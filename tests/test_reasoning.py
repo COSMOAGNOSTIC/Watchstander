@@ -1,5 +1,5 @@
 from agent_core.deconfliction import find_all_conflicts
-from agent_core.reasoning import generate_safety_brief, reasoning_node
+from agent_core.reasoning import generate_safety_brief, provenance_tag, reasoning_node
 from agent_core.state import HazardCategory, SpatialCoordinates, WorkPackageState
 
 
@@ -90,6 +90,27 @@ def test_safety_brief_notes_missing_case_instead_of_inventing_one(monkeypatch):
     brief = generate_safety_brief(a)
 
     assert "No sourced case on file" in brief.precedent_context
+
+
+def test_provenance_tag_maps_known_sources():
+    assert provenance_tag("llm") == "[SOURCE: LLM SYNTHESIS]"
+    assert provenance_tag("deterministic-fallback") == "[SOURCE: DETERMINISTIC FALLBACK - LLM OFFLINE]"
+
+
+def test_fallback_brief_is_visibly_tagged_as_deterministic(monkeypatch):
+    """
+    Per architecture review: a Safety Officer reading the brief must be
+    able to tell at a glance whether an LLM actually reasoned about this
+    or a template filled it in because no model was reachable. The tag
+    has to be in the reviewer-facing text itself, not just the `source`
+    field on the model.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    wp, _ = _flagged_pair()
+
+    brief = generate_safety_brief(wp)
+
+    assert brief.executive_summary.startswith("[SOURCE: DETERMINISTIC FALLBACK - LLM OFFLINE]")
 
 
 def test_reasoning_node_only_briefs_flagged_packages(monkeypatch):

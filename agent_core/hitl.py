@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from langgraph.types import interrupt
 
+from agent_core.reasoning import provenance_tag
 from agent_core.state import RiskLevel, WorkPackageState
 
 
@@ -38,6 +39,12 @@ def hitl_gate_node(state: dict) -> dict:
                 "conflicts": wp.conflicts,
                 "conflict_rationale": wp.conflict_rationale,
                 "safety_brief": wp.safety_brief.model_dump() if wp.safety_brief else None,
+                # Duplicated as a top-level field (not just embedded in
+                # the brief text) so any UI rendering this payload can
+                # surface it prominently without parsing prose.
+                "safety_brief_provenance": (
+                    provenance_tag(wp.safety_brief.source) if wp.safety_brief else None
+                ),
                 "risk_level": wp.risk_level,
                 "prompt": (
                     f"Work package {wp.work_package_id} requires human review before "

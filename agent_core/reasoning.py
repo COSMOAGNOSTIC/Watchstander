@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import os
 
-from agent_core.case_lookup import cite_best_case
+from agent_core.retrieval import cite_best_matching_case
 from agent_core.state import SafetyBrief, WorkPackageState
 
 _SYSTEM_PROMPT = (
@@ -45,20 +45,41 @@ _SYSTEM_PROMPT = (
 
 _REQUIRED_LLM_KEYS = ("executive_summary", "precedent_context", "recommended_action")
 
+# Explicit provenance tags (per architecture review, PASSDOWN.md Section 3):
+# a Safety Officer reading a brief -- whether in the HITL payload, a log,
+# or a printed report -- must always be able to tell at a glance whether
+# an LLM actually reasoned about this conflict or the deterministic
+# template assembled it because no model was reachable. Never let the
+# two paths look identical downstream.
+_PROVENANCE_TAGS = {
+    "llm": "[SOURCE: LLM SYNTHESIS]",
+    "deterministic-fallback": "[SOURCE: DETERMINISTIC FALLBACK - LLM OFFLINE]",
+}
+
+
+def provenance_tag(source: str) -> str:
+    return _PROVENANCE_TAGS.get(source, f"[SOURCE: {source.upper()}]")
+
 
 def _grounding_context(wp: WorkPackageState) -> dict:
     """
     The complete, explicit set of facts this node is allowed to reason
     over. Nothing outside this dict reaches the model or the fallback --
     that's what makes both paths auditable.
+
+    Case citation (Phase 3): ranked by TF-IDF similarity between this
+    work package's own text and the candidate cases for its hazard
+    categories, via agent_core/retrieval.py -- not just "the first case
+    on file for this category," which is what Phase 1/2 did.
     """
+    retrieval_query = f"{wp.description} {wp.conflict_rationale or ''}"
     return {
         "work_package_id": wp.work_package_id,
         "description": wp.description,
         "hazard_categories": list(wp.hazard_categories),
         "conflicts_with": list(wp.conflicts),
         "conflict_rationale": wp.conflict_rationale,
-        "case_citation": cite_best_case(wp.hazard_categories),
+        "case_citation": cite_best_matching_case(retrieval_query, wp.hazard_categories),
     }
 
 
@@ -138,10 +159,17 @@ def generate_safety_brief(wp: WorkPackageState) -> SafetyBrief:
 
     llm_result = _call_llm(context)
     if llm_result is not None:
-        return SafetyBrief(**llm_result, source="llm")
+        fields, source = llm_result, "llm"
+    else:
+        fields, source = _deterministic_fallback(context), "deterministic-fallback"
 
-    fallback = _deterministic_fallback(context)
-    return SafetyBrief(**fallback, source="deterministic-fallback")
+    tagged_summary = f"{provenance_tag(source)} {fields['executive_summary']}"
+    return SafetyBrief(
+        executive_summary=tagged_summary,
+        precedent_context=fields["precedent_context"],
+        recommended_action=fields["recommended_action"],
+        source=source,
+    )
 
 
 def reasoning_node(state: dict) -> dict:
