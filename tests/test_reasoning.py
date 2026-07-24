@@ -56,15 +56,20 @@ def test_safety_brief_is_grounded_in_real_conflict_rationale(monkeypatch):
 
 def test_safety_brief_cites_real_sourced_case_not_a_hallucination(monkeypatch):
     """
-    hot_work has a sourced case on file (HW-FIRSTMARINE) -- the brief's
-    precedent_context must cite it verbatim, not invent one.
+    hot_work has two sourced cases on file as of the Phase 4 data pass
+    (HW-FIRSTMARINE, HW-ASHTABULA-2024) -- the brief's precedent_context
+    must cite one of them verbatim, whichever ranks higher for this
+    conflict's text, never an invented case_id.
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     wp, _ = _flagged_pair()
 
     brief = generate_safety_brief(wp)
 
-    assert "HW-FIRSTMARINE" in brief.precedent_context
+    assert any(
+        real_case_id in brief.precedent_context
+        for real_case_id in ("HW-FIRSTMARINE", "HW-ASHTABULA-2024")
+    )
 
 
 def test_safety_brief_notes_missing_case_instead_of_inventing_one(monkeypatch):

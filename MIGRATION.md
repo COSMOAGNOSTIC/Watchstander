@@ -3,7 +3,7 @@
 > **Goal:** From a deterministic rules-engine scaffold to a fully case-grounded, HITL-reviewed multi-agent safety system — building each phase on a verified previous phase, never freelancing ahead of the plan.
 > **Companion doc:** PASSDOWN.md covers team roles and session continuity; this file is the build road.
 > **Rule of the road:** one phase per sitting where practical, each phase ends with tests passing. Never start a phase with the previous one's Definition of Done unmet.
-> **Last updated:** 2026-07-24
+> **Last updated:** 2026-07-24 (Phase 4 in progress)
 
 Phase ordering logic: **prove the deterministic core → wire it to real case data → add reasoning on top → expand coverage → make it presentable/lockable.**
 
@@ -59,12 +59,15 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 
 ---
 
-## Phase 4 — Case data expansion
+## Phase 4 — Case data expansion (in progress)
 
-- [ ] Round out to 5-10 cases per hazard category (currently light: hot work needs more discrete cases, over-the-side needs dedicated pulls)
-- [ ] Continue public OSHA/DOL sourcing only — no Navy data (see PASSDOWN.md Section 7)
+- [ ] Round out to 5-10 cases per hazard category — **status as of 2026-07-24: confined_space=1, hot_work=2, working_aloft=1, over_the_side=0, fall_protection=3 (10 total). Not yet at target for any category.**
+- [x] First expansion pass added 2 new verified cases: `HW-ASHTABULA-2024` (hot_work — South Marine Systems LLC, Port of Ashtabula OH, fire during welding/paint removal in a cargo hold) and `ALOFT-GUAMSHIPYARD-2022` (working_aloft — Guam Shipyard, rigger fatally struck when an overloaded crane's cable snapped). Both sourced directly from OSHA/DOL press releases, not press-summary sites.
+- [x] Continue public OSHA/DOL sourcing only — no Navy data (see PASSDOWN.md Section 7)
+- [ ] `over_the_side` still has zero genuinely-in-scope cases — one strong candidate (SSA Pacific, Seattle longshoreman fatal fall) was found and **deliberately excluded**: it's a marine cargo handling/longshoring incident under 29 CFR 1917/1918, not shipyard employment under 1915, and including it would misrepresent this dataset's stated scope. Needs a dedicated search for an actual ship-repair/construction over-the-side incident (see `case_data/cases_v1.json` `notes_for_next_pass` for detail).
+- [ ] `confined_space` needs cases beyond St. John's Ship Building — next pass should search OSHA's structured accident-search database rather than press-release prose (same note as Phase 1's original pass).
 
-**Definition of done:** Every hazard category has 5+ sourced, cited cases.
+**Definition of done:** Every hazard category has 5+ sourced, cited cases. **Not yet met — this phase needs at least one more research pass before it can be checked off.**
 
 ---
 
@@ -96,6 +99,6 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 | 1 — Case-data grounding | ✅ | 2026-07-23 |
 | 2 — Reasoning layer | ✅ | 2026-07-24 |
 | 3 — Real retrieval (RAG) | ✅ | 2026-07-24 |
-| 4 — Case data expansion | ⬜ | |
+| 4 — Case data expansion | 🟡 in progress (10 cases total, target 5-10/category) | |
 | 5 — Digital twin readiness | ⬜ (deferred) | |
 | 6 — Lock it in | ⬜ | |

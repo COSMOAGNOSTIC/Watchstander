@@ -50,12 +50,33 @@
       "root_cause": "Systemic/repeat noncompliance pattern at the same facility -- valuable as a longitudinal case rather than a single incident.",
       "osha_subpart": "Multiple - 1915 Subparts E, F, H",
       "source_url": "https://www.dol.gov/newsroom/releases/osha/osha20150603-0"
+    },
+    {
+      "case_id": "HW-ASHTABULA-2024",
+      "hazard_category": "hot_work",
+      "shipyard": "South Marine Systems LLC, Port of Ashtabula OH",
+      "date": "2024-03",
+      "summary": "Fire erupted while workers welded to remove paint from a cargo hold aboard the commercial vessel Cuyahoga. Crewmembers who had been working below the cargo hold were on lunch break at the time and avoided being trapped below decks by the fire.",
+      "root_cause": "No designated competent person to identify hot work hazards, no marine chemist certificate to test for hazardous atmospheres, and no procedure to assess conditions once small fires began.",
+      "osha_subpart": "1915 Subpart D - Welding, Cutting and Heating / Subpart B - Confined and Enclosed Spaces",
+      "source_url": "https://www.osha.gov/news/newsreleases/chicago/20240916"
+    },
+    {
+      "case_id": "ALOFT-GUAMSHIPYARD-2022",
+      "hazard_category": "working_aloft",
+      "shipyard": "Guam Industrial Services Inc. (Guam Shipyard), Santa Rita, Guam",
+      "date": "2022-11",
+      "summary": "A rigger was fatally struck when a barge-mounted crane's cable snapped while lowering a 100-foot gantry crane leg that exceeded the crane's rated capacity. The load swung after the boom bent and the cable snapped, striking the rigger.",
+      "root_cause": "Management proceeded with a lift exceeding the crane's rated capacity over workers' objections (workers had proposed cutting the load into pieces first), and failed to ensure the crane operator was trained, certified, and evaluated.",
+      "osha_subpart": "1915 Subpart G - Gear and Equipment for Rigging and Materials Handling",
+      "source_url": "https://www.dol.gov/newsroom/releases/osha/osha20230425"
     }
   ],
   "notes_for_next_pass": [
-    "Need 5-10 cases per category; currently strongest in fall_protection (Detyens longitudinal) and confined_space.",
-    "Hot work has good regulatory/stat grounding but needs more discrete case examples beyond First Marine.",
-    "Working aloft and over-the-side need dedicated case pulls -- current data treats them as subcategories of fall_protection.",
+    "2026-07-24 pass added HW-ASHTABULA-2024 (hot_work) and ALOFT-GUAMSHIPYARD-2022 (working_aloft), both verified against primary OSHA/DOL sources. Counts as of this pass: confined_space=1, hot_work=2, working_aloft=1, over_the_side=0, fall_protection=3. Still well short of the Phase 4 target of 5-10/category -- treat Phase 4 as in progress, not complete.",
+    "over_the_side remains at zero cases under genuine 29 CFR 1915 (shipyard employment) scope. One strong candidate was found and deliberately excluded: SSA Pacific, Seattle -- longshoreman fatal fall from a cargo ship's deck while loading timber (https://www.dol.gov/newsroom/releases/osha/osha20161129) -- but that's a marine cargo handling / longshoring operation, covered under 29 CFR 1917/1918, not 1915. Including it would misrepresent this dataset's stated scope (source_note above). Next pass should search specifically for over-the-side work during ship repair/construction at an actual shipyard (e.g. painting or coating work over the side, staging rigged over water) rather than cargo/stevedoring incidents.",
+    "confined_space needs more cases beyond St. John's Ship Building -- the HW-ASHTABULA-2024 fire also involved a confined/enclosed space but is filed under hot_work since that was the proximate hazard; a search focused specifically on confined-space entry/atmosphere-testing citations at named shipyards (not generic OSHA training videos, which don't name a real incident) is still needed.",
+    "fall_protection is comparatively well covered (3 cases, all Detyens) but all three are the same shipyard -- a case from a different facility would strengthen this category.",
     "Next search pass: OSHA public accident search database directly (https://www.osha.gov/ords/imis/accidentsearch.search) for structured records rather than press-release prose."
   ]
 }
