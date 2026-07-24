@@ -1,0 +1,61 @@
+{
+  "source_note": "All cases sourced from public OSHA.gov / DOL.gov press releases and eTools. Civilian shipyards only. No Navy mishap data included by design (see PASSDOWN.md, Section 7).",
+  "cases": [
+    {
+      "case_id": "CS-2023-STJOHNS",
+      "hazard_category": "confined_space",
+      "shipyard": "St. John's Ship Building, Palatka FL",
+      "date": "2023-08-28",
+      "summary": "Welder entered a 4x8 ft space in a ship's hull for fabrication work without the space being tested for oxygen content. Supervisor who went to assist was also overcome. Welder died of asphyxiation.",
+      "root_cause": "No pre-entry atmospheric testing for oxygen deficiency.",
+      "osha_subpart": "1915 Subpart B - Confined and Enclosed Spaces",
+      "source_url": "https://www.dol.gov/newsroom/releases/osha/osha20240410-0"
+    },
+    {
+      "case_id": "HW-FIRSTMARINE",
+      "hazard_category": "hot_work",
+      "shipyard": "First Marine LLC, Calvert City KY",
+      "date": null,
+      "summary": "Explosion onboard a towboat during cutting/welding in an atmosphere containing flammable gases. 3 fatalities, 2 critical injuries. Five contractors cited (prime, insulation sub, two staffing agencies, one individual).",
+      "root_cause": "Hot work performed without testing for explosive atmosphere; confined space not tested before entry.",
+      "osha_subpart": "1915 Subpart D - Welding, Cutting and Heating / Subpart B - Confined Spaces",
+      "source_url": "https://www.businessinsurance.com/article/00010101/NEWS08/912322937/Fatal-shipyard-explosion-leads-to-nearly-$800,000-in-OSHA-fines"
+    },
+    {
+      "case_id": "FALL-DETYENS-2024",
+      "hazard_category": "fall_protection",
+      "shipyard": "Detyens Shipyards Inc., North Charleston SC",
+      "date": "2023-11",
+      "summary": "41-year-old worker fell ~20 ft from an unguarded platform edge inside a gas tank aboard a Naval Ship undergoing fuel piping work. Co-workers were waiting for him to descend a ladder.",
+      "root_cause": "No guardrails on platform edge; inadequate lighting; no hard hats required for workers below overhead activity.",
+      "osha_subpart": "1915 Subpart E - Guarding of Deck Openings and Edges",
+      "source_url": "https://www.dol.gov/newsroom/releases/osha/osha20240501-1"
+    },
+    {
+      "case_id": "STRUCK-DETYENS-2020",
+      "hazard_category": "fall_protection",
+      "shipyard": "Detyens Shipyards Inc., North Charleston SC",
+      "date": "2020",
+      "summary": "Employee fatally struck by a shackle during a lifting operation while positioned between a guardrail and a rudder shaft being lifted.",
+      "root_cause": "No fall protection system in use; employee allowed in a caught-between hazard zone during a lift.",
+      "osha_subpart": "1915 Subpart E / Subpart H - Lifting",
+      "source_url": "https://www.dol.gov/newsroom/releases/osha/osha20200615"
+    },
+    {
+      "case_id": "PATTERN-DETYENS-2015",
+      "hazard_category": "fall_protection",
+      "shipyard": "Detyens Shipyards Inc., North Charleston SC",
+      "date": "2014-12-02",
+      "summary": "Comprehensive OSHA inspection (Regional Emphasis Program on Maritime Industries) resulted in 1 repeated, 13 serious, 1 other-than-serious citation for fall, electrical, and amputation hazards.",
+      "root_cause": "Systemic/repeat noncompliance pattern at the same facility -- valuable as a longitudinal case rather than a single incident.",
+      "osha_subpart": "Multiple - 1915 Subparts E, F, H",
+      "source_url": "https://www.dol.gov/newsroom/releases/osha/osha20150603-0"
+    }
+  ],
+  "notes_for_next_pass": [
+    "Need 5-10 cases per category; currently strongest in fall_protection (Detyens longitudinal) and confined_space.",
+    "Hot work has good regulatory/stat grounding but needs more discrete case examples beyond First Marine.",
+    "Working aloft and over-the-side need dedicated case pulls -- current data treats them as subcategories of fall_protection.",
+    "Next search pass: OSHA public accident search database directly (https://www.osha.gov/ords/imis/accidentsearch.search) for structured records rather than press-release prose."
+  ]
+}
