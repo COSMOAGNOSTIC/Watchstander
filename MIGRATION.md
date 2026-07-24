@@ -26,13 +26,13 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 
 ## Phase 1 — Case-data grounding
 
-- [ ] Wire `case_data/cases_v1.json` into the deconfliction node
-- [ ] When a conflict is flagged, retrieve the matching case(s) by hazard category
-- [ ] Include case citation (case_id, root_cause, source_url) in `conflict_rationale`
-- [ ] No LLM call yet — pure lookup, keeps this phase deterministic and testable
-- [ ] Tests: conflict rationale includes a real case_id from the JSON, not just template text
+- [x] Wire `case_data/cases_v1.json` into the deconfliction node
+- [x] When a conflict is flagged, retrieve the matching case(s) by hazard category
+- [x] Include case citation (case_id, root_cause, source_url) in `conflict_rationale`
+- [x] No LLM call yet — pure lookup, keeps this phase deterministic and testable
+- [x] Tests: conflict rationale includes a real case_id from the JSON, not just template text
 
-**Definition of done:** A flagged conflict's rationale cites a specific sourced case, verifiable in `cases_v1.json`, with a passing test proving the lookup works.
+**Definition of done:** ✅ Complete — 2026-07-23.
 
 ---
 
@@ -90,7 +90,7 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 | Phase | Status | Date done |
 |---|---|---|
 | 0 — Structural scaffold | ✅ | 2026-07-23 |
-| 1 — Case-data grounding | ⬜ | |
+| 1 — Case-data grounding | ✅ | 2026-07-23 |
 | 2 — Reasoning layer | ⬜ | |
 | 3 — Real retrieval (RAG) | ⬜ | |
 | 4 — Case data expansion | ⬜ | |
