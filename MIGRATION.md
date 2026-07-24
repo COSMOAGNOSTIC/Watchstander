@@ -61,13 +61,14 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 
 ## Phase 4 — Case data expansion (in progress)
 
-- [ ] Round out to 5-10 cases per hazard category — **status as of 2026-07-24: confined_space=1, hot_work=2, working_aloft=1, over_the_side=0, fall_protection=3 (10 total). Not yet at target for any category.**
+- [ ] Round out to 5-10 cases per **core civilian hazard domain** — **status as of 2026-07-24: confined_space=1, hot_work=2, working_aloft=1, fall_protection=3 (7 cases across the 4 core domains, plus over_the_side=0, now explicitly out of scope — see amendment below). Not yet at target for any domain.**
 - [x] First expansion pass added 2 new verified cases: `HW-ASHTABULA-2024` (hot_work — South Marine Systems LLC, Port of Ashtabula OH, fire during welding/paint removal in a cargo hold) and `ALOFT-GUAMSHIPYARD-2022` (working_aloft — Guam Shipyard, rigger fatally struck when an overloaded crane's cable snapped). Both sourced directly from OSHA/DOL press releases, not press-summary sites.
 - [x] Continue public OSHA/DOL sourcing only — no Navy data (see PASSDOWN.md Section 7)
-- [ ] `over_the_side` still has zero genuinely-in-scope cases — one strong candidate (SSA Pacific, Seattle longshoreman fatal fall) was found and **deliberately excluded**: it's a marine cargo handling/longshoring incident under 29 CFR 1917/1918, not shipyard employment under 1915, and including it would misrepresent this dataset's stated scope. Needs a dedicated search for an actual ship-repair/construction over-the-side incident (see `case_data/cases_v1.json` `notes_for_next_pass` for detail).
+- [x] **DoD amendment (architecture review, 2026-07-24):** `over_the_side` is dropped as a standalone case-citation target. Under civilian shipyard employment (29 CFR 1915), over-water fall hazards are legally captured under *Fall Protection* (Subpart I / 1915.73), not a separate OSHA case classification — standalone "over-the-side" program tracking is an underway Naval/NSTM operational convention (confirmed independently by Donnie as SME), not a civilian OSHA case pattern. Future over-water staging cases get sourced and tagged as `fall_protection`, same as any other elevated/edge-guarding case. The `OVER_THE_SIDE` flag stays in `SpatialCoordinates`/`HazardCategory` for deconfliction geometry (it's still a physically distinct condition worth flagging for spatial overlap purposes) — only the case-citation dataset's target category was dropped.
 - [ ] `confined_space` needs cases beyond St. John's Ship Building — next pass should search OSHA's structured accident-search database rather than press-release prose (same note as Phase 1's original pass).
+- [ ] `fall_protection` next case should ideally come from over-water/over-the-side staging work specifically, given the amendment above, to actually demonstrate that category covering what it now claims to cover.
 
-**Definition of done:** Every hazard category has 5+ sourced, cited cases. **Not yet met — this phase needs at least one more research pass before it can be checked off.**
+**Definition of done:** Every one of the 4 core hazard domains (`hot_work`, `confined_space`, `working_aloft`, `fall_protection`) has 5+ sourced, cited cases. **Not yet met — this phase needs at least one more research pass before it can be checked off.**
 
 ---
 
@@ -99,6 +100,6 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 | 1 — Case-data grounding | ✅ | 2026-07-23 |
 | 2 — Reasoning layer | ✅ | 2026-07-24 |
 | 3 — Real retrieval (RAG) | ✅ | 2026-07-24 |
-| 4 — Case data expansion | 🟡 in progress (10 cases total, target 5-10/category) | |
+| 4 — Case data expansion | 🟡 in progress (7 cases across 4 core domains, target 5-10/domain; `over_the_side` out of scope) | |
 | 5 — Digital twin readiness | ⬜ (deferred) | |
 | 6 — Lock it in | ⬜ | |
