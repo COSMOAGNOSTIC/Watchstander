@@ -37,6 +37,7 @@ def hitl_gate_node(state: dict) -> dict:
                 "hazard_categories": wp.hazard_categories,
                 "conflicts": wp.conflicts,
                 "conflict_rationale": wp.conflict_rationale,
+                "safety_brief": wp.safety_brief.model_dump() if wp.safety_brief else None,
                 "risk_level": wp.risk_level,
                 "prompt": (
                     f"Work package {wp.work_package_id} requires human review before "

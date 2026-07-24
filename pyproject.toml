@@ -19,6 +19,9 @@ dev = [
     "pytest>=8",
     "pytest-cov",
 ]
+llm = [
+    "anthropic>=0.40",
+]
 
 [tool.setuptools.packages.find]
 include = ["agent_core*"]

@@ -72,6 +72,30 @@ class SafetyPermitsRequired(BaseModel):
     competent_person_inspection: bool = False
 
 
+class SafetyBrief(BaseModel):
+    """
+    Plain-language synthesis of a flagged conflict, produced by the
+    Phase 2 reasoning node for the HITL reviewer. This is explanatory
+    output layered on top of an already-deterministic conflict
+    decision -- it never decides whether a conflict exists, only
+    explains one that deconfliction.py already found.
+    """
+
+    executive_summary: str = Field(
+        description="2-sentence plain-language breakdown of the hazard for the reviewer"
+    )
+    precedent_context: str = Field(
+        description="Plain-language summary of the sourced case this brief is grounded in, "
+        "or an explicit note that no case is on file yet"
+    )
+    recommended_action: str = Field(
+        description="Concrete deconfliction step, e.g. reschedule, add a barrier, verify permit"
+    )
+    source: str = Field(
+        description="How this brief was generated: 'llm' or 'deterministic-fallback'"
+    )
+
+
 class WorkPackageState(BaseModel):
     """
     The unit of work the agent graph reasons over. One instance per
@@ -98,6 +122,11 @@ class WorkPackageState(BaseModel):
     )
     conflict_rationale: Optional[str] = Field(
         default=None, description="Agent-generated explanation of why a conflict was flagged"
+    )
+
+    # populated by the Phase 2 reasoning node, not set by the submitter
+    safety_brief: Optional[SafetyBrief] = Field(
+        default=None, description="Plain-language HITL brief synthesized from the flagged conflict"
     )
 
     model_config = ConfigDict(use_enum_values=True)

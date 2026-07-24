@@ -3,7 +3,7 @@
 > **Goal:** From a deterministic rules-engine scaffold to a fully case-grounded, HITL-reviewed multi-agent safety system — building each phase on a verified previous phase, never freelancing ahead of the plan.
 > **Companion doc:** PASSDOWN.md covers team roles and session continuity; this file is the build road.
 > **Rule of the road:** one phase per sitting where practical, each phase ends with tests passing. Never start a phase with the previous one's Definition of Done unmet.
-> **Last updated:** 2026-07-23
+> **Last updated:** 2026-07-24
 
 Phase ordering logic: **prove the deterministic core → wire it to real case data → add reasoning on top → expand coverage → make it presentable/lockable.**
 
@@ -38,12 +38,13 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 
 ## Phase 2 — Reasoning layer (first LLM node)
 
-- [ ] New graph node: takes flagged conflict + retrieved case, produces plain-language rationale for the HITL reviewer
-- [ ] Node sits between deconfliction and HITL gate, does not replace either
-- [ ] Explicit prompt grounding — no hallucinated case details, cites only what's in the retrieved case object
-- [ ] Tests: verify node output references only real data from the input case
+- [x] New graph node (`agent_core/reasoning.py`): takes flagged conflict + retrieved case, produces a `SafetyBrief` (executive summary, precedent context, recommended action) for the HITL reviewer
+- [x] Node sits between deconfliction and HITL gate, does not replace either — graph is now `deconfliction -> reasoning -> hitl_gate`
+- [x] Explicit prompt grounding — no hallucinated case details; the model (or the deterministic fallback) works only from an explicit `_grounding_context()` built from already-verified state
+- [x] Deterministic fallback when no `ANTHROPIC_API_KEY` is configured (always true in CI) — zero network calls in the test suite, brief is assembled directly from real fields instead of generated
+- [x] Tests (`tests/test_reasoning.py`): verify brief cites the real sourced case_id (e.g. `HW-FIRSTMARINE`) when one exists, states plainly when none exists rather than inventing one, and is only attached to flagged packages
 
-**Definition of done:** HITL reviewer sees a natural-language explanation, not just a template string, and that explanation is traceable to real case data every time.
+**Definition of done:** ✅ Complete — 2026-07-24. HITL reviewer sees a natural-language explanation, not just a template string, and that explanation is traceable to real case data every time.
 
 ---
 
@@ -91,7 +92,7 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 |---|---|---|
 | 0 — Structural scaffold | ✅ | 2026-07-23 |
 | 1 — Case-data grounding | ✅ | 2026-07-23 |
-| 2 — Reasoning layer | ⬜ | |
+| 2 — Reasoning layer | ✅ | 2026-07-24 |
 | 3 — Real retrieval (RAG) | ⬜ | |
 | 4 — Case data expansion | ⬜ | |
 | 5 — Digital twin readiness | ⬜ (deferred) | |
