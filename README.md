@@ -17,17 +17,39 @@ Case grounding is sourced entirely from public OSHA/DOL records — real shipyar
 
 ## Architecture
 
-```
-entry -> deconfliction_node -> hitl_gate_node -> END
+```mermaid
+flowchart LR
+    Entry(["entry"]) --> Deconf["deconfliction_node<br/>(deconfliction.py)<br/>deterministic overlap check"]
+    Deconf --> Reason["reasoning_node<br/>(reasoning.py)<br/>SafetyBrief synthesis, LLM + fallback"]
+    Reason --> Hitl["hitl_gate_node<br/>(hitl.py)<br/>interrupt() — genuine human pause"]
+    Hitl --> End(["END"])
+
+    CaseData[("case_data/cases_v1.json<br/>sourced OSHA/DOL cases")] --> Retrieval["retrieval.py<br/>TF-IDF ranked case lookup"]
+    Retrieval --> Reason
+
+    State[["state.py<br/>WorkPackageState schema"]] -.-> Deconf
+    State -.-> Reason
+    State -.-> Hitl
+
+    Deconf --> Events["events.py<br/>WebSocket broadcaster"]
+    Reason --> Events
+    Hitl --> Events
+    Events --> Viz["visualizer/<br/>Godot 4 live schematic deck plan"]
+
+    Eval["eval/<br/>fixed-scenario harness vs. checked-in baseline"] -.->|regression-tests| Deconf
+    Eval -.->|regression-tests| Retrieval
 ```
 
 - **`agent_core/state.py`** — `WorkPackageState` schema: hazard categories, spatial coordinates, required permits, risk level.
 - **`agent_core/deconfliction.py`** — deterministic, testable overlap detection between work packages. Geometry-based, not LLM-dependent, so conflicts are auditable and repeatable.
+- **`agent_core/retrieval.py`** — TF-IDF ranked case lookup grounding each flagged conflict in a real, sourced OSHA/DOL case.
+- **`agent_core/reasoning.py`** — synthesizes a flagged conflict + its grounded case citation into a provenance-tagged `SafetyBrief`, with a deterministic zero-network fallback.
 - **`agent_core/hitl.py`** — LangGraph `interrupt()`-based human review gate. Genuinely pauses graph execution; does not simulate review.
-- **`agent_core/graph.py`** — graph assembly.
-- **`case_data/`** — sourced OSHA/DOL case histories, tagged by hazard category, used to ground future rationale-generation passes.
+- **`agent_core/graph.py`** — graph assembly: `entry -> deconfliction -> reasoning -> hitl_gate -> END`.
+- **`case_data/`** — sourced OSHA/DOL case histories, tagged by hazard category, used to ground rationale generation.
 - **`agent_core/events.py`** — lazy WebSocket broadcaster, no-op with no listener, feeding the visualizer.
 - **`visualizer/`** — Godot 4 project rendering the graph's activity as a live schematic deck plan.
+- **`eval/`** — fixed-scenario evaluation harness scoring the deterministic-fallback path against a checked-in baseline (see ARCHITECTURE.md Section 7).
 
 ## Watch It Live
 

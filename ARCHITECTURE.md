@@ -33,6 +33,31 @@ Out of scope for v1: Navy mishap data (classification/aggregation risk — delib
 | `visualizer/` | Godot 4 2D spatial scene rendering work packages, conflicts, and HITL state on a schematic shipyard deck layout (Section 8) |
 | `eval/` | Fixed-scenario evaluation harness measuring `deconfliction.py`/`retrieval.py`/`reasoning.py`'s deterministic-fallback path against a checked-in baseline (Section 7) |
 
+```mermaid
+flowchart LR
+    Entry(["entry"]) --> Deconf["deconfliction_node<br/>(deconfliction.py)<br/>deterministic overlap check"]
+    Deconf --> Reason["reasoning_node<br/>(reasoning.py)<br/>SafetyBrief synthesis, LLM + fallback"]
+    Reason --> Hitl["hitl_gate_node<br/>(hitl.py)<br/>interrupt() — genuine human pause"]
+    Hitl --> End(["END"])
+
+    CaseData[("case_data/cases_v1.json<br/>sourced OSHA/DOL cases")] --> Retrieval["retrieval.py<br/>TF-IDF ranked case lookup"]
+    Retrieval --> Reason
+
+    State[["state.py<br/>WorkPackageState schema"]] -.-> Deconf
+    State -.-> Reason
+    State -.-> Hitl
+
+    Deconf --> Events["events.py<br/>WebSocket broadcaster"]
+    Reason --> Events
+    Hitl --> Events
+    Events --> Viz["visualizer/<br/>Godot 4 live schematic deck plan"]
+
+    Eval["eval/<br/>fixed-scenario harness vs. checked-in baseline"] -.->|regression-tests| Deconf
+    Eval -.->|regression-tests| Retrieval
+```
+
+This is the same diagram as README.md's Architecture section, kept here as the canonical copy — update both together if the graph shape changes.
+
 ## 4. Reasoning and Grounding Model
 
 Threat: an LLM inventing plausible-sounding but false case details (a fabricated shipyard, a fabricated fatality) in front of a Safety Officer making a real decision.
