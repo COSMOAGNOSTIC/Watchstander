@@ -138,6 +138,7 @@ This phase exists because closing Phase 5.5's two acute defects didn't fully clo
 - [x] Fixed-scenario evaluation harness with a checked-in regression baseline — see Phase 5.75
 - [x] Fail-open gaps in the Phase 5.5 fixes themselves closed — see Phase 5.85
 - [x] ARCHITECTURE.md §8's visualizer status line corrected from "implementation in progress" to "built and substantially complete," matching Phase 5's own status above — caught by an independent Fable/Grok review pass finding the two docs disagreed with each other, rather than caught proactively
+- [x] CI was red on every push since the eval harness was added (Phase 5.75) — `eval/` was never registered as an installable package, so `tests/test_eval_harness.py`'s `from eval.run_eval import ...` only resolved locally because every local check happened to use `python -m pytest` (which prepends cwd to `sys.path`); CI runs the `pytest` console script directly, which doesn't. Fixed by adding `eval*` to `pyproject.toml`'s `packages.find`, same as `agent_core`. Caught by Donnie noticing the GitHub Actions badge, not by any local or AI-assisted review — see PASSDOWN.md.
 - [ ] README reflects actual current capabilities, not aspirational ones — still stale: its architecture diagram omits `reasoning.py`/`retrieval.py`/`case_lookup.py`, and it claims "temporal" deconfliction that isn't implemented (see Known Debt in ARCHITECTURE.md)
 - [ ] PASSDOWN.md and MIGRATION.md both current
 - [ ] One full end-to-end smoke run documented

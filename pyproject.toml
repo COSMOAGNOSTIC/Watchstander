@@ -26,4 +26,12 @@ llm = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["agent_core*"]
+# "eval*" is needed so tests/test_eval_harness.py's `from eval.run_eval import
+# ...` resolves regardless of how pytest is invoked. Without this, `eval/` was
+# only importable when pytest ran via `python -m pytest` (which prepends cwd
+# to sys.path) -- CI runs the `pytest` console script directly, which does
+# not, so this passed in every local check (always run as `python -m pytest`)
+# and failed in CI on every run since the eval harness was added. Packaging
+# `eval/` the same way `agent_core` already is makes it importable via the
+# editable install itself, independent of invocation style.
+include = ["agent_core*", "eval*"]

@@ -34,6 +34,12 @@ The same evening, a *different* external model (Gemini) was asked for a portfoli
 
 The methodology's existing rule — "AI-generated criticism is input, not authority" — already covered this in principle, but this was the concrete case that earned it a second half: **an AI reviewer can also be confidently, ungroundedly wrong in the *complimentary* direction, not just the critical one.** Uncritical praise from a model that never examined the artifact is exactly as unreliable as an ungrounded criticism, and both need the same check before being acted on: did this reviewer actually look at the thing it's describing? The fix here was direct — a second review was run against the specific files in question, with an instruction to trace cold rather than accept anything at face value (see Round 3 above).
 
+## A verification blind spot the CI badge caught, not any review pass
+
+The evaluation harness added in Round 2 broke CI on every single push from the moment it landed — `tests/test_eval_harness.py` couldn't import the `eval` package, because `eval/` was never registered in `pyproject.toml`'s package list. Every local test run throughout this whole process — including the ones that "verified" Round 2 and Round 3's fixes — used `python -m pytest`, which prepends the current directory to `sys.path` and masked the problem completely. CI runs the plain `pytest` console script, which does not do that, and failed consistently. Neither the original Fable review, the second Fable pass, nor Gemini's or Grok's assessments caught this — it surfaced only because Donnie noticed the GitHub Actions badge and asked about it directly.
+
+This is the same principle as the section above, aimed at a different actor: **verifying a fix by re-running it the same way you always have isn't verification, it's repetition.** The fix here (`eval*` added to `packages.find`, same as `agent_core` already was) was confirmed by installing into a genuinely fresh virtualenv and invoking `pytest` exactly as CI does — the same discipline this document already argues for when judging AI critique, applied to a human-run (i.e. Claude-run) test command that had quietly been checking the wrong thing all along.
+
 ## Where the discipline is still open
 
 - The non-idempotent multi-package HITL loop (`hitl_gate_node`'s `interrupt()`-in-a-loop pattern) is a known, disclosed gap, not yet restructured — see ARCHITECTURE.md Known Debt.

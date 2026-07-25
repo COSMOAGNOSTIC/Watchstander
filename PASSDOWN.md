@@ -200,3 +200,21 @@ Initial research pass complete via OSHA.gov and DOL.gov public releases. Real, c
 **Decided but not built:** the rest of Grok's list (temporal deconfliction claim vs. implementation, porting the eval harness pattern to cosmoai-adept, dependency pinning on both repos, closing the HITL loop's remaining non-idempotency) was deliberately left for a future session — Donnie chose the cheap, honest doc fix only this round rather than opening a larger scope.
 
 **Open questions for next session:** same as Section 11's close — which of temporal deconfliction, the HITL loop restructure, or porting the eval harness to cosmoai-adept is the next highest-leverage move.
+
+---
+
+## 13. Session Notes — 2026-07-25 (still later): CI red since the eval harness landed — packaging bug, not a code bug
+
+**What happened:** Donnie noticed GitHub Actions showing red for Watchstander and asked. The actual failure: `ModuleNotFoundError: No module named 'eval'` in `tests/test_eval_harness.py`, on every run since the eval harness was added (Phase 5.75) — several commits' worth of red CI that nobody, including this session's own "verify in a clean venv" checks, had caught.
+
+**Root cause:** `eval/` was added as a plain directory with an `__init__.py` but never registered in `pyproject.toml`'s `[tool.setuptools.packages.find]` list — only `agent_core*` was. That made `eval` importable only by accident: `python -m pytest` prepends the current working directory to `sys.path`, so every local run this session (all invoked as `python -m pytest`) resolved the import fine. CI's workflow runs the `pytest` console-script entry point directly (`Run pytest -v` in the Actions log), which does not add the cwd to `sys.path`, so it failed every time. Confirmed by reproducing the exact failure locally with a plain `pytest -v` invocation in a fresh venv, then confirming the fix the same way — not with `python -m pytest`, which would have hidden the bug all over again.
+
+**What got fixed:** `eval*` added to `pyproject.toml`'s `packages.find`, same treatment as `agent_core`. Verified in two freshly created virtualenvs (Python 3.11 and 3.12), fresh `pip install -e ".[dev]"`, invoked as plain `pytest -v` to match CI exactly — 50/50 passing both times.
+
+**Why this matters beyond the one-line fix:** none of the AI review passes this session — two independent Fable passes, plus Gemini's and Grok's assessments — caught this, because none of them ran the actual CI command; they all read code, not execution behavior under the exact invocation CI uses. This session's own local verification also didn't catch it for the same reason: it always ran `python -m pytest`, which papered over the exact gap. AOSE.md gained a new section on this specifically, because it's a live instance of the document's own principle — re-running a check the same way you always have isn't verification — aimed at this session's own habits rather than at an external AI reviewer for once.
+
+**Decided but not built:** did not add a CI-mirroring pytest invocation to the local dev workflow (e.g. a Makefile target or pre-commit hook that runs plain `pytest`, not `python -m pytest`) — worth considering for a future session so this class of gap can't recur silently.
+
+**Follow-up, same session:** checked cosmoai-adept for the same class of bug before closing this out. It uses `setup.py`'s `find_packages()` with no include filter (unlike Watchstander's `pyproject.toml`, which explicitly lists `agent_core*`), so any future top-level package there gets auto-registered — no equivalent gap exists. Confirmed by a fresh-venv install and a plain `pytest -v` run (CI's exact invocation): 59/59 passing. No changes needed on that repo.
+
+**Open questions for next session:** worth considering whether Watchstander's explicit `include=[...]` list in `pyproject.toml` should switch to `find_packages()`-style auto-discovery (matching cosmoai-adept) specifically so this class of bug can't recur the next time a new top-level package is added and someone forgets to list it.
