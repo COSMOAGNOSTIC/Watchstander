@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 
+from agent_core import events
 from agent_core.retrieval import cite_best_matching_case
 from agent_core.state import SafetyBrief, WorkPackageState
 
@@ -179,7 +180,23 @@ def reasoning_node(state: dict) -> dict:
     flagged -- clean packages pass through untouched.
     """
     packages = state["work_packages"]
-    for wp in packages:
-        if wp.conflicts:
-            wp.safety_brief = generate_safety_brief(wp)
+    flagged = [wp for wp in packages if wp.conflicts]
+    if flagged:
+        events.emit(
+            "reasoning_start",
+            work_package_ids=[wp.work_package_id for wp in flagged],
+        )
+    for wp in flagged:
+        wp.safety_brief = generate_safety_brief(wp)
+    if flagged:
+        events.emit(
+            "reasoning_result",
+            briefs=[
+                {
+                    "work_package_id": wp.work_package_id,
+                    "provenance": provenance_tag(wp.safety_brief.source),
+                }
+                for wp in flagged
+            ],
+        )
     return {"work_packages": packages}

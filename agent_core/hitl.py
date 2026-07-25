@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from langgraph.types import interrupt
 
+from agent_core import events
 from agent_core.reasoning import provenance_tag
 from agent_core.state import RiskLevel, WorkPackageState
 
@@ -31,6 +32,16 @@ def hitl_gate_node(state: dict) -> dict:
             reviewed.append(wp)
             continue
 
+        provenance = provenance_tag(wp.safety_brief.source) if wp.safety_brief else None
+
+        events.emit(
+            "hitl_awaiting",
+            work_package_id=wp.work_package_id,
+            hazard_categories=list(wp.hazard_categories),
+            risk_level=wp.risk_level,
+            safety_brief_provenance=provenance,
+        )
+
         decision = interrupt(
             {
                 "work_package_id": wp.work_package_id,
@@ -42,15 +53,19 @@ def hitl_gate_node(state: dict) -> dict:
                 # Duplicated as a top-level field (not just embedded in
                 # the brief text) so any UI rendering this payload can
                 # surface it prominently without parsing prose.
-                "safety_brief_provenance": (
-                    provenance_tag(wp.safety_brief.source) if wp.safety_brief else None
-                ),
+                "safety_brief_provenance": provenance,
                 "risk_level": wp.risk_level,
                 "prompt": (
                     f"Work package {wp.work_package_id} requires human review before "
                     f"it can be approved. Respond with 'approve', 'reject', or a note."
                 ),
             }
+        )
+
+        events.emit(
+            "hitl_decided",
+            work_package_id=wp.work_package_id,
+            decision=str(decision),
         )
 
         wp.conflict_rationale = (wp.conflict_rationale or "") + f" | HITL decision: {decision}"

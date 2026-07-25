@@ -12,6 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
     "langgraph>=0.2",
     "pydantic>=2",
+    "websockets>=12",
 ]
 
 [project.optional-dependencies]

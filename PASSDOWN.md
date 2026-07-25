@@ -1,8 +1,8 @@
 # PROJECT PASSDOWN: Watchstander
 ## Civilian Shipyard OSHA Spatial & Temporal Deconfliction Agent Graph
 
-**Last updated:** 2026-07-23
-**Status:** Scaffolding phase — local build, pending GitHub push (connector issue, see Blockers)
+**Last updated:** 2026-07-25
+**Status:** Live on GitHub, CI green. ARCHITECTURE.md added; live spatial visualizer (Phase 5) built and demo-recorded. Phase 4 case-data expansion still open.
 
 ---
 
@@ -76,12 +76,38 @@ Initial research pass complete via OSHA.gov and DOL.gov public releases. Real, c
 
 ## 6. Blockers
 
-- **GitHub connector failing (2026-07-23):** All GitHub MCP tool calls (create_repository, search_repositories) returning generic execution failures — not a naming collision, confirmed via unrelated test search. Donnie checking reauth on his end. Repo is being scaffolded locally in the interim; will push in one shot once resolved.
+- **GitHub connector failing (2026-07-23):** Resolved — repo is live at `github.com/COSMOAGNOSTIC/Watchstander`, CI green. No open blockers as of 2026-07-25.
 
 ---
 
 ## 7. Explicitly Out of Scope (v1)
 
 - Navy mishap data (classification/aggregation risk — deliberately excluded)
-- WebGL/Three.js front-end (digital twin visualization is a future phase)
 - Any yard-specific proprietary data
+- Real ship CAD/general-arrangement drawings in the visualizer (see Section 8 below — deliberate, not a resource gap)
+
+---
+
+## 8. Session Notes — 2026-07-25: ARCHITECTURE.md + Live Spatial Visualizer
+
+**Where things stood coming in:** Watchstander already had MIGRATION.md and PASSDOWN.md (this file), both current, but no ARCHITECTURE.md — inconsistent with the three-doc standard now codified across all projects (see cosmoai-adept's PASSDOWN.md for the origin of that rule). No visualizer existed at all; MIGRATION.md Phase 5 ("Digital twin readiness") was explicitly deferred. The prompt for this work: add ARCHITECTURE.md first (with the visualizer's design recorded in it before building), then build the visualizer.
+
+**What got built:**
+- `ARCHITECTURE.md` — new. Purpose/scope, design principles (deterministic detection / non-deterministic explanation split, provenance tagging, real `interrupt()`, edge-resilient TF-IDF retrieval), component table, a dedicated Section 8 for the digital-twin/visualizer design (written before implementation), Known Debt, and a Decision Log carrying forward the existing ADRs from git history (deterministic-detection split, real HITL interrupt, provenance tagging, TF-IDF over vector DB, `over_the_side` scope narrowing) plus a new ADR-006 for the asset-sourcing decision below.
+- **Asset-sourcing research, before building anything:** checked whether real open-source ship general-arrangement drawings (DWG/DXF) could be imported into Godot. Two findings closed that path: Godot 4 has no native 2D CAD import (only STL, which is 3D-print geometry, not deck plans), and the "open" ship CAD drawings that do exist online (cadbull, dwgdownload, etc.) are commercial CAD marketplace content with unclear reuse licensing — wrong fit for a public MIT repo. Decision: generate a stylized schematic deck plan procedurally instead, same `gen_assets.py` + PIL pattern as both COSMO visualizers. Recorded as ADR-006.
+- `agent_core/events.py` — new, ported from cosmoai-adept's broadcaster design (lazy-started, no-op-by-default WebSocket server), on port 8081 instead of 8080 so both COSMO visualizers and this one can run concurrently on one machine.
+- `deconfliction.py`, `reasoning.py`, `hitl.py` — each now emits events at the point execution actually reaches them. Deliberately narrow payloads: work package ids, hazard categories, frame range, deck level, conflict pairs, and safety-brief provenance tags — never `description` or case-citation prose, consistent with the "operational metadata only" rule from cosmoai-adept.
+- `visualizer/` — Godot 4 project, "Blueprint" skin: a schematic top-down deck plan (frame-grid lines, deck-level bands, a hatched waterline region), work packages placed by their real `frame_start`/`frame_end`/`deck_level`/`is_aloft`/`is_over_side`, conflicts rendered as red links between markers, a dedicated Safety Review station that pulses orange during `hitl_awaiting` and stops on `hitl_decided`.
+- Overlap de-stacking (`band_placements` in `Main.gd`): two work packages sharing a deck level and overlapping frame range — which is exactly what a flagged conflict looks like — would otherwise render labels on top of each other. Fixed by shifting the second marker down within its band.
+- `visualizer/demo_broadcaster.py` — scripted run through the full pipeline (4 work packages placed, a hot-work/confined-space conflict flagged, a deterministic-fallback safety brief synthesized, HITL review requested and decided) with no API key required.
+- Recorded and screenshot-verified the demo GIF at three points: initial placement, conflict flagged, HITL decision resolved. Embedded in README.md.
+- `tests/test_events.py` — 2 new tests. Full suite: 24/24 passing, zero network calls.
+- README.md, `visualizer/README.md`, MIGRATION.md (Phase 5 flipped from deferred to substantially complete) all updated to match.
+
+**Decided but not built:**
+- Standalone JSON spatial-payload export (a snapshot artifact distinct from the live WebSocket stream) — MIGRATION.md Phase 5's one remaining unchecked item. The live event stream already carries this data; a static export format for a hypothetical non-live consumer just hasn't been built yet.
+- Whether Watchstander should get a HITL-approval-hook-swap or local-LLM-backend feature parity with cosmoai-adept was not raised this session — Watchstander's HITL gate is already a real `interrupt()`, a different (and arguably stronger) pattern than cosmoai-adept's `approval_hook` callback, so parity isn't obviously the right goal here without more thought.
+
+**Open questions for next session:**
+- Phase 4 (case data expansion) is still the most-overdue item in MIGRATION.md — `confined_space` and `fall_protection` both need another OSHA sourcing pass. Worth prioritizing before further visualizer polish.
+- Is a non-CLI resume mechanism worth building for the HITL gate (something that actually calls back into a paused LangGraph thread from, say, a Slack button), or is a local/demo-only reviewer flow sufficient for portfolio purposes?

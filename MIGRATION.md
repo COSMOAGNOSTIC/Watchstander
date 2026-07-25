@@ -3,7 +3,7 @@
 > **Goal:** From a deterministic rules-engine scaffold to a fully case-grounded, HITL-reviewed multi-agent safety system — building each phase on a verified previous phase, never freelancing ahead of the plan.
 > **Companion doc:** PASSDOWN.md covers team roles and session continuity; this file is the build road.
 > **Rule of the road:** one phase per sitting where practical, each phase ends with tests passing. Never start a phase with the previous one's Definition of Done unmet.
-> **Last updated:** 2026-07-24 (Phase 4 in progress)
+> **Last updated:** 2026-07-25 (Phase 4 in progress, Phase 5 substantially complete)
 
 Phase ordering logic: **prove the deterministic core → wire it to real case data → add reasoning on top → expand coverage → make it presentable/lockable.**
 
@@ -72,12 +72,20 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 
 ---
 
-## Phase 5 — Digital twin readiness (deferred)
+## Phase 5 — Digital twin readiness / live spatial visualizer
 
-- [ ] JSON spatial payload export shape defined
-- [ ] Not built until Phases 1-4 are solid — explicitly deferred, not urgent
+- [x] `ARCHITECTURE.md` added — Watchstander now has all three standard docs (MIGRATION, PASSDOWN, ARCHITECTURE); Section 8 records the visualizer's design before it was built
+- [x] `agent_core/events.py` — lazy WebSocket broadcaster ported from cosmoai-adept's design, on port 8081 so both visualizers can run side by side
+- [x] `deconfliction.py`, `reasoning.py`, `hitl.py` emit `deconfliction_start`/`deconfliction_result`, `reasoning_start`/`reasoning_result`, `hitl_awaiting`/`hitl_decided` — operational metadata only, never `description` or case prose
+- [x] `visualizer/` — Godot 4 project, "Blueprint" skin: schematic deck plan (frame grid + deck-level bands), work packages placed by real `frame_start`/`frame_end`/`deck_level`, conflicts drawn as red links, a dedicated Safety Review station that pulses during `hitl_awaiting`
+- [x] Asset-sourcing decision made explicit (ARCHITECTURE.md ADR-006): procedural schematic instead of real ship CAD drawings — no license-clean open option exists, and Godot 4 has no native 2D CAD import path
+- [x] `visualizer/demo_broadcaster.py` — scripted run through deconfliction → reasoning → HITL, no API key required
+- [x] Overlap de-stacking so two work packages sharing a deck level and frame range (i.e. exactly the packages a conflict flags) don't render their labels on top of each other
+- [x] Recorded demo GIF, embedded in README.md; screenshot-verified at three points in the sequence (initial placement, conflict flagged, HITL decision)
+- [x] `tests/test_events.py` — 2 new tests; full suite still green with zero network calls in CI
+- [ ] JSON spatial payload export as a standalone artifact (distinct from the live WebSocket stream) — not yet built; the event stream itself now carries this data, but there's no snapshot-export format yet for a hypothetical non-live consumer
 
-**Definition of done:** N/A — deferred phase, revisit after Phase 4.
+**Definition of done:** ✅ Substantially complete — live visualizer built, screenshot-verified, demo GIF recorded and embedded, docs current. Standalone JSON export (the one remaining unchecked item) is minor and can be picked up opportunistically.
 
 ---
 
@@ -101,5 +109,5 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 | 2 — Reasoning layer | ✅ | 2026-07-24 |
 | 3 — Real retrieval (RAG) | ✅ | 2026-07-24 |
 | 4 — Case data expansion | 🟡 in progress (7 cases across 4 core domains, target 5-10/domain; `over_the_side` out of scope) | |
-| 5 — Digital twin readiness | ⬜ (deferred) | |
+| 5 — Digital twin readiness / live visualizer | ✅ (JSON export artifact still open) | 2026-07-25 |
 | 6 — Lock it in | ⬜ | |

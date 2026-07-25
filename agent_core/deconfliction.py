@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from itertools import combinations
 
+from agent_core import events
 from agent_core.state import HazardCategory, WorkPackageState
 
 # Hazard category pairs that are unsafe to run concurrently in
@@ -115,12 +116,44 @@ def deconfliction_node(state: dict) -> dict:
         wp if isinstance(wp, WorkPackageState) else WorkPackageState(**wp)
         for wp in state["work_packages"]
     ]
+    events.emit(
+        "deconfliction_start",
+        # Spatial/hazard metadata only -- frame numbers, deck level, and
+        # hazard category, never `description` -- so a visualizer can
+        # place each work package on a schematic deck plan before
+        # conflicts are known. See ARCHITECTURE.md Section 8.
+        work_packages=[
+            {
+                "work_package_id": wp.work_package_id,
+                "hazard_categories": list(wp.hazard_categories),
+                "frame_start": wp.spatial.frame_start,
+                "frame_end": wp.spatial.frame_end,
+                "deck_level": wp.spatial.deck_level,
+                "is_aloft": wp.spatial.is_aloft,
+                "is_over_side": wp.spatial.is_over_side,
+            }
+            for wp in packages
+        ],
+    )
     find_all_conflicts(packages)
 
     any_conflicts = any(wp.conflicts for wp in packages)
     for wp in packages:
         if wp.conflicts:
             wp.requires_hitl_review = True
+
+    events.emit(
+        "deconfliction_result",
+        conflicts=[
+            {
+                "work_package_id": wp.work_package_id,
+                "conflicts_with": wp.conflicts,
+                "hazard_categories": list(wp.hazard_categories),
+            }
+            for wp in packages
+            if wp.conflicts
+        ],
+    )
 
     return {
         "work_packages": packages,
