@@ -80,28 +80,60 @@ def check_conflict(a: WorkPackageState, b: WorkPackageState) -> str | None:
         )
 
     if _vertically_stacked(a, b):
+        # _vertically_stacked only confirms a and b differ on overhead status,
+        # not which one is actually overhead -- an independent code review
+        # found this rationale unconditionally named `a` as "Overhead work"
+        # regardless of which package actually carries is_aloft/is_over_side,
+        # which is wrong whenever the non-overhead package happens to be `a`
+        # (e.g. because of iteration order in find_all_conflicts). Determine
+        # the actual overhead party explicitly instead of assuming positionally.
+        a_overhead = a.spatial.is_aloft or a.spatial.is_over_side
+        overhead, underlying = (a, b) if a_overhead else (b, a)
         return (
-            f"Overhead work ({a.work_package_id}) and underlying work "
-            f"({b.work_package_id}) share an overlapping frame range with no "
-            f"vertical deconfliction confirmed."
+            f"Overhead work ({overhead.work_package_id}) and underlying work "
+            f"({underlying.work_package_id}) share an overlapping frame range with "
+            f"no vertical deconfliction confirmed."
         )
 
     return None
+
+
+def _record_conflict(wp: WorkPackageState, other_id: str, rationale: str) -> None:
+    """
+    Records one side of a flagged conflict on `wp`, idempotently.
+
+    Two things an independent code review found broken here: (1) a package
+    conflicting with more than one other package only kept the *last*
+    rationale it was assigned -- `conflict_rationale = rationale` overwrote
+    whatever an earlier pair had already recorded, so the reviewer-facing
+    explanation silently dropped earlier conflicts even though `.conflicts`
+    itself stayed complete; (2) re-running `find_all_conflicts` on the same
+    objects (a retry, a checkpoint replay) appended duplicate entries to
+    `.conflicts` and duplicate text to `.conflict_rationale` with no
+    idempotency guard at all. Both are fixed here: `other_id` is only
+    appended if not already present, and `rationale` is only appended to
+    the accumulated text if it isn't already part of it.
+    """
+    if other_id not in wp.conflicts:
+        wp.conflicts.append(other_id)
+    if not wp.conflict_rationale:
+        wp.conflict_rationale = rationale
+    elif rationale not in wp.conflict_rationale:
+        wp.conflict_rationale = f"{wp.conflict_rationale} | {rationale}"
 
 
 def find_all_conflicts(packages: list[WorkPackageState]) -> list[WorkPackageState]:
     """
     Evaluates every pair of concurrent work packages and populates
     `.conflicts` / `.conflict_rationale` on affected packages in place.
-    Returns the same list for convenience.
+    Returns the same list for convenience. Safe to call more than once on
+    the same objects -- see `_record_conflict`.
     """
     for a, b in combinations(packages, 2):
         rationale = check_conflict(a, b)
         if rationale:
-            a.conflicts.append(b.work_package_id)
-            b.conflicts.append(a.work_package_id)
-            a.conflict_rationale = rationale
-            b.conflict_rationale = rationale
+            _record_conflict(a, b.work_package_id, rationale)
+            _record_conflict(b, a.work_package_id, rationale)
     return packages
 
 
@@ -141,6 +173,15 @@ def deconfliction_node(state: dict) -> dict:
     for wp in packages:
         if wp.conflicts:
             wp.requires_hitl_review = True
+            # Fail closed the moment a conflict is flagged, not just once the
+            # HITL gate finishes. `cleared_for_execution` otherwise defaults
+            # to True (see state.py), which an independent code review
+            # correctly flagged as a window where any consumer reading state
+            # between this node and hitl_gate_node -- or a graph that
+            # crashes/terminates in that window -- would see an un-reviewed
+            # flagged conflict as cleared. hitl_gate_node remains the sole
+            # authority on the *final* value once review actually happens.
+            wp.cleared_for_execution = False
 
     events.emit(
         "deconfliction_result",

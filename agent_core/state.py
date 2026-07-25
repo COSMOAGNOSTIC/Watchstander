@@ -13,7 +13,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class HazardCategory(str, Enum):
@@ -166,3 +166,31 @@ class WorkPackageState(BaseModel):
     )
 
     model_config = ConfigDict(use_enum_values=True)
+
+    @model_validator(mode="after")
+    def _fail_closed_pending_review(self) -> "WorkPackageState":
+        """
+        `cleared_for_execution` defaults to True, which is correct for a
+        package that never needed review -- but an independent code review
+        found it was *also* True for a package that needs review and hasn't
+        been reviewed yet, from the moment the object exists (e.g. a
+        RiskLevel.CRITICAL package, which always requires review even before
+        deconfliction runs) until `hitl_gate_node` records an actual
+        disposition. Any consumer trusting `cleared_for_execution` alone --
+        exactly what this field's own docstring instructs -- would treat an
+        unreviewed critical package as cleared.
+
+        This closes the gap at construction time: a package that is
+        independently CRITICAL risk and hasn't been reviewed yet
+        (`hitl_disposition is None`) is forced to `cleared_for_execution =
+        False` here, regardless of what was passed in. `deconfliction_node`
+        closes the second half of the same gap for packages that only
+        become review-required once a conflict is actually flagged (see
+        deconfliction.py). `hitl_gate_node` remains the sole authority once
+        an actual disposition is recorded -- this validator only tightens
+        the *pending-review* default, it never runs again after that, since
+        by then `hitl_disposition` is no longer `None`.
+        """
+        if self.hitl_disposition is None and self.risk_level == RiskLevel.CRITICAL:
+            self.cleared_for_execution = False
+        return self

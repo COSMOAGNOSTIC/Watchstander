@@ -234,7 +234,12 @@ func _handle_event(raw: String) -> void:
 			review_pulsing = false
 			if review_glow:
 				review_glow.modulate.a = 0.5
-			var decision: String = parsed.get("decision", parsed.get("approved", ""))
+			# "decision" (cosmoai-adept's approval_decided) carried a raw
+			# human-readable string; Watchstander's hitl_decided instead
+			# broadcasts the structured "disposition" (approved/rejected/
+			# invalid) per events.py's ids-and-flags-only broadcast policy --
+			# check both so this scene can render either event type.
+			var decision: String = parsed.get("decision", parsed.get("disposition", parsed.get("approved", "")))
 			_say("%s decision: %s" % [parsed.get("work_package_id", ""), decision])
 
 

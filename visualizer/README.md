@@ -49,7 +49,7 @@ provenance tags). `Main.gd` connects as a client using Godot 4's built-in
 | `deconfliction_result` | flagged packages' markers turn red and a red link line is drawn between each conflicting pair |
 | `reasoning_start` / `reasoning_result` | status bubble shows brief synthesis progress and each brief's provenance tag |
 | `hitl_awaiting` | the flagged package's marker links to the Safety Review station, which pulses orange, until a decision resumes |
-| `hitl_decided` | Safety Review station stops pulsing; bubble shows the decision |
+| `hitl_decided` | Safety Review station stops pulsing; bubble shows the disposition (approved/rejected/invalid) |
 
 The event schema is deliberately close to cosmoai-adept's (same
 lazy-broadcaster design, same "operational metadata only" rule) so the

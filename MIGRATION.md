@@ -116,17 +116,35 @@ This phase exists because the external review response above closed two acute de
 
 ---
 
+## Phase 5.85 — Second-pass review response: fail-open gaps in this session's own fixes
+
+This phase exists because closing Phase 5.5's two acute defects didn't fully close them — a second, more targeted independent Fable-model review pass (asked to line-trace `state.py`, `deconfliction.py`, and `hitl.py` cold, not read this document) found real fail-open gaps in the disposition-enforcement and graph-import fixes from Phase 5.5 itself, plus two pre-existing correctness bugs in `deconfliction.py`.
+
+- [x] **`cleared_for_execution` no longer defaults open while review is pending.** It defaulted `True` not just for packages that never needed review, but also for a `CRITICAL`-risk package before it's ever reviewed, and for a flagged package in the window between `deconfliction_node` and `hitl_gate_node`. Fixed with a `model_validator` on `WorkPackageState` (closes the construction-time gap) plus an explicit set in `deconfliction_node` (closes the post-flagging gap).
+- [x] **`_parse_decision()` fails closed on hedged/conditional text, not just unrecognized text.** "approve only if X re-certifies" and "approve?? absolutely not" both used to parse as `APPROVED` since both start with the substring "approve". Fixed with a leading-words negation-cue check ahead of the prefix match — bounded to the leading words specifically after an early version of the fix wrongly flagged legitimate trailing rationale ("reject - the permit hasn't been signed off") as `INVALID` too.
+- [x] **`conflict_rationale` accumulates instead of being overwritten, and `find_all_conflicts` is idempotent.** A package conflicting with two others used to keep only the last pair's rationale; re-running the function on the same objects used to append duplicate `.conflicts` entries. Fixed via a `_record_conflict()` helper with both guards.
+- [x] **The overhead/underlying rationale label tracks the actual overhead party, not argument position.** The rationale text used to unconditionally name the first argument to `check_conflict()` as "Overhead work" regardless of which package actually carried `is_aloft`/`is_over_side`. Fixed — this closes the *labeling* bug; the deeper semantic question of whether `is_over_side` should count as "overhead" at all remains open (Known Debt).
+- [x] **`hitl_decided` no longer broadcasts the reviewer's raw free-text answer**, closing a violation of `events.py`'s own ids/flags/provenance-only broadcast policy that Phase 5.5's disposition fix itself introduced.
+- [x] 10 new tests (`tests/test_state.py` new; `tests/test_deconfliction.py` gained 4; `tests/test_hitl.py` gained 3) — each named for the specific bug it regresses, not just the passing case. 50/50 passing, up from 40. `eval/baseline.json` re-verified unchanged (the harness only captures booleans/counts, not raw rationale text, so none of these fixes moved the eval metrics).
+- [x] ARCHITECTURE.md §5 gained five new explanatory paragraphs (one per fix); Known Debt's HITL-loop and `is_over_side` rows updated to reflect what's now partially mitigated vs. still fully open; ADR-010 through ADR-013 added.
+
+**Definition of done:** ✅ Complete — all five issues reproduced via the review's own examples, fixed, and covered by regression tests; `pytest -v` green (50 tests); eval harness baseline re-verified unaffected.
+
+---
+
 ## Phase 6 — Lock it in
 
 - [x] Test coverage expanded beyond deconfliction logic (state validation, HITL gate behavior) — see Phase 5.5
 - [x] Fixed-scenario evaluation harness with a checked-in regression baseline — see Phase 5.75
+- [x] Fail-open gaps in the Phase 5.5 fixes themselves closed — see Phase 5.85
 - [ ] README reflects actual current capabilities, not aspirational ones — still stale: its architecture diagram omits `reasoning.py`/`retrieval.py`/`case_lookup.py`, and it claims "temporal" deconfliction that isn't implemented (see Known Debt in ARCHITECTURE.md)
 - [ ] PASSDOWN.md and MIGRATION.md both current
 - [ ] One full end-to-end smoke run documented
 - [ ] Temporal deconfliction actually implemented, or the claim removed
 - [ ] Adjacency tolerance added to `_frame_ranges_overlap()` (or the "adjacent uncleared space" claim in `deconfliction.py`'s own comment softened to match what the code does)
 - [ ] `deck_level` actually used in conflict detection, or the "(x, y) grid coordinates" claim in `SpatialCoordinates`'s docstring softened
-- [ ] `is_over_side` rationale text fixed to describe the geometry correctly (currently labeled "Overhead work" — see `eval/scenarios.py`'s `rationale-over-side-labeled-overhead`)
+- [ ] `is_over_side`'s underlying semantic model (treated as "overhead" the same as aloft work) changed to reflect that over-the-side hangs *below* the deck edge — the rationale now correctly names *which* package is labeled overhead (Phase 5.85), but the label's premise for `is_over_side` specifically is still domain-backwards
+- [ ] Non-idempotent multi-package HITL loop fully closed — `conflict_rationale`'s append is now guarded (Phase 5.85), but the `events.emit()` calls in the replayed interrupt path are not; needs the interrupt-once-per-invocation restructure
 
 **Definition of done:** Tests green, docs match reality, repo is honestly representative of what it does.
 
@@ -144,4 +162,5 @@ This phase exists because the external review response above closed two acute de
 | 5 — Digital twin readiness / live visualizer | ✅ (JSON export artifact still open) | 2026-07-25 |
 | 5.5 — External review response (graph import + HITL disposition) | ✅ | 2026-07-25 |
 | 5.75 — Evaluation harness | ✅ | 2026-07-25 |
+| 5.85 — Second-pass review response (fail-open gaps in 5.5's own fixes) | ✅ | 2026-07-25 |
 | 6 — Lock it in | ⬜ | |

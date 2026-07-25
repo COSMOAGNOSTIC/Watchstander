@@ -98,7 +98,13 @@ SCRIPT = [
             "safety_brief_provenance": "[SOURCE: DETERMINISTIC FALLBACK - LLM OFFLINE]",
         },
     ),
-    ("hitl_decided", {"work_package_id": "HW-2201", "decision": "reject - reschedule after CS-2202 clears"}),
+    (
+        "hitl_decided",
+        # Matches the real hitl_gate_node payload shape (see agent_core/hitl.py):
+        # the parsed, structural disposition -- never the reviewer's raw free-text
+        # answer, which stays off the wire per events.py's own broadcast policy.
+        {"work_package_id": "HW-2201", "disposition": "rejected", "cleared_for_execution": False},
+    ),
 ]
 
 
