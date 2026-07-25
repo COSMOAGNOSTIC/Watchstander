@@ -1,0 +1,181 @@
+{
+  "conflict_scenarios": [
+    {
+      "actual_conflict": true,
+      "category": "true_positive",
+      "domain_correct": true,
+      "expected_conflict": true,
+      "id": "tp-hotwork-confined-same-compartment",
+      "matches_expected": true
+    },
+    {
+      "actual_conflict": true,
+      "category": "true_positive",
+      "domain_correct": true,
+      "expected_conflict": true,
+      "id": "tp-hotwork-aloft-vertically-stacked",
+      "matches_expected": true
+    },
+    {
+      "actual_conflict": true,
+      "category": "true_positive",
+      "domain_correct": true,
+      "expected_conflict": true,
+      "id": "tp-frame-overlap-different-compartments",
+      "matches_expected": true
+    },
+    {
+      "actual_conflict": true,
+      "category": "true_positive",
+      "domain_correct": true,
+      "expected_conflict": true,
+      "id": "tp-over-side-vertically-stacked",
+      "matches_expected": true
+    },
+    {
+      "actual_conflict": true,
+      "category": "boundary",
+      "domain_correct": true,
+      "expected_conflict": true,
+      "id": "tp-boundary-touching-frames",
+      "matches_expected": true
+    },
+    {
+      "actual_conflict": false,
+      "category": "true_negative",
+      "domain_correct": true,
+      "expected_conflict": false,
+      "id": "tn-unrelated-hazards-non-overlapping",
+      "matches_expected": true
+    },
+    {
+      "actual_conflict": false,
+      "category": "true_negative",
+      "domain_correct": true,
+      "expected_conflict": false,
+      "id": "tn-incompatible-pair-but-not-linked",
+      "matches_expected": true
+    },
+    {
+      "actual_conflict": false,
+      "category": "true_negative",
+      "domain_correct": true,
+      "expected_conflict": false,
+      "id": "tn-missing-frame-data-different-compartments",
+      "matches_expected": true
+    },
+    {
+      "actual_conflict": false,
+      "category": "known_gap_false_negative",
+      "domain_correct": false,
+      "expected_conflict": false,
+      "id": "gap-adjacent-frames-not-touching",
+      "matches_expected": true
+    },
+    {
+      "actual_conflict": false,
+      "category": "known_gap_false_negative",
+      "domain_correct": false,
+      "expected_conflict": false,
+      "id": "gap-two-aloft-packages-stacked",
+      "matches_expected": true
+    },
+    {
+      "actual_conflict": false,
+      "category": "known_gap_false_negative",
+      "domain_correct": false,
+      "expected_conflict": false,
+      "id": "gap-simultaneous-confined-space-entries",
+      "matches_expected": true
+    },
+    {
+      "actual_conflict": true,
+      "category": "flagged_rationale_wrong",
+      "domain_correct": true,
+      "expected_conflict": true,
+      "id": "rationale-over-side-labeled-overhead",
+      "matches_expected": true,
+      "rationale_check_passed": true
+    },
+    {
+      "actual_conflict": true,
+      "category": "debatable_false_positive",
+      "domain_correct": false,
+      "expected_conflict": true,
+      "id": "debatable-aloft-fall-protection-compliant-config",
+      "matches_expected": true
+    },
+    {
+      "actual_conflict": true,
+      "category": "true_positive",
+      "conflict_count_for_a": 2,
+      "conflicts_with_third_package": true,
+      "domain_correct": true,
+      "expected_conflict": true,
+      "id": "tp-multi-conflict-single-package",
+      "matches_expected": true
+    }
+  ],
+  "reasoning_check": {
+    "executive_summary_non_empty": true,
+    "is_deterministic_fallback": true,
+    "precedent_context_non_empty": true,
+    "provenance_tag_present": true,
+    "recommended_action_non_empty": true,
+    "references_conflict_rationale": true,
+    "source": "deterministic-fallback"
+  },
+  "retrieval_scenarios": [
+    {
+      "actual_case_id": "CS-2023-STJOHNS",
+      "expected_case_id": "CS-2023-STJOHNS",
+      "id": "retrieval-confined-space-single-candidate",
+      "matches_expected": true
+    },
+    {
+      "actual_case_id": "HW-FIRSTMARINE",
+      "expected_case_id": "HW-FIRSTMARINE",
+      "id": "retrieval-hotwork-two-candidates-explosion",
+      "matches_expected": true
+    },
+    {
+      "actual_case_id": "HW-ASHTABULA-2024",
+      "expected_case_id": "HW-ASHTABULA-2024",
+      "id": "retrieval-hotwork-two-candidates-fire",
+      "matches_expected": true
+    },
+    {
+      "actual_case_id": "FALL-DETYENS-2024",
+      "expected_case_id": "FALL-DETYENS-2024",
+      "id": "retrieval-fall-protection-three-candidates-fall",
+      "matches_expected": true
+    },
+    {
+      "actual_case_id": "STRUCK-DETYENS-2020",
+      "expected_case_id": "STRUCK-DETYENS-2020",
+      "id": "retrieval-fall-protection-three-candidates-struck",
+      "matches_expected": true
+    },
+    {
+      "actual_case_id": "PATTERN-DETYENS-2015",
+      "expected_case_id": "PATTERN-DETYENS-2015",
+      "id": "retrieval-fall-protection-three-candidates-pattern",
+      "matches_expected": true
+    },
+    {
+      "actual_case_id": "FALL-DETYENS-2024",
+      "expected_case_id": "FALL-DETYENS-2024",
+      "id": "retrieval-no-signal-falls-back-to-first",
+      "matches_expected": true
+    }
+  ],
+  "summary": {
+    "conflict_scenarios_behavior_matches_expected": 14,
+    "conflict_scenarios_domain_correct": 10,
+    "conflict_scenarios_known_gaps": 4,
+    "conflict_scenarios_total": 14,
+    "reasoning_deterministic_fallback_healthy": true,
+    "retrieval_scenarios_matches_expected": 7,
+    "retrieval_scenarios_total": 7
+  }
+}

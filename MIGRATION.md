@@ -102,14 +102,31 @@ This phase exists because an independent Fable-model code review (run against th
 
 ---
 
+## Phase 5.75 — Evaluation harness
+
+This phase exists because the external review response above closed two acute defects, but left the system's actual domain-correctness rate an unmeasured, qualitative claim — Fable's review had found real gaps (no adjacency tolerance, `deck_level` never used, `is_over_side` mislabeled in rationale text, a domain-questionable hazard pair) but nothing in the repo turned those findings into a number that CI re-checks. Unit tests answer whether one function is correct on one input; they don't answer "out of a representative set of real scenarios, how many does the whole pipeline get right today, and which specific ones does it still get wrong."
+
+- [x] `eval/scenarios.py` — 14 hand-authored conflict-detection scenarios (true positives, true negatives, a frame-boundary edge case, a multi-conflict case) plus 7 case-retrieval scenarios run against the real `case_data/cases_v1.json`. Four scenarios are known gaps *on purpose*: `gap-adjacent-frames-not-touching`, `gap-two-aloft-packages-stacked`, and `gap-simultaneous-confined-space-entries` each reproduce a specific false negative from ARCHITECTURE.md's Known Debt table; `debatable-aloft-fall-protection-compliant-config` reproduces the domain-questionable `{WORKING_ALOFT, FALL_PROTECTION}` pair Fable flagged. A fifth scenario, `rationale-over-side-labeled-overhead`, pins down the `is_over_side` mislabeling as a measured string check instead of prose.
+- [x] `eval/run_eval.py` — runs the real, non-mocked pipeline (`deconfliction.find_all_conflicts`, `retrieval.cite_best_matching_case`, `reasoning.generate_safety_brief`'s deterministic-fallback path) against every scenario and produces a metrics dict. Zero API keys, zero network calls, same constraint as the rest of the suite.
+- [x] `eval/baseline.json` — the metrics dict from this reviewed run, checked into git.
+- [x] `tests/test_eval_harness.py` — asserts a fresh run matches the baseline exactly, and separately asserts the set of known-gap scenario IDs is exactly the documented four — so either a silent new regression or a silently-unclaimed gap-fix fails the suite instead of passing quietly.
+- [x] ARCHITECTURE.md §3/§7/§9/§10 updated (component row, harness description, Known Debt rows cross-referenced to specific scenario IDs, ADR-009).
+
+**Definition of done:** ✅ Complete — 14/14 conflict scenarios and 7/7 retrieval scenarios match their documented expected behavior (10/14 conflict scenarios are domain-correct; the other 4 are documented, intentional known gaps); `pytest -v` green (40 tests, up from 34).
+
+---
+
 ## Phase 6 — Lock it in
 
 - [x] Test coverage expanded beyond deconfliction logic (state validation, HITL gate behavior) — see Phase 5.5
+- [x] Fixed-scenario evaluation harness with a checked-in regression baseline — see Phase 5.75
 - [ ] README reflects actual current capabilities, not aspirational ones — still stale: its architecture diagram omits `reasoning.py`/`retrieval.py`/`case_lookup.py`, and it claims "temporal" deconfliction that isn't implemented (see Known Debt in ARCHITECTURE.md)
 - [ ] PASSDOWN.md and MIGRATION.md both current
 - [ ] One full end-to-end smoke run documented
 - [ ] Temporal deconfliction actually implemented, or the claim removed
 - [ ] Adjacency tolerance added to `_frame_ranges_overlap()` (or the "adjacent uncleared space" claim in `deconfliction.py`'s own comment softened to match what the code does)
+- [ ] `deck_level` actually used in conflict detection, or the "(x, y) grid coordinates" claim in `SpatialCoordinates`'s docstring softened
+- [ ] `is_over_side` rationale text fixed to describe the geometry correctly (currently labeled "Overhead work" — see `eval/scenarios.py`'s `rationale-over-side-labeled-overhead`)
 
 **Definition of done:** Tests green, docs match reality, repo is honestly representative of what it does.
 
@@ -126,4 +143,5 @@ This phase exists because an independent Fable-model code review (run against th
 | 4 — Case data expansion | 🟡 in progress (7 cases across 4 core domains, target 5-10/domain; `over_the_side` out of scope) | |
 | 5 — Digital twin readiness / live visualizer | ✅ (JSON export artifact still open) | 2026-07-25 |
 | 5.5 — External review response (graph import + HITL disposition) | ✅ | 2026-07-25 |
+| 5.75 — Evaluation harness | ✅ | 2026-07-25 |
 | 6 — Lock it in | ⬜ | |
