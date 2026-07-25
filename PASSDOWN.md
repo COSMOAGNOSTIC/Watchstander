@@ -1,8 +1,8 @@
 # PROJECT PASSDOWN: Watchstander
 ## Civilian Shipyard OSHA Spatial & Temporal Deconfliction Agent Graph
 
-**Last updated:** 2026-07-25
-**Status:** Live on GitHub, CI green. ARCHITECTURE.md added; live spatial visualizer (Phase 5) built and demo-recorded. Phase 4 case-data expansion still open.
+**Last updated:** 2026-07-25 (later same day)
+**Status:** Live on GitHub, CI now genuinely green — the graph import was broken and untested until this session's external-review response (see Section 9). ARCHITECTURE.md added; live spatial visualizer (Phase 5) built and demo-recorded. Phase 4 case-data expansion still open.
 
 ---
 
@@ -111,3 +111,29 @@ Initial research pass complete via OSHA.gov and DOL.gov public releases. Real, c
 **Open questions for next session:**
 - Phase 4 (case data expansion) is still the most-overdue item in MIGRATION.md — `confined_space` and `fall_protection` both need another OSHA sourcing pass. Worth prioritizing before further visualizer polish.
 - Is a non-CLI resume mechanism worth building for the HITL gate (something that actually calls back into a paused LangGraph thread from, say, a Slack button), or is a local/demo-only reviewer flow sufficient for portfolio purposes?
+
+---
+
+## 9. Session Notes — 2026-07-25 (later same day): External review response — broken graph import + unenforced HITL decision
+
+**Where things stood coming in:** both public repos (this one and `cosmoai-adept`) went through an independent Fable-model code/architecture/security review, plus two external recruiter-perspective AI assessments (ChatGPT, Grok) that Donnie ran separately and brought back for comparison. Both recruiter assessments praised this repo's HITL gate as one of the two strongest architectural signals in the whole portfolio ("the workflow cannot proceed without human authorization") — true in the narrow sense that execution genuinely pauses, but Fable's actual code trace found the pause and the answer weren't the same guarantee.
+
+**What got found and verified before fixing:**
+- **`graph.py` didn't import on a clean install.** `from langgraph.checkpoint.sqlite import SqliteSaver` needs the separate `langgraph-checkpoint-sqlite` package, never declared in `pyproject.toml`. Reproduced directly in a fresh virtualenv containing only `langgraph`/`pydantic`/`websockets`: `ModuleNotFoundError` on `import agent_core.graph`. Compounding factor: no test in the repo ever imported `graph.py` or `hitl.py` — the green CI badge was masking a broken build of the flagship assembled graph, the exact thing "clone it and run it" would hit first.
+- **The HITL decision wasn't structurally enforced.** `hitl_gate_node` genuinely blocked on `interrupt()` (real, not simulated — that part was never in question), but the human's answer was recorded only as a string appended to `conflict_rationale`. "Approve" and "reject" produced byte-identical `WorkPackageState` output on every other field. ARCHITECTURE.md's old §5 claimed "nothing downstream of a flag can execute without it" — true only because nothing downstream existed yet to check anything.
+
+**What got built:**
+- `pyproject.toml` — added `langgraph-checkpoint-sqlite>=2.0` as an explicit dependency.
+- `state.py` — new `HitlDisposition` enum (`APPROVED`/`REJECTED`/`INVALID`); `WorkPackageState` gained `hitl_disposition` (the parsed verdict, `None` until a review happens) and `cleared_for_execution` (the field a real downstream consumer must check — defaults `True` for packages that never needed review, `False` only on rejection or an unparseable answer).
+- `hitl.py` — new `_parse_decision()` (case-insensitive prefix match on "approve"/"reject", anything else fails closed to `INVALID`); `hitl_gate_node` now sets both new fields and includes the parsed disposition in the `hitl_decided` event payload, not just the raw string.
+- `tests/test_graph.py` (new) — builds the real graph via `build_graph()` and drives a full `entry -> deconfliction -> reasoning -> hitl_gate -> END` invocation through a genuine `interrupt()`/`Command(resume=...)` cycle with `MemorySaver`. This is the literal regression test for the import bug — it would have caught it on day one.
+- `tests/test_hitl.py` (new) — 7 tests covering the disposition parser directly plus the full approve/reject/ambiguous/no-review-needed/critical-risk cases through the real compiled graph.
+- 34/34 tests passing (up from 24). Verified the import fix in an isolated clean virtualenv both ways: fails without the dependency (reproducing the bug), succeeds with it (confirming the fix).
+- ARCHITECTURE.md §5 and §7 rewritten to explain why these fixes exist; ADR-007/008 added. Known Debt gained the non-idempotent multi-package `interrupt()` loop (a real, more involved issue Fable also found — deliberately *not* fixed in this pass, disclosed instead of silently deferred) plus two domain-correctness gaps from the same review: "temporal deconfliction" is claimed in the README/docstrings but `scheduled_start`/`scheduled_end` are never read by `check_conflict()`, and there's no adjacency tolerance on frame ranges, so the "adjacent uncleared space" scenario `INCOMPATIBLE_HAZARD_PAIRS`'s own comment cites as motivating isn't actually caught.
+
+**Decided but not built:**
+- The non-idempotent HITL loop under multiple simultaneously-flagged packages — real issue, larger fix (restructuring to interrupt once per invocation rather than once per package), out of scope for this pass and tracked honestly in Known Debt.
+- Temporal deconfliction and frame-range adjacency tolerance — both real domain-correctness gaps, both left for a future session since they're feature work, not defects in what's already shipped.
+- cosmoai-adept received its own review-response fixes this session (sandbox trust boundary, quick-start crash) — see that repo's PASSDOWN.md; not duplicated here since the two repos' gaps were unrelated.
+
+**Open questions for next session:** should the HITL loop restructure happen before or after Phase 4's case-data expansion? Given three independent reviewers now flagged an eval harness as the highest-leverage next investment across both repos, is that still the right next priority over closing Known Debt items surfaced this session?

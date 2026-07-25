@@ -3,7 +3,7 @@
 > **Goal:** From a deterministic rules-engine scaffold to a fully case-grounded, HITL-reviewed multi-agent safety system — building each phase on a verified previous phase, never freelancing ahead of the plan.
 > **Companion doc:** PASSDOWN.md covers team roles and session continuity; this file is the build road.
 > **Rule of the road:** one phase per sitting where practical, each phase ends with tests passing. Never start a phase with the previous one's Definition of Done unmet.
-> **Last updated:** 2026-07-25 (Phase 4 in progress, Phase 5 substantially complete)
+> **Last updated:** 2026-07-25 (Phase 4 in progress, Phase 5.5 complete)
 
 Phase ordering logic: **prove the deterministic core → wire it to real case data → add reasoning on top → expand coverage → make it presentable/lockable.**
 
@@ -89,12 +89,27 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 
 ---
 
+## Phase 5.5 — External review response: broken graph import + unenforced HITL decision
+
+This phase exists because an independent Fable-model code review (run against the public repo, no shared context with prior sessions) found two critical defects — both confirmed by direct reproduction in a clean virtualenv before fixing:
+
+- [x] **`graph.py` didn't import on a clean install.** `from langgraph.checkpoint.sqlite import SqliteSaver` requires the separate `langgraph-checkpoint-sqlite` package, which was never declared in `pyproject.toml`. Reproduced: a fresh venv with only `langgraph`/`pydantic`/`websockets` installed raised `ModuleNotFoundError` on `import agent_core.graph`. Worse than a missing dependency alone — **no test in this repo ever imported `graph.py` or `hitl.py`**, so CI was green while the flagship assembled graph was unrunnable. Fixed: dependency added; `tests/test_graph.py` now builds the real graph and drives a full invocation through it, so this class of gap can't recur silently.
+- [x] **The HITL gate's decision wasn't structurally enforced.** `hitl_gate_node` genuinely paused on `interrupt()` (that part was always real), but recorded the human's answer only as a string appended to `conflict_rationale` — "approve" and "reject" produced identical `WorkPackageState` output. Fixed: `state.py` gained a `HitlDisposition` enum (`APPROVED`/`REJECTED`/`INVALID`) and two new `WorkPackageState` fields, `hitl_disposition` and `cleared_for_execution`; `hitl.py`'s new `_parse_decision()` maps the raw answer to a disposition (case-insensitive prefix match on "approve"/"reject", anything else fails closed to `INVALID`); `cleared_for_execution` is the field any future consumer must actually check, not prose-grepping.
+- [x] 10 new tests (`tests/test_graph.py`, `tests/test_hitl.py`) drive the real compiled graph through genuine `interrupt()`/`Command(resume=...)` cycles — approve, reject, ambiguous input, no-review-needed, and independently-critical-risk cases. 34/34 tests passing, up from 24.
+- [x] ARCHITECTURE.md §5 rewritten to describe why the fix exists, not just the current state; ADR-007/008 added; a known-but-not-fixed limitation (the HITL loop's non-idempotent `interrupt()` replay under multiple flagged packages) disclosed honestly in Known Debt rather than silently omitted, along with two domain-correctness gaps the same review surfaced (temporal deconfliction claimed but not implemented; no adjacency tolerance on frame ranges).
+
+**Definition of done:** ✅ Complete — both defects reproduced in a clean environment, fixed, and covered by tests that exercise the real graph rather than a mock; `pytest -v` green (34 tests).
+
+---
+
 ## Phase 6 — Lock it in
 
-- [ ] Test coverage expanded beyond deconfliction logic (state validation, HITL gate behavior)
-- [ ] README reflects actual current capabilities, not aspirational ones
+- [x] Test coverage expanded beyond deconfliction logic (state validation, HITL gate behavior) — see Phase 5.5
+- [ ] README reflects actual current capabilities, not aspirational ones — still stale: its architecture diagram omits `reasoning.py`/`retrieval.py`/`case_lookup.py`, and it claims "temporal" deconfliction that isn't implemented (see Known Debt in ARCHITECTURE.md)
 - [ ] PASSDOWN.md and MIGRATION.md both current
 - [ ] One full end-to-end smoke run documented
+- [ ] Temporal deconfliction actually implemented, or the claim removed
+- [ ] Adjacency tolerance added to `_frame_ranges_overlap()` (or the "adjacent uncleared space" claim in `deconfliction.py`'s own comment softened to match what the code does)
 
 **Definition of done:** Tests green, docs match reality, repo is honestly representative of what it does.
 
@@ -110,4 +125,5 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 | 3 — Real retrieval (RAG) | ✅ | 2026-07-24 |
 | 4 — Case data expansion | 🟡 in progress (7 cases across 4 core domains, target 5-10/domain; `over_the_side` out of scope) | |
 | 5 — Digital twin readiness / live visualizer | ✅ (JSON export artifact still open) | 2026-07-25 |
+| 5.5 — External review response (graph import + HITL disposition) | ✅ | 2026-07-25 |
 | 6 — Lock it in | ⬜ | |

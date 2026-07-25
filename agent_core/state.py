@@ -31,6 +31,23 @@ class RiskLevel(str, Enum):
     CRITICAL = "critical"  # always routes to HITL gate
 
 
+class HitlDisposition(str, Enum):
+    """
+    The structured, machine-checkable record of a human reviewer's decision
+    at the HITL gate. Before this existed, `hitl_gate_node` recorded the
+    raw decision only as a string appended to `conflict_rationale` -- prose,
+    not state -- so "approve" and "reject" produced identical downstream
+    behavior. `approve`/`reject` (case-insensitive prefix match) parse to
+    APPROVED/REJECTED; anything else parses to INVALID and is treated
+    identically to REJECTED for `cleared_for_execution`, below -- the gate
+    fails closed on an unparseable answer rather than defaulting to open.
+    """
+
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    INVALID = "invalid"
+
+
 class SpatialCoordinates(BaseModel):
     """
     Locates a work package within a vessel or shipyard structure.
@@ -127,6 +144,25 @@ class WorkPackageState(BaseModel):
     # populated by the Phase 2 reasoning node, not set by the submitter
     safety_brief: Optional[SafetyBrief] = Field(
         default=None, description="Plain-language HITL brief synthesized from the flagged conflict"
+    )
+
+    # populated by hitl_gate_node, not set by the submitter. `conflict_rationale`
+    # still gets the decision appended as prose for human readability, but
+    # these two fields are the actual machine-checkable record - a future
+    # downstream consumer (a scheduler, a permit issuer) must check
+    # `cleared_for_execution`, not grep `conflict_rationale` for the word
+    # "approve".
+    hitl_disposition: Optional[HitlDisposition] = Field(
+        default=None,
+        description="Structured record of the human reviewer's decision. "
+        "None means no HITL review has happened yet for this package.",
+    )
+    cleared_for_execution: bool = Field(
+        default=True,
+        description="False only when a required HITL review resulted in a "
+        "rejection or an unparseable decision (fail closed). True by default "
+        "for packages that never required review. Any downstream consumer "
+        "must check this field before acting on a work package.",
     )
 
     model_config = ConfigDict(use_enum_values=True)

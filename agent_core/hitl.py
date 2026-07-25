@@ -14,7 +14,23 @@ from langgraph.types import interrupt
 
 from agent_core import events
 from agent_core.reasoning import provenance_tag
-from agent_core.state import RiskLevel, WorkPackageState
+from agent_core.state import HitlDisposition, RiskLevel, WorkPackageState
+
+
+def _parse_decision(raw) -> HitlDisposition:
+    """
+    Turns whatever the human reviewer typed into a structured disposition.
+    Case-insensitive prefix match on "approve"/"reject"; anything else -
+    a typo, a note with no clear verdict, an empty string - is INVALID and
+    is treated identically to REJECTED by the caller. This is a fail-closed
+    parse: an ambiguous answer must never be read as approval.
+    """
+    text = str(raw).strip().lower()
+    if text.startswith("approve"):
+        return HitlDisposition.APPROVED
+    if text.startswith("reject"):
+        return HitlDisposition.REJECTED
+    return HitlDisposition.INVALID
 
 
 def hitl_gate_node(state: dict) -> dict:
@@ -62,13 +78,27 @@ def hitl_gate_node(state: dict) -> dict:
             }
         )
 
+        disposition = _parse_decision(decision)
+        wp.hitl_disposition = disposition
+        # The structural record a downstream consumer must actually check -
+        # approve and reject are no longer just prose in conflict_rationale.
+        # An unparseable answer fails closed (treated as not cleared), same
+        # as an explicit rejection.
+        wp.cleared_for_execution = disposition == HitlDisposition.APPROVED
+
         events.emit(
             "hitl_decided",
             work_package_id=wp.work_package_id,
             decision=str(decision),
+            disposition=disposition,
+            cleared_for_execution=wp.cleared_for_execution,
         )
 
-        wp.conflict_rationale = (wp.conflict_rationale or "") + f" | HITL decision: {decision}"
+        wp.conflict_rationale = (
+            (wp.conflict_rationale or "")
+            + f" | HITL decision: {decision} (disposition={disposition.value}, "
+            f"cleared_for_execution={wp.cleared_for_execution})"
+        )
         reviewed.append(wp)
 
     return {"work_packages": reviewed}
