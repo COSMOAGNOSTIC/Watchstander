@@ -123,4 +123,4 @@ Unlike cosmoai-adept's visualizer — an agent walking between abstract tool sta
 
 ## 11. Maintenance Rules
 
-Update this document when: a migration phase completes, a component is added, a decision changes, or debt is paid. If the doc and the code disagree, the doc is the bug. See [MIGRATION.md](MIGRATION.md) for how we got here and [PASSDOWN.md](PASSDOWN.md) for team roles and session continuity.
+Update this document when: a migration phase completes, a component is added, a decision changes, or debt is paid. If the doc and the code disagree, the doc is the bug. See [MIGRATION.md](MIGRATION.md) for how we got here, [PASSDOWN.md](PASSDOWN.md) for team roles and session continuity, and [AOSE.md](AOSE.md) for the adversarial-review discipline behind ADR-007 through ADR-013 specifically.

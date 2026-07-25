@@ -38,6 +38,7 @@ entry -> deconfliction_node -> hitl_gate_node -> END
 - [ARCHITECTURE.md](ARCHITECTURE.md) — component map, design principles, decision log
 - [MIGRATION.md](MIGRATION.md) — phased build history with a definition of done per phase
 - [PASSDOWN.md](PASSDOWN.md) — team roles and session-to-session continuity notes
+- [AOSE.md](AOSE.md) — the adversarial review discipline behind this repo's fixes, with real instances from its own history
 
 ## Installation
 
