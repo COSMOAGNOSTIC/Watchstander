@@ -188,3 +188,15 @@ Initial research pass complete via OSHA.gov and DOL.gov public releases. Real, c
 - cosmoai-adept received its own second-pass fixes this session (memory checkpointer moved outside the sandbox, the `_assert_no_model_controlled_sandbox()` guard hardened against two fail-open gaps, two `config.py` hardening fixes) — see that repo's PASSDOWN.md.
 
 **Open questions for next session:** is it worth formalizing "ask an independent reviewer to trace N specific files cold" as a repeatable pattern, given it's now found real issues twice in a row — once against the original code (Section 9), once against this session's own fixes to that code? What's the actual next highest-leverage item: the interrupt-loop restructure, the `is_over_side` semantic fix, or one of the eval-harness-quantified gaps from Section 10?
+
+---
+
+## 12. Session Notes — 2026-07-25 (still later): Stale-doc fix caught by Grok review
+
+**What happened:** an independent Grok review of both repos (run after the AOSE.md addition) correctly flagged that ARCHITECTURE.md §8 still said "design recorded here, implementation in progress" for the visualizer, even though Phase 5 in MIGRATION.md has been marked substantially complete since earlier today. Spot-checked several of Grok's other specific claims (the `pyproject.toml` dependency-pinning gap, the `is_over_side` semantic note, the TOCTOU item's actual location in cosmoai-adept) against the real files before trusting any of it — all checked out accurately, unlike the earlier Gemini assessment.
+
+**What got fixed:** ARCHITECTURE.md §8's status line corrected to match reality, with a note explaining *why* it went stale (this project's own Maintenance Rules say "if the doc and the code disagree, the doc is the bug," and this is a live instance of exactly that). MIGRATION.md Phase 6 checklist updated to record the fix.
+
+**Decided but not built:** the rest of Grok's list (temporal deconfliction claim vs. implementation, porting the eval harness pattern to cosmoai-adept, dependency pinning on both repos, closing the HITL loop's remaining non-idempotency) was deliberately left for a future session — Donnie chose the cheap, honest doc fix only this round rather than opening a larger scope.
+
+**Open questions for next session:** same as Section 11's close — which of temporal deconfliction, the HITL loop restructure, or porting the eval harness to cosmoai-adept is the next highest-leverage move.

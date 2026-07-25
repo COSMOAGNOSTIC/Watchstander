@@ -76,7 +76,7 @@ Deterministic logic (`deconfliction.py`, `case_lookup.py`, `retrieval.py`) is te
 
 ## 8. Digital Twin / Spatial Visualizer (Phase 5)
 
-**Status: design recorded here, implementation in progress — see MIGRATION.md Phase 5.**
+**Status: built and substantially complete — see MIGRATION.md Phase 5.** This section originally recorded the design before the visualizer existed; that status line went stale once Phase 5 shipped and was caught by an external review pass rather than updated proactively (the project's own Maintenance Rules say "if the doc and the code disagree, the doc is the bug"). The one remaining open item is a standalone JSON spatial-payload export (distinct from the live WebSocket stream) — everything else described below is implemented, screenshot-verified, and covered by `tests/test_events.py`.
 
 Unlike cosmoai-adept's visualizer — an agent walking between abstract tool stations — Watchstander's natural visualization is literally spatial: work packages already carry `compartment_id`, `frame_start`/`frame_end`, and `deck_level`. The visualizer renders these as an actual schematic cross-section rather than an abstraction layered on top of unrelated data.
 
