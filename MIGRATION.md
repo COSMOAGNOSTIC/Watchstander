@@ -159,6 +159,20 @@ Prompted by a real signal, not a hypothetical one: a Carrier-team GS-14 told Don
 
 ---
 
+## Phase 5.97 — Real ship data for the visualizer demo: Turner Joy → USCG ACUSHNET, plus a 3D blockout companion view
+
+Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s HAER drawings (real compartment names, but no printed frame numbers — `frame_start`/`frame_end` were synthetic placement values, flagged as such). Second pass found a strictly better source and replaced it.
+
+- [x] **Source swap: Turner Joy → USCG Cutter ACUSHNET / ex-USS SHACKLE (ARS-9), HAER AK-49, Sheet 5 ("Deck Plans").** Same public-domain footing (HABS/HAER/HALS, NPS-confirmed), but this sheet has real frame station numbers printed on it (AP at frame 110 to FP at the bow) — closes the exact "not read off the drawing" caveat the Turner Joy data carried. See `docs/uscg-acushnet-ars9-source.md` for the full sourcing chain, including the ±2-3 frame tick-proximity estimation caveat and the inferred (not printed) ~1.94 ft/frame spacing. Turner Joy source doc kept for history, no longer the active demo source.
+- [x] **`visualizer/demo_broadcaster.py` `WORK_PACKAGES` updated** — real ACUSHNET compartments (`Electric & Machine Shop (B-2)` for the flagged hot_work/confined_space pair, now genuinely frame-overlapping and not just compartment-ID-matched; `Anchor Windlass Room (A-102-E)` for fall_protection; an approximate, honestly-labeled "amidships, way of mast" placement for working_aloft since aloft work by definition isn't a labeled interior compartment). 2D visualizer (`Main.gd`) required no changes — its `deck_level` string matching already handled "Main Deck"/"Second Deck".
+- [x] **New: `visualizer/Main3D.gd` + `Main3D.tscn` + `OrbitCamera.gd`** — a static, non-networked 3D blockout companion view, explicitly NOT a replacement for the live 2D visualizer (which still owns the WebSocket-driven real-time deconfliction/HITL display). Renders ACUSHNET as a simplified rectangular hull (straight bow/stern — real curvature exists on the source's Sheet 9 but wasn't traced, a deliberate scope call in the same spirit as ADR-006's 2D schematic decision, not an oversight) with compartments extruded as boxes at their real frame positions, colored by hazard category, flagged pair highlighted in the same red used elsewhere. Mouse-drag-to-orbit, scroll-to-zoom camera, no dependencies.
+- [x] **Actually rendered, not just written.** Downloaded a real Godot 4.3 Linux binary into the build sandbox, ran it headless under Xvfb + software GL (llvmpipe) with a throwaway capture script, and confirmed the scene renders correctly — real ship silhouette, correct hazard colors, flagged pair in red — before handing off. Camera defaults tuned from that actual render (initial framing was too close/low; fixed).
+- [x] `pytest -v` still green, 66/66 — no Python-side logic touched, only demo data and new Godot-only files.
+
+**Definition of done:** ✅ Complete for this scope — real frame numbers now drive both the 2D and 3D views, the 3D blockout exists, renders correctly (verified via an actual headless render, not just code review), and is honestly documented as a simplified companion view rather than a claimed-accurate hull model. Explicitly NOT done, on purpose: hull curvature (Sheet 9 not traced), port/starboard subdivision within compartments (every box spans full beam), and only a curated subset of ACUSHNET's real compartments are placed in the 3D scene (the rest exist in the source doc but weren't worth the time to add for a demo view).
+
+---
+
 ## Phase 6 — Lock it in
 
 - [x] Test coverage expanded beyond deconfliction logic (state validation, HITL gate behavior) — see Phase 5.5

@@ -9,9 +9,28 @@ the agent_core WebSocket broadcaster - no API key required. Useful for:
 Run this, then open visualizer/ in Godot 4 and run the main scene
 (or run it headless - see README.md in this folder).
 
-The scripted work packages below are illustrative, not drawn from the
-real cases in case_data/ - they exist to exercise the deconfliction ->
-reasoning -> HITL pipeline end to end for the demo.
+Compartment names, deck levels, AND frame ranges below are real, read
+directly off USCG Cutter ACUSHNET / ex-USS SHACKLE (ARS-9)'s HAER
+(Historic American Engineering Record) drawing, Sheet 5 of 10 ("Deck
+Plans") -- Library of Congress HABS/AK-49, public domain (HABS/HAER/HALS
+documentation is "available to the public without restriction" per
+NPS). Not from case_data/ -- this is illustrative demo staging, not a
+sourced incident or a real work order. Full sourcing detail, including
+the frame-range estimation caveat (~+/-2-3 frames, read from tick-mark
+proximity, not digitized coordinates) and the standard-frame-spacing
+assumption used to interpret them, is in
+docs/uscg-acushnet-ars9-source.md -- this supersedes the earlier Turner
+Joy source (docs/uss-turner-joy-dd951-source.md, kept for history),
+which had real compartment names but no printed frame numbers at all.
+
+Spatial linkage for the flagged pair below comes from the shared
+compartment_id ("Electric & Machine Shop (B-2)"), which
+deconfliction._same_compartment() supports independently of frame
+ranges -- the frame numbers additionally place both packages in a
+genuinely overlapping span this time, not just the same named space.
+ACUSHNET is an active Coast Guard cutter, not a Navy shipyard work site
+-- governing_installation is deliberately left unset here, since
+tagging her "PSNS" would misrepresent where she actually is.
 """
 import sys
 import time
@@ -23,38 +42,63 @@ from agent_core import events  # noqa: E402
 
 WORK_PACKAGES = [
     {
+        # Sheet 5, Second Deck: "Electric & Machine Shop (B-2)" -- hot
+        # work (e.g. welding repair on shop equipment) in the shop itself.
+        # Frame range read from the printed scale -- see
+        # docs/uscg-acushnet-ars9-source.md for the +/-2-3 frame caveat.
         "work_package_id": "HW-2201",
         "hazard_categories": ["hot_work"],
-        "frame_start": 80,
-        "frame_end": 96,
-        "deck_level": "2nd Deck",
+        "compartment_id": "Electric & Machine Shop (B-2)",
+        "deck_level": "Second Deck",
+        "frame_start": 70,
+        "frame_end": 84,
         "is_aloft": False,
         "is_over_side": False,
     },
     {
+        # Same real compartment, same sheet: a confined-space entry (e.g.
+        # bilge/void inspection reachable from the shop) during the same
+        # work period -- the shared compartment_id is what a real
+        # find_all_conflicts() run would use to flag this pair, exactly the
+        # First Marine LLC pattern already in case_data/cases_v1.json
+        # (hot work + confined space entry, same space, not tested first).
+        # Frame range genuinely overlaps HW-2201's this time, not just the
+        # compartment_id match.
         "work_package_id": "CS-2202",
         "hazard_categories": ["confined_space"],
-        "frame_start": 84,
-        "frame_end": 92,
-        "deck_level": "2nd Deck",
+        "compartment_id": "Electric & Machine Shop (B-2)",
+        "deck_level": "Second Deck",
+        "frame_start": 74,
+        "frame_end": 80,
         "is_aloft": False,
         "is_over_side": False,
     },
     {
+        # No single labeled compartment on Sheet 5 corresponds to "aloft"
+        # work by definition -- aloft work happens above/outside interior
+        # spaces. Placed at Main Deck amidships, frame 60-70, approximate
+        # and not tied to a printed label -- see source doc. Illustrative
+        # only, not part of the flagged pair.
         "work_package_id": "ALOFT-2203",
         "hazard_categories": ["working_aloft"],
-        "frame_start": 60,
-        "frame_end": 78,
+        "compartment_id": "Main Deck, amidships (way of mast)",
         "deck_level": "Main Deck",
+        "frame_start": 60,
+        "frame_end": 70,
         "is_aloft": True,
         "is_over_side": False,
     },
     {
+        # Sheet 5, Main Deck: "Anchor Windlass Room (A-102-E)" and the
+        # open forward weather deck around it -- a real space near the
+        # bow where fall-protection-relevant work (anchor detail, forward
+        # deck work) would plausibly occur.
         "work_package_id": "FALL-2204",
         "hazard_categories": ["fall_protection"],
-        "frame_start": 140,
-        "frame_end": 156,
-        "deck_level": "3rd Deck",
+        "compartment_id": "Anchor Windlass Room (A-102-E)",
+        "deck_level": "Main Deck",
+        "frame_start": 2,
+        "frame_end": 12,
         "is_aloft": False,
         "is_over_side": False,
     },

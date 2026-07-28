@@ -86,6 +86,36 @@ markers would otherwise render on top of each other. `Main.gd` detects
 this (`band_placements`) and stacks the second marker slightly below the
 first so both labels stay legible, rather than letting them collide.
 
+## 3D blockout companion view (Main3D.tscn)
+
+A separate, static, non-networked scene — `Main3D.tscn` / `Main3D.gd` / `OrbitCamera.gd` — that
+renders the demo data's vessel (USCG Cutter ACUSHNET / ex-USS SHACKLE, ARS-9) as a simplified 3D
+hull with compartment boxes at their real frame positions, colored by hazard category, the flagged
+pair highlighted in the same red as the 2D view. It does **not** connect to `agent_core.events` or
+show live state — it's a "pretty picture" for demos and screenshots, built once from a curated
+subset of `docs/uscg-acushnet-ars9-source.md`'s real compartments. The 2D `Main.tscn` remains the
+one true live view.
+
+Deliberately simplified: straight bow and stern (no traced hull curvature), every compartment box
+spans the full beam (no port/starboard subdivision). Frame positions and compartment identity are
+real; hull shape is not — see the source doc's "3D blockout simplification" section for why that
+was a scope call, not an oversight.
+
+To view it: open this folder in the Godot editor, open `Main3D.tscn` in the scene dock, and run the
+current scene (F6). Left-drag to orbit, scroll to zoom.
+
+To render a screenshot without opening the editor (useful for CI or a quick check after editing the
+compartment list), run headless under Xvfb with software GL:
+
+```
+Xvfb :99 -screen 0 1280x720x24 &
+DISPLAY=:99 godot --path visualizer/ --display-driver x11 --rendering-driver opengl3 -s capture.gd
+```
+
+where `capture.gd` is a small throwaway `SceneTree` script that instantiates `Main3D.tscn`, waits a
+few frames, and calls `get_viewport().get_texture().get_image().save_png(...)` before quitting —
+not checked into this repo since it's a one-off dev tool, not part of the shipped project.
+
 ## Recording a demo GIF
 
 ```
