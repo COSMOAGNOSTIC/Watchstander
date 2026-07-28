@@ -11,6 +11,7 @@ a model call to be correct or repeatable.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from itertools import combinations
 
 from agent_core import events
@@ -26,6 +27,18 @@ INCOMPATIBLE_HAZARD_PAIRS: set[frozenset[HazardCategory]] = {
     frozenset({HazardCategory.WORKING_ALOFT, HazardCategory.FALL_PROTECTION}),
 }
 
+# NAVSEA8010-4.4.3 ("Limitations to Single Fire Watch with Multiple Hot
+# Workers") establishes that a single fire watch cannot supervise
+# unlimited concurrent hot work -- but the exact numeric limit is
+# UNVERIFIED against the primary-source PDF text (see
+# case_data/navsea_8010_psns_v2014.json's verification_note). 1 is used
+# here as a conservative default -- i.e. any fire watch covering more
+# than one concurrent hot-work package is flagged -- deliberately on the
+# same over-flagging-is-the-safe-direction posture as the rest of this
+# module, not because 1 has been confirmed as the actual regulatory
+# limit. Raise this only after someone reads the actual section text.
+MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH = 1
+
 
 def _frame_ranges_overlap(a: WorkPackageState, b: WorkPackageState) -> bool:
     a_start, a_end = a.spatial.frame_start, a.spatial.frame_end
@@ -39,6 +52,31 @@ def _same_compartment(a: WorkPackageState, b: WorkPackageState) -> bool:
     if not (a.spatial.compartment_id and b.spatial.compartment_id):
         return False
     return a.spatial.compartment_id == b.spatial.compartment_id
+
+
+def _schedules_overlap(a: WorkPackageState, b: WorkPackageState) -> bool:
+    """
+    Temporal counterpart to `_frame_ranges_overlap`. README and this
+    module's docstring have claimed spatial *and* temporal overlap
+    detection since Phase 1, but `check_conflict()` never read
+    `scheduled_start`/`scheduled_end` at all -- two packages scheduled
+    weeks apart in the same compartment were still flagged (see
+    ARCHITECTURE.md Known Debt: '"Temporal deconfliction" is advertised,
+    not implemented').
+
+    Deliberately the opposite default from `_frame_ranges_overlap`, which
+    treats missing frame data as "no spatial link" (returns False).
+    Missing schedule data on either side is treated as unknown, not as
+    "no overlap" -- a work package with no schedule filled in yet cannot
+    be assumed safe to run concurrently with anything, so this returns
+    True (over-flagging, the documented safe direction) when either side
+    is missing a start or end.
+    """
+    a_start, a_end = a.scheduled_start, a.scheduled_end
+    b_start, b_end = b.scheduled_start, b.scheduled_end
+    if None in (a_start, a_end, b_start, b_end):
+        return True
+    return a_start <= b_end and b_start <= a_end
 
 
 def _vertically_stacked(a: WorkPackageState, b: WorkPackageState) -> bool:
@@ -58,8 +96,19 @@ def check_conflict(a: WorkPackageState, b: WorkPackageState) -> str | None:
     """
     Returns a human-readable conflict rationale if `a` and `b` should
     not run concurrently, or None if no conflict is detected.
+
+    Two packages are only ever flagged if they're both spatially *and*
+    temporally linked -- see `_schedules_overlap`. Packages scheduled
+    weeks apart in the same compartment are not a conflict even though
+    they're spatially linked; packages with no schedule data on one or
+    both sides default to "temporally linked" (unknown treated as
+    overlapping), the same over-flagging-is-safe posture the rest of
+    this module takes.
     """
     if a.work_package_id == b.work_package_id:
+        return None
+
+    if not _schedules_overlap(a, b):
         return None
 
     hazard_overlap = {
@@ -98,6 +147,51 @@ def check_conflict(a: WorkPackageState, b: WorkPackageState) -> str | None:
     return None
 
 
+def _fire_watch_capacity_conflicts(
+    packages: list[WorkPackageState],
+) -> list[tuple[WorkPackageState, WorkPackageState, str]]:
+    """
+    Fire-watch capacity (NAVSEA8010-4.4.3) is an N-way constraint -- how
+    many concurrent hot-work packages one fire watch covers -- not a
+    pairwise geometry/hazard check like everything else in this module,
+    so it can't live inside `check_conflict()`, which only ever sees two
+    packages at a time. Packages are grouped by `fire_watch_id`; within
+    a group that exceeds `MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH`,
+    every temporally-overlapping pair is flagged -- temporal, not
+    spatial, because fire watch capacity is about how many hot-work
+    evolutions one watchstander is actively covering *right now*,
+    regardless of where aboard the ship each one is.
+
+    Packages with no `fire_watch_id` set are never included -- silently
+    grouping unassigned packages together would fabricate a capacity
+    conflict between two packages that were never actually claimed to
+    share a fire watch in the first place.
+    """
+    by_watch: dict[str, list[WorkPackageState]] = defaultdict(list)
+    for wp in packages:
+        if wp.fire_watch_id and HazardCategory.HOT_WORK in wp.hazard_categories:
+            by_watch[wp.fire_watch_id].append(wp)
+
+    violations: list[tuple[WorkPackageState, WorkPackageState, str]] = []
+    for watch_id, group in by_watch.items():
+        if len(group) <= MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH:
+            continue
+        for a, b in combinations(group, 2):
+            if not _schedules_overlap(a, b):
+                continue
+            covered = ", ".join(sorted(wp.work_package_id for wp in group))
+            rationale = (
+                f"Fire watch '{watch_id}' covers {len(group)} concurrent hot-work "
+                f"packages ({covered}), exceeding the configured limit of "
+                f"{MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH} (NAVSEA8010-4.4.3 -- "
+                f"limitation on single fire watch with multiple hot workers; exact "
+                f"numeric limit UNVERIFIED against primary source, see "
+                f"case_data/navsea_8010_psns_v2014.json)."
+            )
+            violations.append((a, b, rationale))
+    return violations
+
+
 def _record_conflict(wp: WorkPackageState, other_id: str, rationale: str) -> None:
     """
     Records one side of a flagged conflict on `wp`, idempotently.
@@ -128,12 +222,19 @@ def find_all_conflicts(packages: list[WorkPackageState]) -> list[WorkPackageStat
     `.conflicts` / `.conflict_rationale` on affected packages in place.
     Returns the same list for convenience. Safe to call more than once on
     the same objects -- see `_record_conflict`.
+
+    Fire-watch capacity is checked separately from the pairwise
+    `check_conflict()` loop, not as an alternative to it -- see
+    `_fire_watch_capacity_conflicts` for why it's inherently N-way.
     """
     for a, b in combinations(packages, 2):
         rationale = check_conflict(a, b)
         if rationale:
             _record_conflict(a, b.work_package_id, rationale)
             _record_conflict(b, a.work_package_id, rationale)
+    for a, b, rationale in _fire_watch_capacity_conflicts(packages):
+        _record_conflict(a, b.work_package_id, rationale)
+        _record_conflict(b, a.work_package_id, rationale)
     return packages
 
 

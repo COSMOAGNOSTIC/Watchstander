@@ -43,8 +43,12 @@ This is the same principle as the section above, aimed at a different actor: **v
 ## Where the discipline is still open
 
 - The non-idempotent multi-package HITL loop (`hitl_gate_node`'s `interrupt()`-in-a-loop pattern) is a known, disclosed gap, not yet restructured — see ARCHITECTURE.md Known Debt.
-- `is_over_side`'s underlying semantic model (treated as "overhead" the same as aloft work) is still domain-backwards; only the *labeling* bug on top of it was fixed in Round 3.
-- Temporal deconfliction is advertised but not implemented — `check_conflict()` never reads `scheduled_start`/`scheduled_end`.
+
+## Accepted, not open
+
+- `is_over_side`'s underlying semantic model (treated as "overhead" the same as aloft work) is still domain-backwards, and only the *labeling* bug on top of it was fixed in Round 3 — but this is a deliberate call (2026-07-27, ADR-016), not an oversight. It never causes an under-flag; the conflict is still conservatively caught, only the rationale's wording is domain-imprecise. Tracking it as indefinitely-open competed for attention against gaps that actually affect detection correctness, so it moved to accepted risk instead.
+- Temporal deconfliction, previously advertised but not implemented, is now implemented (2026-07-27) — `check_conflict()` reads `scheduled_start`/`scheduled_end` via `_schedules_overlap()`.
+- Event payloads previously had no version marker; `events.py` now stamps `schema_version` on every broadcast.
 
 These are listed here, not hidden, because AOSE's Step 10 says a discovered failure becomes one of three things: fixed and tested, an accepted risk, or documented technical debt. All three categories exist in this repo on purpose.
 

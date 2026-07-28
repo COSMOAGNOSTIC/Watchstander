@@ -28,20 +28,31 @@ import json
 import os
 
 from agent_core import events
+from agent_core.procedural_lookup import cite_governing_procedure
 from agent_core.retrieval import cite_best_matching_case
 from agent_core.state import SafetyBrief, WorkPackageState
 
 _SYSTEM_PROMPT = (
     "You are a shipyard safety synthesis assistant. You are given a "
-    "deterministically-flagged work package conflict and, if available, a "
-    "single sourced OSHA/DOL case citation. Respond with ONLY a JSON object "
+    "deterministically-flagged work package conflict, if available a "
+    "single sourced OSHA/DOL case citation, and if available a governing "
+    "Navy/command procedure citation for the work package's installation. "
+    "These are two distinct kinds of grounding -- the case is incident "
+    "precedent, the procedure is the actual rule that applies at that "
+    "installation -- keep them distinguishable in your response, never "
+    "blend them into one unlabeled claim. If a procedure citation is "
+    "marked UNVERIFIED, say so explicitly rather than presenting it as a "
+    "confirmed exact requirement. Respond with ONLY a JSON object "
     "with exactly these keys: executive_summary (2 sentences max, plain "
     "language, for a Safety Officer), precedent_context (plain-language "
-    "summary of what happened in the cited case -- if no case is given, "
+    "summary of what happened in the cited case, and separately what the "
+    "governing procedure requires if one was given -- if no case is given, "
     "say so explicitly, do not invent one), and recommended_action (a "
     "concrete deconfliction step, e.g. reschedule / add a barrier / verify "
     "permit). Use ONLY the facts given below. Do not invent case IDs, "
-    "shipyards, dates, or outcomes that are not present in the input."
+    "shipyards, dates, or outcomes that are not present in the input. Do "
+    "not invent a governing procedure or installation that is not present "
+    "in the input either."
 )
 
 _REQUIRED_LLM_KEYS = ("executive_summary", "precedent_context", "recommended_action")
@@ -72,6 +83,14 @@ def _grounding_context(wp: WorkPackageState) -> dict:
     work package's own text and the candidate cases for its hazard
     categories, via agent_core/retrieval.py -- not just "the first case
     on file for this category," which is what Phase 1/2 did.
+
+    Procedural citation (site-scoped): the governing Navy/command
+    procedure for `wp.governing_installation`, via
+    agent_core/procedural_lookup.py -- distinct from the case citation
+    above. None if `governing_installation` is unset or that
+    installation has no ruleset entry for this package's hazard
+    categories, same "silence over fabrication" posture as the case
+    citation.
     """
     retrieval_query = f"{wp.description} {wp.conflict_rationale or ''}"
     return {
@@ -81,6 +100,9 @@ def _grounding_context(wp: WorkPackageState) -> dict:
         "conflicts_with": list(wp.conflicts),
         "conflict_rationale": wp.conflict_rationale,
         "case_citation": cite_best_matching_case(retrieval_query, wp.hazard_categories),
+        "procedural_citation": cite_governing_procedure(
+            wp.governing_installation, wp.hazard_categories
+        ),
     }
 
 
@@ -140,6 +162,10 @@ def _deterministic_fallback(context: dict) -> dict:
         "No sourced case on file yet for this hazard category "
         "(case_data expansion is tracked in MIGRATION.md Phase 4)."
     )
+
+    procedural_citation = context.get("procedural_citation")
+    if procedural_citation:
+        precedent_context = f"{precedent_context} | {procedural_citation}"
 
     recommended_action = (
         f"Do not run {wp_id} concurrently with {conflicts} in the affected "

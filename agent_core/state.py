@@ -130,6 +130,23 @@ class WorkPackageState(BaseModel):
     scheduled_start: Optional[datetime] = None
     scheduled_end: Optional[datetime] = None
 
+    governing_installation: Optional[str] = Field(
+        default=None,
+        description="Which installation's ruleset governs this package (e.g. 'PSNS'), "
+        "used by agent_core/procedural_lookup.py to select a site-scoped governing-"
+        "procedure citation. Different installations and type commands (NASNI, NAVSTA "
+        "Everett, SURFPAC vs AIRPAC vs AIRLANT) operate under different instructions -- "
+        "leaving this unset means no procedural citation is attempted, rather than "
+        "silently assuming a default site's rules apply.",
+    )
+    fire_watch_id: Optional[str] = Field(
+        default=None,
+        description="Identifier for the fire watch covering this package's hot work, "
+        "if any. Multiple concurrent HOT_WORK packages sharing the same fire_watch_id "
+        "are checked against NAVSEA8010-4.4.3's single-fire-watch-with-multiple-hot-"
+        "workers limitation in deconfliction.py.",
+    )
+
     risk_level: RiskLevel = RiskLevel.LOW
     requires_hitl_review: bool = False
 

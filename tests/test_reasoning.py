@@ -97,6 +97,49 @@ def test_safety_brief_notes_missing_case_instead_of_inventing_one(monkeypatch):
     assert "No sourced case on file" in brief.precedent_context
 
 
+def test_safety_brief_includes_governing_procedure_when_installation_set(monkeypatch):
+    """
+    Site-scoped grounding: a hot_work package tagged with
+    governing_installation='PSNS' must get a governing-procedure citation
+    from the NAVSEA 8010 ruleset in addition to (not instead of) the case
+    citation, and the UNVERIFIED caveat must survive into the brief.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    a = make_wp(
+        work_package_id="WP-HOTWORK",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        spatial=SpatialCoordinates(frame_start=40, frame_end=48, compartment_id="FR-44-TANK"),
+        governing_installation="PSNS",
+    )
+    b = make_wp(
+        work_package_id="WP-CONFINED",
+        hazard_categories=[HazardCategory.CONFINED_SPACE],
+        spatial=SpatialCoordinates(frame_start=42, frame_end=50, compartment_id="FR-44-TANK"),
+    )
+    find_all_conflicts([a, b])
+
+    brief = generate_safety_brief(a)
+
+    assert "PSNS" in brief.precedent_context
+    assert "UNVERIFIED" in brief.precedent_context
+    # Case citation must still be present -- procedural grounding is
+    # additive, not a replacement.
+    assert any(
+        real_case_id in brief.precedent_context
+        for real_case_id in ("HW-FIRSTMARINE", "HW-ASHTABULA-2024")
+    )
+
+
+def test_safety_brief_has_no_procedural_citation_without_installation(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    wp, _ = _flagged_pair()  # governing_installation left unset
+
+    brief = generate_safety_brief(wp)
+
+    assert "PSNS" not in brief.precedent_context
+    assert "UNVERIFIED" not in brief.precedent_context
+
+
 def test_provenance_tag_maps_known_sources():
     assert provenance_tag("llm") == "[SOURCE: LLM SYNTHESIS]"
     assert provenance_tag("deterministic-fallback") == "[SOURCE: DETERMINISTIC FALLBACK - LLM OFFLINE]"

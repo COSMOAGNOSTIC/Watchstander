@@ -15,6 +15,8 @@ Shipyard work packages (jobs, permits, tasks) carry spatial metadata — compart
 
 Case grounding is sourced entirely from public OSHA/DOL records — real shipyard incidents, not synthetic examples. See `case_data/cases_v1.json` and `PASSDOWN.md` for sourcing detail and scope notes.
 
+A second, site-scoped grounding source sits alongside the case data: a work package tagged with `governing_installation` (e.g. `"PSNS"`) is additionally cited against that installation's governing procedure — currently the public-domain NAVSEA 8010 Manual (fire prevention/hot work only) for PSNS. This is deliberately not a universal Navy-wide ruleset; a different installation or type command may operate under different governing instructions, and no installation's rules are assumed to apply anywhere they haven't been explicitly sourced. See `agent_core/procedural_lookup.py` and `case_data/navsea_8010_psns_v2014.json`.
+
 ## Architecture
 
 ```mermaid
@@ -43,10 +45,11 @@ flowchart LR
 - **`agent_core/state.py`** — `WorkPackageState` schema: hazard categories, spatial coordinates, required permits, risk level.
 - **`agent_core/deconfliction.py`** — deterministic, testable overlap detection between work packages. Geometry-based, not LLM-dependent, so conflicts are auditable and repeatable.
 - **`agent_core/retrieval.py`** — TF-IDF ranked case lookup grounding each flagged conflict in a real, sourced OSHA/DOL case.
-- **`agent_core/reasoning.py`** — synthesizes a flagged conflict + its grounded case citation into a provenance-tagged `SafetyBrief`, with a deterministic zero-network fallback.
+- **`agent_core/procedural_lookup.py`** — site-scoped governing-procedure lookup (e.g. NAVSEA 8010 for `governing_installation="PSNS"`), distinct from case precedent — the rule that applies, not the incident it resembles.
+- **`agent_core/reasoning.py`** — synthesizes a flagged conflict + its grounded case citation + its governing-procedure citation (if any) into a provenance-tagged `SafetyBrief`, with a deterministic zero-network fallback.
 - **`agent_core/hitl.py`** — LangGraph `interrupt()`-based human review gate. Genuinely pauses graph execution; does not simulate review.
 - **`agent_core/graph.py`** — graph assembly: `entry -> deconfliction -> reasoning -> hitl_gate -> END`.
-- **`case_data/`** — sourced OSHA/DOL case histories, tagged by hazard category, used to ground rationale generation.
+- **`case_data/`** — sourced OSHA/DOL case histories (`cases_v1.json`) and site-scoped governing-procedure rulesets (`navsea_8010_psns_v2014.json`), tagged by hazard category, used to ground rationale generation.
 - **`agent_core/events.py`** — lazy WebSocket broadcaster, no-op with no listener, feeding the visualizer.
 - **`visualizer/`** — Godot 4 project rendering the graph's activity as a live schematic deck plan.
 - **`eval/`** — fixed-scenario evaluation harness scoring the deterministic-fallback path against a checked-in baseline (see ARCHITECTURE.md Section 7).

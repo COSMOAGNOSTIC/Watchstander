@@ -1,0 +1,59 @@
+{
+  "source_note": "Structural/topical citations from NAVSEA S0570-AC-CCM-010/8010, 'Industrial Ship Safety Manual for Fire Prevention and Response,' Distribution Statement A (approved for public release, distribution unlimited), dated 06 Feb 2014, smoothed version 26 Aug 2014, hosted at NAVSEA's own FOIA reading room. This is a SITE-SCOPED ruleset -- installation='PSNS' -- not a universal Navy-wide source. A different installation/command (NASNI, NAVSTA Everett, SURFPAC vs AIRPAC vs AIRLANT, etc.) may operate under different governing instructions; this file should not be treated as applicable outside the installation it's tagged for. Only HOT_WORK is covered -- this manual does not address confined_space, working_aloft, fall_protection, or over_the_side at all, so no entries exist for those categories and none should be added here (see case_data/cases_v1.json for those).",
+  "source_url": "https://www.navsea.navy.mil/Portals/103/Documents/FOIA-PII/ReadingRoom/S0570-AC-CCM-010_8010_06Feb14_DistA_Version_26Aug14_smooth.pdf",
+  "distribution_statement": "DISTRIBUTION STATEMENT A: APPROVED FOR PUBLIC RELEASE; DISTRIBUTION IS UNLIMITED",
+  "document_date": "2014-08-26",
+  "installation": "PSNS",
+  "verification_note": "Section titles and topical scope were extracted via automated document fetch, not a verbatim primary-source read. 'summary' fields below are accurate to that structural extraction. Any field marked verified=false has NOT been confirmed against the primary-source PDF text for exact numeric/procedural specifics (counts, distances, durations) and must not be treated as a citable exact requirement until someone reads the actual section and confirms it.",
+  "procedures": [
+    {
+      "procedure_id": "NAVSEA8010-4.2",
+      "hazard_category": "hot_work",
+      "section": "Chapter 4.2 - Hot Work Authorization",
+      "summary": "Hot work requires written authorization before commencing: written notice, designated signing authority approval, posting of the notice at the work site, and notification to the Commanding Officer's representative.",
+      "verified": false
+    },
+    {
+      "procedure_id": "NAVSEA8010-4.3",
+      "hazard_category": "hot_work",
+      "section": "Chapter 4.3 - Gas-Free Procedures and Special Hazards",
+      "summary": "Hot work is governed by gas-free testing procedures; certain compartments/spaces are restricted from hot work; protective coverings, precautions around lines/piping carrying flammable or combustible fluids, proximity controls around flammables/combustibles, restrictions near ammunition/explosives, and special precautions for battery-charging areas all apply.",
+      "verified": false
+    },
+    {
+      "procedure_id": "NAVSEA8010-4.4.3",
+      "hazard_category": "hot_work",
+      "section": "Chapter 4.4.3 - Limitations to Single Fire Watch with Multiple Hot Workers",
+      "summary": "A single fire watch cannot supervise unlimited concurrent hot work activity -- the manual places a limitation on how many hot workers one fire watch can cover at once. Exact numeric limit not confirmed against primary text.",
+      "verified": false
+    },
+    {
+      "procedure_id": "NAVSEA8010-4.4.4",
+      "hazard_category": "hot_work",
+      "section": "Chapter 4.4.4 - Hot Work Involving Multiple Levels",
+      "summary": "Hot work spanning multiple deck levels requires enhanced fire watch protocols beyond a single-level assignment.",
+      "verified": false
+    },
+    {
+      "procedure_id": "NAVSEA8010-4.4.6",
+      "hazard_category": "hot_work",
+      "section": "Chapter 4.4.6 - Blind Compartment Hot Work",
+      "summary": "Hot work performed in a compartment not directly observable by the fire watch (a 'blind compartment') requires special fire watch provisions beyond standard line-of-sight supervision.",
+      "verified": false
+    },
+    {
+      "procedure_id": "NAVSEA8010-11.1",
+      "hazard_category": "hot_work",
+      "section": "Chapter 11.1 - Fire Zone Boundaries",
+      "summary": "Fire zone boundaries must be maintained and marked; temporary access cuts through fire zone boundaries during industrial work are permitted under controlled conditions and must be recorded (audit trail of boundary openings); boundaries may be temporarily degraded during maintenance and must be tracked as such.",
+      "verified": false
+    },
+    {
+      "procedure_id": "NAVSEA8010-11.1.7",
+      "hazard_category": "hot_work",
+      "section": "Chapter 11.1.7 - Boundaries on Carrier Type Ships",
+      "summary": "Special fire zone boundary provisions apply specifically to aircraft carrier-type ships, distinct from the general fire zone boundary rules elsewhere in Chapter 11.",
+      "verified": false
+    }
+  ]
+}

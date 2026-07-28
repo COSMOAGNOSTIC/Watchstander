@@ -1,4 +1,11 @@
-from agent_core.deconfliction import check_conflict, deconfliction_node, find_all_conflicts
+from datetime import datetime, timedelta
+
+from agent_core.deconfliction import (
+    MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH,
+    check_conflict,
+    deconfliction_node,
+    find_all_conflicts,
+)
 from agent_core.state import HazardCategory, SpatialCoordinates, WorkPackageState
 
 
@@ -195,3 +202,183 @@ def test_deconfliction_node_fails_closed_immediately_on_flagging_a_conflict():
     for wp in result["work_packages"]:
         assert wp.requires_hitl_review is True
         assert wp.cleared_for_execution is False
+
+
+def test_no_conflict_when_spatially_linked_but_scheduled_weeks_apart():
+    """
+    ARCHITECTURE.md Known Debt: README and this module's own docstring
+    claimed spatial *and* temporal deconfliction, but `check_conflict()`
+    never read `scheduled_start`/`scheduled_end` -- two packages
+    scheduled weeks apart in the same compartment were still flagged.
+    Regression test for the fix: spatially/hazard-linked packages with
+    non-overlapping schedules must not be flagged.
+    """
+    week1_start = datetime(2026, 8, 3, 7, 0)
+    week1_end = datetime(2026, 8, 3, 15, 0)
+    week3_start = datetime(2026, 8, 17, 7, 0)
+    week3_end = datetime(2026, 8, 17, 15, 0)
+
+    a = make_wp(
+        work_package_id="WP-HOTWORK",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        spatial=SpatialCoordinates(frame_start=40, frame_end=48, compartment_id="FR-44-TANK"),
+        scheduled_start=week1_start,
+        scheduled_end=week1_end,
+    )
+    b = make_wp(
+        work_package_id="WP-CONFINED",
+        hazard_categories=[HazardCategory.CONFINED_SPACE],
+        spatial=SpatialCoordinates(frame_start=42, frame_end=50, compartment_id="FR-44-TANK"),
+        scheduled_start=week3_start,
+        scheduled_end=week3_end,
+    )
+    assert check_conflict(a, b) is None
+
+
+def test_conflict_still_flagged_when_schedules_actually_overlap():
+    same_day_am = datetime(2026, 8, 3, 7, 0)
+    same_day_noon = datetime(2026, 8, 3, 12, 0)
+    same_day_pm = datetime(2026, 8, 3, 15, 0)
+
+    a = make_wp(
+        work_package_id="WP-HOTWORK",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        spatial=SpatialCoordinates(frame_start=40, frame_end=48, compartment_id="FR-44-TANK"),
+        scheduled_start=same_day_am,
+        scheduled_end=same_day_noon,
+    )
+    b = make_wp(
+        work_package_id="WP-CONFINED",
+        hazard_categories=[HazardCategory.CONFINED_SPACE],
+        spatial=SpatialCoordinates(frame_start=42, frame_end=50, compartment_id="FR-44-TANK"),
+        scheduled_start=same_day_noon,
+        scheduled_end=same_day_pm,
+    )
+    rationale = check_conflict(a, b)
+    assert rationale is not None
+    assert "hot_work" in rationale and "confined_space" in rationale
+
+
+def test_fire_watch_capacity_flagged_when_exceeded():
+    """
+    NAVSEA8010-4.4.3: a single fire watch cannot supervise unlimited
+    concurrent hot work. Two spatially-unrelated hot-work packages
+    sharing the same fire_watch_id and overlapping schedule must still
+    be flagged -- this is a capacity constraint, not a geometry one.
+    """
+    assert MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH == 1
+
+    same_day_am = datetime(2026, 8, 3, 7, 0)
+    same_day_pm = datetime(2026, 8, 3, 15, 0)
+
+    a = make_wp(
+        work_package_id="WP-HOT-A",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        spatial=SpatialCoordinates(frame_start=1, frame_end=5),
+        fire_watch_id="FW-1",
+        scheduled_start=same_day_am,
+        scheduled_end=same_day_pm,
+    )
+    b = make_wp(
+        work_package_id="WP-HOT-B",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        spatial=SpatialCoordinates(frame_start=900, frame_end=905),  # far away, no geometry link
+        fire_watch_id="FW-1",
+        scheduled_start=same_day_am,
+        scheduled_end=same_day_pm,
+    )
+
+    find_all_conflicts([a, b])
+
+    assert "WP-HOT-B" in a.conflicts
+    assert "NAVSEA8010-4.4.3" in a.conflict_rationale
+
+
+def test_fire_watch_capacity_not_flagged_when_schedules_dont_overlap():
+    week1 = datetime(2026, 8, 3, 7, 0)
+    week1_end = datetime(2026, 8, 3, 15, 0)
+    week3 = datetime(2026, 8, 17, 7, 0)
+    week3_end = datetime(2026, 8, 17, 15, 0)
+
+    a = make_wp(
+        work_package_id="WP-HOT-A",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        fire_watch_id="FW-1",
+        scheduled_start=week1,
+        scheduled_end=week1_end,
+    )
+    b = make_wp(
+        work_package_id="WP-HOT-B",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        fire_watch_id="FW-1",
+        scheduled_start=week3,
+        scheduled_end=week3_end,
+    )
+
+    find_all_conflicts([a, b])
+    assert a.conflicts == []
+    assert b.conflicts == []
+
+
+def test_fire_watch_capacity_not_flagged_without_shared_fire_watch_id():
+    a = make_wp(
+        work_package_id="WP-HOT-A",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        spatial=SpatialCoordinates(frame_start=1, frame_end=5),
+    )
+    b = make_wp(
+        work_package_id="WP-HOT-B",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        spatial=SpatialCoordinates(frame_start=900, frame_end=905),
+    )
+    find_all_conflicts([a, b])
+    assert a.conflicts == []
+    assert b.conflicts == []
+
+
+def test_fire_watch_capacity_conflicts_are_idempotent_on_repeated_invocation():
+    same_day_am = datetime(2026, 8, 3, 7, 0)
+    same_day_pm = datetime(2026, 8, 3, 15, 0)
+    a = make_wp(
+        work_package_id="WP-HOT-A",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        fire_watch_id="FW-1",
+        scheduled_start=same_day_am,
+        scheduled_end=same_day_pm,
+    )
+    b = make_wp(
+        work_package_id="WP-HOT-B",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        fire_watch_id="FW-1",
+        scheduled_start=same_day_am,
+        scheduled_end=same_day_pm,
+    )
+    find_all_conflicts([a, b])
+    first_rationale = a.conflict_rationale
+    find_all_conflicts([a, b])
+    assert a.conflicts == ["WP-HOT-B"]
+    assert a.conflict_rationale == first_rationale
+
+
+def test_conflict_still_flagged_when_schedule_data_is_missing():
+    """
+    Missing schedule data must default to "temporally linked" (unknown
+    treated as overlapping) -- the same over-flagging-is-safe posture as
+    the rest of the module -- not silently clear a package that just
+    hasn't had its schedule filled in yet.
+    """
+    a = make_wp(
+        work_package_id="WP-HOTWORK",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        spatial=SpatialCoordinates(frame_start=40, frame_end=48, compartment_id="FR-44-TANK"),
+        # no scheduled_start/scheduled_end set
+    )
+    b = make_wp(
+        work_package_id="WP-CONFINED",
+        hazard_categories=[HazardCategory.CONFINED_SPACE],
+        spatial=SpatialCoordinates(frame_start=42, frame_end=50, compartment_id="FR-44-TANK"),
+        scheduled_start=datetime(2026, 8, 3, 7, 0),
+        scheduled_end=datetime(2026, 8, 3, 15, 0),
+    )
+    rationale = check_conflict(a, b)
+    assert rationale is not None

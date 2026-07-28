@@ -132,6 +132,33 @@ This phase exists because closing Phase 5.5's two acute defects didn't fully clo
 
 ---
 
+## Phase 5.9 — Two items closed off the NEED list: temporal deconfliction, event schema versioning
+
+- [x] **`check_conflict()` now reads `scheduled_start`/`scheduled_end`.** README and `deconfliction.py`'s own docstring had claimed spatial *and* temporal overlap detection since Phase 1; the code never checked it. Fixed via a new `_schedules_overlap()` helper, gated as an early return in `check_conflict()` before either the hazard-pair or vertically-stacked branch runs. Missing schedule data on either side defaults to overlapping (not non-overlapping) — the opposite default from `_frame_ranges_overlap()` — since an unscheduled package can't be assumed safe to run concurrently the way an unlocated one's spatial link can be assumed absent. 3 new tests in `tests/test_deconfliction.py`.
+- [x] **`events.py` broadcast payloads now carry `schema_version`.** Every event previously went out with no version marker at all. Added a module-level `SCHEMA_VERSION` constant and a pure `build_message()` function (split out of `EventBroadcaster.emit` for unit-testability without a live WebSocket client), stamped on every payload after `**payload` so a caller can't override it. cosmoai-adept's broadcaster doesn't have this field yet — worth porting there too, not done in this pass. 2 new tests in `tests/test_events.py`.
+- [x] 5 new tests total. 55/55 passing, up from 50. `eval/baseline.json` re-verified unchanged — none of `eval/scenarios.py`'s existing scenarios set `scheduled_start`/`scheduled_end`, so all default to the "missing data = overlapping" path and none of their outcomes moved.
+- [x] ARCHITECTURE.md §5 gained two new explanatory paragraphs; Known Debt's "temporal deconfliction advertised, not implemented" row removed (closed) and "no event schema versioning" row removed (closed); ADR-014 and ADR-015 added.
+
+**Definition of done:** ✅ Complete — both items reproduced against ARCHITECTURE.md's own Known Debt description, fixed, covered by regression tests; `pytest -v` green (55 tests); eval harness baseline re-verified unaffected. `is_over_side`'s semantic model deliberately deprioritized rather than fixed, 2026-07-27 (ADR-016 — never causes an under-flag, only an imprecise rationale). Still genuinely open from the original NEED list: the non-idempotent multi-package HITL loop, see Known Debt.
+
+---
+
+## Phase 5.95 — NAVSEA 8010 Manual integration: site-scoped procedural grounding + fire-watch capacity
+
+Prompted by a real signal, not a hypothetical one: a Carrier-team GS-14 told Donnie directly that work in this specific lane is award-relevant. Scoped deliberately narrow rather than building a universal Navy-wide rules engine in one pass — see the design discussion this phase is based on for why (different installations/type commands run different governing instructions; nothing forces fleet-wide adoption of this software yet, so there's no second real deployment to generalize against).
+
+- [x] **New site-scoped governing-procedure source: `case_data/navsea_8010_psns_v2014.json`.** Confirmed genuinely public domain — NAVSEA S0570-AC-CCM-010/8010, Distribution Statement A, dated 06 Feb 2014 / smoothed 26 Aug 2014, hosted at NAVSEA's own FOIA reading room. A separate "ACN 3/A" amendment found on a third-party (non-.mil) host, marked FOR OFFICIAL USE ONLY, was identified and explicitly excluded — not the authoritative copy, not used anywhere in this repo. Covers `hot_work` only; the manual doesn't address confined_space/working_aloft/fall_protection/over_the_side, and no entries exist for those categories under this source.
+- [x] **New `agent_core/procedural_lookup.py`**, mirroring `case_lookup.py`'s pattern: `cite_governing_procedure(installation, hazards)` returns a citation or `None`. Site-scoped by design — `WorkPackageState.governing_installation` selects the ruleset; unset means no citation, not a silently-assumed default site. Adding a second installation means adding a sourced JSON file and a `_RULESET_FILES` entry, not new logic.
+- [x] **Every ruleset entry marked `verified: false`** — extracted via automated document fetch, not confirmed verbatim against primary-source text for exact numeric/procedural specifics. `cite_governing_procedure()` surfaces an explicit `[UNVERIFIED: ...]` caveat in the citation text itself.
+- [x] **`reasoning.py` wired to cite both sources** — case precedent and governing procedure are additive, kept distinguishable in the system prompt and in `_deterministic_fallback()`'s `precedent_context` text, never blended into one unlabeled claim.
+- [x] **New deconfliction concept: fire-watch capacity (NAVSEA8010-4.4.3).** `WorkPackageState` gained `fire_watch_id`. `deconfliction._fire_watch_capacity_conflicts()` — a new N-way function, not a pairwise `check_conflict()` branch, since capacity is a group constraint — flags temporally-overlapping HOT_WORK packages sharing a fire watch once the group exceeds `MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH` (set to `1`, a conservative default since the exact regulatory number is unverified, not a confirmed limit). Called from `find_all_conflicts()` alongside the pairwise loop, with the same idempotency guard via `_record_conflict()`.
+- [x] 11 new tests (`tests/test_procedural_lookup.py` new — 5; `tests/test_deconfliction.py` gained 4; `tests/test_reasoning.py` gained 2). 66/66 passing, up from 55. `eval/baseline.json` re-verified unchanged — no existing eval scenario sets `governing_installation` or `fire_watch_id`, so none of their outcomes moved.
+- [x] ARCHITECTURE.md §3/§6/§9/§10 updated (component rows, two new grounding-model explanatory paragraphs, three new Known Debt rows for the unverified-specifics gap, ADR-017/ADR-018 added); README.md updated with the second grounding source and component list.
+
+**Definition of done:** ✅ Complete for this scope — site-scoped ruleset architecture built and sourced correctly (public domain confirmed, FOUO copy excluded), dual citation grounding wired, fire-watch capacity implemented as its own correctly-scoped N-way check, `pytest -v` green (66 tests), eval harness baseline re-verified unaffected. Explicitly NOT done, on purpose: verbatim confirmation of NAVSEA8010-4.4.3's actual numeric fire-watch limit and other unverified specifics (needs a primary-source read, not automated extraction); a second installation's ruleset (no second site deployment exists yet to generalize against); Chapter 11 (fire/smoke boundaries) integration into the spatial model — flagged as a real structural echo worth a future look, not built this pass.
+
+---
+
 ## Phase 6 — Lock it in
 
 - [x] Test coverage expanded beyond deconfliction logic (state validation, HITL gate behavior) — see Phase 5.5
@@ -139,13 +166,13 @@ This phase exists because closing Phase 5.5's two acute defects didn't fully clo
 - [x] Fail-open gaps in the Phase 5.5 fixes themselves closed — see Phase 5.85
 - [x] ARCHITECTURE.md §8's visualizer status line corrected from "implementation in progress" to "built and substantially complete," matching Phase 5's own status above — caught by an independent Fable/Grok review pass finding the two docs disagreed with each other, rather than caught proactively
 - [x] CI was red on every push since the eval harness was added (Phase 5.75) — `eval/` was never registered as an installable package, so `tests/test_eval_harness.py`'s `from eval.run_eval import ...` only resolved locally because every local check happened to use `python -m pytest` (which prepends cwd to `sys.path`); CI runs the `pytest` console script directly, which doesn't. Fixed by adding `eval*` to `pyproject.toml`'s `packages.find`, same as `agent_core`. Caught by Donnie noticing the GitHub Actions badge, not by any local or AI-assisted review — see PASSDOWN.md.
-- [ ] README reflects actual current capabilities, not aspirational ones — still stale: its architecture diagram omits `reasoning.py`/`retrieval.py`/`case_lookup.py`, and it claims "temporal" deconfliction that isn't implemented (see Known Debt in ARCHITECTURE.md)
+- [ ] README reflects actual current capabilities, not aspirational ones — still stale: its architecture diagram omits `reasoning.py`/`retrieval.py`/`case_lookup.py` (the "temporal" deconfliction claim is no longer stale as of Phase 5.9 — it's now true)
 - [ ] PASSDOWN.md and MIGRATION.md both current
 - [ ] One full end-to-end smoke run documented
-- [ ] Temporal deconfliction actually implemented, or the claim removed
+- [x] Temporal deconfliction actually implemented — see Phase 5.9
 - [ ] Adjacency tolerance added to `_frame_ranges_overlap()` (or the "adjacent uncleared space" claim in `deconfliction.py`'s own comment softened to match what the code does)
 - [ ] `deck_level` actually used in conflict detection, or the "(x, y) grid coordinates" claim in `SpatialCoordinates`'s docstring softened
-- [ ] `is_over_side`'s underlying semantic model (treated as "overhead" the same as aloft work) changed to reflect that over-the-side hangs *below* the deck edge — the rationale now correctly names *which* package is labeled overhead (Phase 5.85), but the label's premise for `is_over_side` specifically is still domain-backwards
+- [x] `is_over_side`'s underlying semantic model — deliberately deprioritized (not fixed), 2026-07-27: it never causes an under-flag, only an occasionally domain-imprecise rationale on an already-correctly-flagged conflict; see ARCHITECTURE.md Known Debt / ADR-016
 - [ ] Non-idempotent multi-package HITL loop fully closed — `conflict_rationale`'s append is now guarded (Phase 5.85), but the `events.emit()` calls in the replayed interrupt path are not; needs the interrupt-once-per-invocation restructure
 
 **Definition of done:** Tests green, docs match reality, repo is honestly representative of what it does.

@@ -30,6 +30,29 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     _HAS_WEBSOCKETS = False
 
+# Bump when the *shape* of broadcast payloads changes in a way a consumer
+# (the visualizer, a future non-Godot client) would need to branch on --
+# new required keys, renamed keys, changed value types. Adding an
+# additional optional key to one event's payload is not by itself a
+# reason to bump this. Previously every event went out with no version
+# marker at all, so a consumer had no way to detect a breaking payload
+# change short of a runtime KeyError.
+SCHEMA_VERSION = 1
+
+
+def build_message(event_type: str, ts: float, **payload: Any) -> str:
+    """
+    Pure message-construction, split out of `EventBroadcaster.emit` so the
+    JSON shape (including `schema_version`) is unit-testable without
+    standing up a real WebSocket client -- `emit()` itself only runs the
+    send path when at least one client is connected, which made the
+    payload shape untestable in isolation before this split.
+
+    `schema_version` is placed after `**payload` so it always wins over an
+    accidental caller-supplied key of the same name.
+    """
+    return json.dumps({"type": event_type, "ts": ts, **payload, "schema_version": SCHEMA_VERSION})
+
 
 class EventBroadcaster:
     """
@@ -85,7 +108,7 @@ class EventBroadcaster:
         self.start()
         if self._loop is None or not self._clients:
             return
-        message = json.dumps({"type": event_type, "ts": time.time(), **payload})
+        message = build_message(event_type, time.time(), **payload)
 
         async def _send():
             dead = []
