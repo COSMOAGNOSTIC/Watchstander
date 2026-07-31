@@ -1,7 +1,7 @@
 # Watchstander — Architecture
 
 > **Status:** Living document. Update when a decision changes, a component is added/removed, or a migration phase completes.
-> **Last updated:** 2026-07-25 (later same day — HITL disposition enforcement + graph import fix, see ADR-007/008)
+> **Last updated:** 2026-07-31 — Research-First, Extraction-Aware policy adopted (ADR-020)
 
 ## 1. Purpose and Scope
 
@@ -17,6 +17,7 @@ Out of scope for v1: Navy mishap data (classification/aggregation risk — delib
 4. **Grounded, never invented.** The reasoning node's system prompt and its deterministic fallback both work only from an explicit `_grounding_context()` dict assembled from already-verified state; case IDs, shipyards, dates, and outcomes are never invented.
 5. **Edge-resilient by requirement.** Case retrieval (`retrieval.py`) uses a hand-rolled TF-IDF index instead of a vector DB specifically so deconfliction and citation keep working with zero network access and zero model-weight downloads — chosen over ChromaDB/FAISS + sentence-transformers for exactly that reason (see Decision Log).
 6. **Public-domain case grounding only.** Every cited case in `case_data/` traces to a public OSHA/DOL record — no Navy mishap data, no proprietary yard data.
+7. **Research-first, extraction-aware.** Before committing to a new subsystem, architectural pattern, or hard technical problem, do a lightweight sweep for whether the open-source/GitHub community has already solved this specific problem well — a habitual check at each genuinely new fork in the road, not a one-time ritual done at project kickoff. Default to adopting or adapting a solid existing solution rather than reinventing it; a known-good pattern from a past decision in this project is a reasonable starting hypothesis, not a permanent default, and gets re-checked when the problem's actual shape changes. When a real sweep turns up nothing solid, that's a finding, not a dead end — it's the signal to build the missing piece well and to ask whether what gets built is general enough to stand alone as its own public repo (see Extraction Candidates, Section 9). Log what was found (or that nothing solid existed) in the normal ADR entry for that decision. First adopted project-wide in SIMNAVY as ADR-007 there; adopted here as ADR-020.
 
 ## 3. Components
 
@@ -145,6 +146,15 @@ Unlike cosmoai-adept's visualizer — an agent walking between abstract tool sta
 | `MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH` is a conservative guess, not a confirmed regulatory limit | Set to `1` because NAVSEA8010-4.4.3's actual numeric limit is unverified (same root cause as the row above) — over-flagging is the safe default, same posture as the rest of this module, but the constant should be corrected once the primary source is read |
 | Governing-procedure ruleset is single-site (PSNS) by design, not yet multi-site | `procedural_lookup._RULESET_FILES` has one entry. Adding a second installation (NASNI, NAVSTA Everett, SURFPAC vs AIRPAC vs AIRLANT, etc.) is architecturally supported (add a sourced JSON file + a dict entry) but not yet done — no second site's rules exist in this repo yet, and none should be assumed |
 
+### Extraction Candidates
+
+Not everything below gets extracted — this is a candidates list, not a commitment. It's where "should this become its own public repo" judgment calls start, per Design Principle 7, instead of being made ad hoc or forgotten.
+
+| Item | Why it's a candidate | Status |
+|---|---|---|
+| Temporal chit-expiration / multi-clock deconfliction engine (see `claude/watchstander-deconfliction-integration.md`) | Constraint-satisfaction problem (independent-clock expiration flags before shift start) that isn't carrier- or Navy-specific in shape — any industrial site with overlapping time-boxed permits has the same problem. Worth a research sweep before design starts (existing scheduling/CSP solvers) per Design Principle 7 | Not started — architecture/requirements-capture only, no real data access yet |
+| `eval/` fixed-scenario harness pattern (baseline.json + known-gap scenarios as regression tests) | Generalizes past this repo's domain — the pattern of "checked-in baseline + scenarios that deliberately encode known gaps as first-class regression tests" is a reusable eval-harness idea, not Watchstander-specific | Idea only, not evaluated |
+
 ## 10. Decision Log
 
 | ID | Date | Decision | Rationale |
@@ -168,6 +178,7 @@ Unlike cosmoai-adept's visualizer — an agent walking between abstract tool sta
 | ADR-017 | 2026-07-27 | Governing-procedure grounding is site-scoped (`governing_installation` selects a ruleset file), not a universal Navy-wide rules engine | Different installations and type commands (NASNI, NAVSTA Everett, SURFPAC vs AIRPAC vs AIRLANT) operate under different governing instructions; nothing forces fleet-wide adoption of this software yet, so encoding every command's rules before a second real deployment exists would be premature scope. The architecture supports adding a site by adding a sourced JSON file, not by changing lookup logic |
 | ADR-018 | 2026-07-27 | Fire-watch capacity (NAVSEA8010-4.4.3) implemented as its own N-way function, `_fire_watch_capacity_conflicts()`, called separately from the pairwise `check_conflict()` loop | The constraint is "how many concurrent hot-work packages does one fire watch cover," which can't be evaluated two packages at a time the way every other rule in `deconfliction.py` is — forcing it into `check_conflict()`'s pairwise signature would have required either a wrong approximation or a signature change that breaks every existing call site |
 | ADR-019 | 2026-07-28 | Demo vessel source swapped from USS Turner Joy to USCG Cutter ACUSHNET / ex-USS SHACKLE (ARS-9); added a static 3D blockout companion view with a deliberately simplified (straight-hull) geometry model | ACUSHNET's HAER sheet has real printed frame numbers, unlike Turner Joy's — closes a standing synthetic-data caveat and made a 3D "greybox" blockout tractable without inventing coordinate data. Hull curvature and beam-wise compartment subdivision were explicitly not traced (scope call, same spirit as ADR-006), and the render was verified with an actual headless Godot run before being called done |
+| ADR-020 | 2026-07-31 | Adopted the Research-First, Extraction-Aware policy (Design Principle 7) and added the Extraction Candidates table (Section 9) | First articulated in SIMNAVY as its own ADR-007 there; adopted here because it applies directly to at least two open Watchstander threads (the temporal deconfliction engine, the RF hazard buffer model) that are still pre-design — cheaper to research known-good patterns before committing to a shape than to discover a better one after building. Scoped to Watchstander/cosmoai-adept for now, not yet declared a blanket cross-project standard |
 
 ## 11. Maintenance Rules
 
