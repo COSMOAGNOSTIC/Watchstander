@@ -79,6 +79,14 @@ pytest -v
 
 GitHub Actions runs the full suite on Python 3.11 and 3.12 for every push and pull request.
 
+## Sub-projects
+
+- [`retrieval/`](retrieval/README.md) — a separate RAG (retrieval-augmented
+  generation) skills-building harness applying semantic search + citation
+  grounding to this repo's regulatory corpus. Standalone teaching project,
+  not wired into the live deconfliction graph above; has its own phased
+  plan and doc set — see [`retrieval/README.md`](retrieval/README.md).
+
 ## Scope (v1)
 
 Public-domain, civilian shipyard OSHA data only. No Navy mishap data — deliberately excluded to avoid classification/aggregation concerns, not an oversight. See `PASSDOWN.md` Section 7 for the full out-of-scope list.

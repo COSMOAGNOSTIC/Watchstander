@@ -34,4 +34,8 @@ llm = [
 # and failed in CI on every run since the eval harness was added. Packaging
 # `eval/` the same way `agent_core` already is makes it importable via the
 # editable install itself, independent of invocation style.
-include = ["agent_core*", "eval*"]
+#
+# "retrieval*" (added retrieval/MIGRATION.md Phase 0) is included up front for
+# the same reason, proactively -- this is the exact failure mode described
+# above, so there's no reason to wait for CI to go red on it first.
+include = ["agent_core*", "eval*", "retrieval*"]
