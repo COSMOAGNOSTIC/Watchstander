@@ -1,7 +1,7 @@
 # watchstander
 
 [![tests](https://github.com/COSMOAGNOSTIC/watchstander/actions/workflows/tests.yml/badge.svg)](https://github.com/COSMOAGNOSTIC/watchstander/actions/workflows/tests.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 A LangGraph-based multi-agent system for **OSHA 1915 (Shipyard Employment)** spatial and temporal safety deconfliction. Built by a 26-year Navy watchstander — this agent graph stands watch over shipyard safety the same way sailors stand watch over their ship.
 
