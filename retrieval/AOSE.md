@@ -168,18 +168,28 @@ verified yet.
   design pass (letting overlap reach into a *previous* chunk), not a quick
   patch under this round.
 
+## Resolved since Round 2
+
+- **The real `sentence-transformers` model path — closed 2026-08-08, same
+  day as Round 2, on Donnie's own machine (live network, not this
+  sandbox).** `python -m retrieval.ingest` ran for real: downloaded
+  `all-MiniLM-L6-v2` from Hugging Face, chunked and embedded the real
+  corpus (22 + 11 + 7 = 40 chunks), wrote a persistent Chroma collection to
+  `retrieval/.chroma_store/`. Then, separately, queried that live index
+  with a genuinely novel query never used in any test fixture — "how many
+  hot workers can a single fire watch supervise" — through the real
+  `Retriever` against the real persisted store. Returned the correct chunk
+  (containing "No more than four hot workers shall be attended by a single
+  fire watch") with the correct citation ("NAVSEA 8010 Manual
+  (S0570-AC-CCM-010/8010), Sec. 4.4.3"). This is the same proof
+  `test_retrieval_integration.py` already established with a fake
+  embedder, now independently confirmed with the real model producing real
+  embeddings — the fake-embedder tests were verifying the pipeline's
+  wiring correctly; they weren't standing in for something that turned out
+  to behave differently for real.
+
 ## Where the discipline is still open
 
-- **The real `sentence-transformers` model path has not been run
-  end-to-end inside this environment** — this sandbox's network allowlist
-  blocks the Hugging Face download `all-MiniLM-L6-v2` needs on first use.
-  `embedder.py`'s own logic is tested against an injected fake model (see
-  Round 2 above), and `retrieval/ingest.py` is believed correct by code
-  review, but "the real model actually downloads and produces sane
-  embeddings that retrieve the right chunks for genuinely novel queries" is
-  unverified until someone runs `python -m retrieval.ingest` for real, on a
-  machine with live network access. Next real round should close this
-  specifically, not just re-confirm the fake-model tests still pass.
 - OSHA CFR 1915 excerpts are still not sourced (see PASSDOWN.md Session 5,
   ARCHITECTURE.md §5) — not an AOSE finding, just a scope gap worth
   tracking here too since Phase 2's eval set will want a corpus that

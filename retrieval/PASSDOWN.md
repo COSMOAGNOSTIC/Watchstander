@@ -5,6 +5,39 @@ next, what was decided but not built" so this can be picked back up cold.
 
 ---
 
+## Session 6 — 2026-08-08 — Real model path verified on live hardware
+
+**Status:** Phase 1's last open item closed. Everything in the "Definition
+of Done" and "Not done, deliberately" sections of Session 5 below still
+holds except the sandbox-network caveat, which is now resolved.
+
+**What happened:** Ran `python -m retrieval.ingest` for real on Donnie's own
+machine (normal internet access, unlike the build sandbox). `all-MiniLM-L6-v2`
+downloaded from Hugging Face without issue, and the real corpus ingested
+cleanly: 22 chunks from Chapter 4, 11 from Chapter 11, 7 from
+`cases_v1.json` — 40 total, written to a persistent Chroma collection at
+`retrieval/.chroma_store/` (gitignored, stays local, not committed).
+
+Then, separately from ingestion, queried that live index through the real
+`Retriever` with a query that appears nowhere in any test fixture — "how
+many hot workers can a single fire watch supervise" — and got back the
+correct chunk ("No more than four hot workers shall be attended by a single
+fire watch") with the correct citation ("NAVSEA 8010 Manual
+(S0570-AC-CCM-010/8010), Sec. 4.4.3"). Logged in `AOSE.md`'s new "Resolved
+since Round 2" section: this is the same proof
+`test_retrieval_integration.py` already established with an injected fake
+embedder, now independently confirmed with the real model producing real
+embeddings on real hardware — not a different result, a second, harder
+confirmation of the same one.
+
+**Next up:** Phase 2 — hybrid retrieval (BM25 + reranking + context
+compression, small eval set). One real loose end left before that: OSHA CFR
+1915 excerpts, the third planned Phase 1 corpus source, are still not
+sourced (same PDF-extraction effort as ADR-005 describes for 8010, not yet
+run against 29 CFR 1915).
+
+---
+
 ## Session 5 — 2026-08-08 — Phase 1 build: local RAG proof
 
 **Status:** Phase 1 complete. Definition of Done met and verified by test,
