@@ -96,17 +96,91 @@ Fixed the actual bug this check surfaced: PASSDOWN.md's stale "Next up" line
 (see that file's latest entry) — it described the AOSE round as a future
 step rather than a past one.
 
+**Round 2 (2026-08-08, Phase 1 boundary).** Phase 1 has real logic and real
+failure modes for the first time — this round covers what the Phase 0 note
+above flagged as revisit-later territory: empty corpus, a chunk losing its
+provenance, and CI silently exercising a different dependency set than
+local runs.
+
+- **Found and fixed a real citation-accuracy bug via the integration test
+  itself, not a separate adversarial pass.** `chunker.chunk_text()`'s first
+  cut at section-tagging only looked at a chunk's own text for a header —
+  a continuation chunk (falls after the header sentence, same section, no
+  header text of its own) silently got `section: None`. Caught by
+  `test_retrieval_integration.py`'s real-Chapter-4 query: right chunk
+  retrieved, wrong (missing) citation. This is exactly the "component
+  failure" angle the loop calls for, just surfaced by a correctness test
+  rather than a deliberately adversarial one — fixed by carrying the last
+  seen section number forward across chunks (ARCHITECTURE.md ADR-006),
+  with a dedicated regression test
+  (`test_chunk_text_carries_section_forward_into_continuation_chunks`) so
+  this can't silently regress.
+- **Assumed environment change, checked it, found it real.** This
+  sandbox's network allowlist blocks Hugging Face model downloads (403,
+  same failure class as the NAVSEA PDF fetch earlier this session) — the
+  real `sentence-transformers` model path cannot be exercised here at all.
+  Rather than skip testing embedder.py, verified its *own* logic (batching,
+  normalization, caching) against an injected fake model with the same
+  `.encode()` interface real models expose — see
+  `test_retrieval_embedder.py`. The real model path is unverified inside
+  this environment specifically; flagged below as still open, not silently
+  assumed to work.
+- **Verified CI would actually pass, not just local `pytest -v`.**
+  `pyproject.toml` gained a `retrieval` optional-dependency group this
+  phase; before pushing, installed into a genuinely fresh venv with only
+  `.[dev]` (mirroring the *old* CI config) and confirmed 13 tests failed on
+  `ModuleNotFoundError: chromadb` — reproducing, not assuming, the exact gap
+  root AOSE.md already documents once for `eval/`. Fixed
+  `.github/workflows/tests.yml` to install `.[dev,retrieval]`, then
+  re-verified clean: 101/101 under a fresh venv + bare `pytest`.
+- **Malicious/clever-misuse angle:** `VectorStore.upsert()` with
+  mismatched `chunks`/`embeddings` lengths now raises `ValueError` instead
+  of silently zipping to the shorter list and dropping data — covered by
+  `test_upsert_mismatched_lengths_raises`. `Retriever.retrieve()` on a
+  blank/whitespace-only query returns `[]` without calling the embedder at
+  all, rather than embedding empty text and returning a plausible-looking
+  but meaningless top-k — covered by
+  `test_retriever_retrieve_on_blank_query_returns_empty_list_without_embedding`.
+- **Component failure angle:** `VectorStore.query()` against an empty
+  collection returns `[]` rather than erroring or returning garbage —
+  Chroma raises on `n_results` greater than the collection's count, which
+  the fix clamps to `min(top_k, collection.count())` before querying.
+  Covered by `test_query_on_empty_store_returns_empty_list`.
+
+**Outcome:** two real fixes with regression tests (section carry-forward,
+CI install gap), three defensive behaviors added and tested proactively
+(mismatched-length upsert, blank-query short-circuit, empty-collection
+query) rather than waiting for them to fail in the wild first. One item
+moved to "still open" below rather than closed, because it genuinely isn't
+verified yet.
+
 ## Accepted, not open
 
 - Bare `import retrieval` inside `agent_core` resolving to the wrong package
   if ever written — see Round 1. Revisit only if it actually happens; not
   worth a rename or an import-linter rule for a risk that fails loud on
   first use.
+- `chunker.py`'s overlap is opportunistic, not guaranteed at every chunk
+  boundary (a single-sentence chunk has nothing earlier of its own to back
+  into) — see ARCHITECTURE.md §5. No text is ever lost; this is a "some
+  chunk boundaries don't get the double-coverage overlap exists for"
+  limitation, not a correctness bug, and fixing it properly needs a real
+  design pass (letting overlap reach into a *previous* chunk), not a quick
+  patch under this round.
 
 ## Where the discipline is still open
 
-- Nothing yet — Phase 0 has no unresolved findings. Next real round is due
-  at the Phase 1 boundary, once ingestion, embedding, and vector storage are
-  real and have failure modes worth attacking (empty corpus, malformed
-  source documents, embedding model unavailable, Chroma collection
-  corruption, a query with no matching chunks, etc.).
+- **The real `sentence-transformers` model path has not been run
+  end-to-end inside this environment** — this sandbox's network allowlist
+  blocks the Hugging Face download `all-MiniLM-L6-v2` needs on first use.
+  `embedder.py`'s own logic is tested against an injected fake model (see
+  Round 2 above), and `retrieval/ingest.py` is believed correct by code
+  review, but "the real model actually downloads and produces sane
+  embeddings that retrieve the right chunks for genuinely novel queries" is
+  unverified until someone runs `python -m retrieval.ingest` for real, on a
+  machine with live network access. Next real round should close this
+  specifically, not just re-confirm the fake-model tests still pass.
+- OSHA CFR 1915 excerpts are still not sourced (see PASSDOWN.md Session 5,
+  ARCHITECTURE.md §5) — not an AOSE finding, just a scope gap worth
+  tracking here too since Phase 2's eval set will want a corpus that
+  actually includes it.

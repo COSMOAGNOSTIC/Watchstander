@@ -24,6 +24,15 @@ dev = [
 llm = [
     "anthropic>=0.40",
 ]
+# Only needed to run retrieval/embedder.py and retrieval/vector_store.py for
+# real (retrieval/ingest.py, or a live retriever.retrieve() call). The test
+# suite never imports these for real -- see embedder.py's module docstring
+# -- so this stays optional. Added now that Phase 1 actually uses them
+# (MIGRATION.md: "don't add unused deps in Phase 0").
+retrieval = [
+    "sentence-transformers>=3",
+    "chromadb>=0.5",
+]
 
 [tool.setuptools.packages.find]
 # "eval*" is needed so tests/test_eval_harness.py's `from eval.run_eval import

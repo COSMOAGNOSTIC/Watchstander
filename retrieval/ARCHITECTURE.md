@@ -14,16 +14,27 @@ exists to close specific platform gaps — RAG mechanics, vector databases,
 AWS SageMaker, Databricks — surfaced by a real job posting. See PASSDOWN.md
 for the full origin story.
 
-## 2. Current structure (Phase 0)
+## 2. Current structure (Phase 1)
 
 ```
 retrieval/
   __init__.py            package docstring, disambiguation note
-  chunker.py              Chunk dataclass, chunk_text() [Phase 1 stub]
-  embedder.py              Embedding dataclass, embed_text()/embed_chunks() [Phase 1 stubs]
-  vector_store.py          VectorStoreResult dataclass, VectorStore class [Phase 1 stubs]
-  retriever.py              RetrievalResult dataclass, Retriever class [Phase 1 stub]
-  citation_formatter.py     format_citation() [Phase 1 stub]
+  chunker.py               Chunk dataclass, chunk_text() -- real sentence-boundary
+                            chunking, carries a NAVSEA-style section number forward
+                            across continuation chunks (see ADR-006)
+  embedder.py               Embedding dataclass, embed_text()/embed_chunks() --
+                            real sentence-transformers wiring (all-MiniLM-L6-v2)
+  vector_store.py           VectorStoreResult dataclass, VectorStore class --
+                            real Chroma wiring (in-memory ephemeral by default,
+                            persistent when given a directory)
+  retriever.py               RetrievalResult dataclass, Retriever class -- real
+                            retrieve(), embed_fn injectable for testing
+  citation_formatter.py      format_citation() -- real, SOURCE_TITLES registry
+  ingest.py                  corpus ingestion: chunk + embed + upsert real
+                            source documents into a persistent collection
+  sources/
+    navsea_8010_ch4.txt      original manual text, Chapter 4 (see ADR-005)
+    navsea_8010_ch11.txt     original manual text, Chapter 11
   README.md
   MIGRATION.md
   ARCHITECTURE.md          (this file)
@@ -36,21 +47,34 @@ tests/
   test_retrieval_vector_store.py
   test_retrieval_retriever.py
   test_retrieval_citation_formatter.py
+  test_retrieval_ingest.py
+  test_retrieval_integration.py   full pipeline against real 8010 source text
 ```
 
-Data flow (target shape, once Phase 1 lands): raw corpus text ->
-`chunker.chunk_text()` -> `Chunk`s -> `embedder.embed_chunks()` ->
-`Embedding`s -> `vector_store.VectorStore.upsert()`. Query time: query string
--> `embedder.embed_text()` -> `vector_store.VectorStore.query()` ->
-`retriever.Retriever.retrieve()` (owns strategy: top-k now, hybrid+rerank in
-Phase 2) -> `RetrievalResult`s -> `citation_formatter.format_citation()` for
-display.
+Corpus as of Phase 1: NAVSEA 8010 Manual Chapters 4 and 11 (original text,
+per ADR-005) and `case_data/cases_v1.json` (one chunk per sourced case, not
+sentence-chunked -- see `ingest.py`). OSHA CFR 1915 excerpts are still not
+sourced -- open item, not stubbed in with placeholder text (MIGRATION.md).
 
-Phase 0 implements every data model for real but leaves every function/method
-body as `raise NotImplementedError(...)` pointing at Phase 1 — the interface
-boundary is deliberately locked in before any real logic, so Phase 1 fills in
-behavior against an already-agreed shape rather than discovering the shape
-and the behavior at the same time.
+Data flow (live now, not just planned): raw corpus text -> `chunker.chunk_text()`
+-> `Chunk`s -> `embedder.embed_chunks()` -> `Embedding`s ->
+`vector_store.VectorStore.upsert()` (`ingest.py` wires this end-to-end).
+Query time: query string -> `embedder.embed_text()` (or an injected `embed_fn`)
+-> `vector_store.VectorStore.query()` -> `retriever.Retriever.retrieve()` (owns
+strategy: top-k now, hybrid+rerank in Phase 2) -> `RetrievalResult`s ->
+`citation_formatter.format_citation()` for display.
+
+No real embedding model or corpus index is exercised by the test suite --
+`embedder._load_model()` requires live network on first use to download
+`all-MiniLM-L6-v2`, which this repo's tests never depend on (same
+philosophy as `agent_core/reasoning.py`'s `ANTHROPIC_API_KEY`-gated
+deterministic fallback). Tests inject a deterministic, network-free
+embedding function instead -- see `test_retrieval_integration.py`'s
+hashed-bag-of-words fake, which is word-overlap-sensitive enough to prove
+the pipeline's wiring is actually correct, not just that it doesn't crash.
+The real model path exists and works (verified by hand outside CI/tests, and
+via `python -m retrieval.ingest`) but running it for real is a manual step,
+not an automatic one.
 
 ## 3. Relationship to the rest of the repo
 
@@ -149,8 +173,51 @@ structured summary exists for OSHA CFR 1915 the way it does for 8010, and
 `cases_v1.json`'s case summaries are closer to prose than 8010's ruleset
 entries are — so no general policy call was needed here, just this one.
 
+**ADR-006 — Section citation carries forward across continuation chunks;
+CI installs the `retrieval` extra.** (2026-08-08) Two real findings from
+Phase 1's own test suite, both fixed the same pass rather than left open:
+
+1. `chunker.chunk_text()` originally tagged a chunk's `section` by
+   searching only that chunk's own text for a NAVSEA-style header (e.g.
+   "4.4.3"). A chunk that continues a section — falls after the header
+   sentence, so contains no header text of its own — came back with
+   `section: None`, silently losing its citation even though it's just as
+   much a part of that section as the chunk before it.
+   `test_retrieval_integration.py`'s real-Chapter-4 query caught this: the
+   retrieved chunk was the right one (contains "No more than four hot
+   workers"), but its citation would have been wrong. Fixed by carrying the
+   most recently seen section number forward across chunks within a
+   document, updating only when a new header actually appears —
+   `test_chunk_text_carries_section_forward_into_continuation_chunks`
+   guards this permanently.
+2. `pyproject.toml` gained a `retrieval` optional-dependency group
+   (`sentence-transformers`, `chromadb`) for this phase, but
+   `.github/workflows/tests.yml` still only installed `.[dev]`. This is the
+   exact failure mode this file's own AOSE.md already documents happening
+   once with `eval/` (local runs used `python -m pytest`, which masks
+   missing-package installs that CI's bare `pytest` doesn't) — caught here
+   by actually installing into a fresh venv and running bare `pytest`
+   before pushing, not by trusting that "tests pass locally" meant
+   anything about CI. Fixed by adding `retrieval` to the CI install step.
+
 ## 5. Known debt / open questions
 
 - No corpus size/scale assumptions have been tested yet; Phase 1's DoD is
   "returns the correct chunk," not "performs well at scale" — that's
   implicitly Phase 2's hybrid-retrieval eval-set territory.
+- `chunker.py`'s overlap between consecutive chunks is opportunistic, not
+  guaranteed: when a chunk consists of a single sentence with no earlier
+  sentence of its own to back into, the next chunk starts immediately after
+  it with no overlap (see `test_chunk_text_covers_the_whole_document_without_gaps`).
+  No text is ever lost — chunks still abut exactly — this only means the
+  "same fact findable from either side of a chunk boundary" property Phase 1
+  overlap exists for doesn't hold at every boundary, just most of them.
+  Lower severity: hasn't caused an incorrect retrieval yet, and fixing it
+  properly means letting overlap reach back into a *previous* chunk's
+  sentences rather than just the current one, which needs a real design
+  pass, not a quick patch.
+- OSHA CFR 1915 excerpts (the third planned Phase 1 corpus source) are not
+  sourced yet — same PDF-extraction effort ADR-005 describes for NAVSEA
+  8010 hasn't been run against 29 CFR 1915. Not blocking Phase 1's DoD
+  (already met against the 8010 + cases_v1 corpus), but the corpus is
+  smaller than originally planned until this lands.

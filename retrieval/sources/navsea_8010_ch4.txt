@@ -1,0 +1,153 @@
+DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
+S0570-AC-
+CCM-010/8010
+Chapter 4
+HOT WORK AND FIRE WATCH
+References
+(a) S9086-CH-STM-010, Naval Ships’ Technical Manual (NSTM) Chapter 074, Volume 1, Welding and Allied Processes
+(b) S6470-AA-SAF-010, Naval Maritime Confined Space Manual
+(c) Occupational Safety and Health Standards for Shipyard Employment, 29 CFR Part 1915 Subpart P, Fire Protection in
+Shipyard Employment
+(d) National Fire Protection Association (NFPA) Codes and Standards 51B, Standard for Fire Prevention During Welding,
+Cutting, and Other Hot Work
+(e) National Fire Protection Association (NFPA) Codes and Standards 312, Standard for Fire Protection of Vessels During
+Construction, Conversion, Repair, and Lay-up
+(f) National Fire Protection Association (NFPA) Codes and Standards 306, Standard for the Control of Gas Hazards on
+Vessels
+(g) Occupational Safety and Health Standards for Shipyard Employment, 29 CFR Part 1915 Subpart B, Confined and
+Enclosed Spaces and Other Dangerous Atmospheres in Shipyard Employment
+(h) NAVSEA OP 4, Ammunition and Explosives Safety Afloat
+Introduction
+In accordance with the hot work requirements of references (a) through (c), this chapter implements the necessary
+precautions, procedures, and safety requirements as related to hot work operations during an industrial availability. This
+chapter applies to all SRCAs (except new construction shipyards) and covers all Navy ships – submarines, surface ships, and
+aircraft carriers.
+The very existence of hot work operations in an industrial environment poses an increased risk to SF and SRCA workers,
+justifying the need for additional fire watches and fire extinguishers, in parallel with the combustible loading requirements
+contained in chapter 5 of this manual. Flexibilities are built into the fire watch requirements contained here-in to ensure
+proper visible coverage of hot work operations by minimal personnel. In implementation of these requirements, it is
+important to note that the prevention and early detection of a small fire is the most effective means of preventing a major
+shipboard fire.
+4.1 HOT WORK MEMORANDUM OF AGREEMENT.
+4.1.1 Classifications of Hot Work. Consistent with references (a) and (b), hot work includes the following operations:
+a. Flame heating, welding, torch cutting, brazing, and carbon arc gouging.
+b. Work which produces heat, by any means, of 400 °F (204 °C), or more.
+c. Grinding, drilling, abrasive blasting, or similar spark-producing operations EXCEPT when such operations are
+isolated physically from any atmosphere containing 10 percent or greater of the Lower Explosive Limit of a
+flammable or combustible substance.
+4.1.2 Hot Work MOA. Prior to performing hot work during an availability, the NSA shall ensure that a Memorandum of
+Agreement (MOA) is in place with the ship to cover the hot work notification process. The ship shall be notified in advance
+of hot work, and status of hot work jobs shall be kept up to date at least daily. The following shall be considered with regards
+to the MOA:
+a. The NSA shall ensure that all hot work performed by all maintenance and modernization activities during the
+availability is coordinated through the LMA.
+DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
+4-1
+DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
+S0570-AC-
+CCM-010/8010
+b. For hot work performed outside of an availability with an assigned NSA, the SRCA will establish a MOA(s)
+between the ship and all outside activities performing hot work.
+4.2 HOT WORK AUTHORIZATION.
+4.2.1 Written Notice. As required per reference (c), hot work shall only be conducted after a written notice for each job or
+separate area of hot work aboard ship is provided and a fire watch posted. The written notice shall include the following
+attributes:
+a. State a description of the work to be done.
+b. List the specific location of the hot work to include compartment number and the compartment numbers of adjacent
+decks, bulkheads and similar structures upon which hot work is to be accomplished.
+c. State the time hot work will commence.
+d. List the current gas-free status of the area.
+e. List the absence or existence of combustible material within 35 feet of the operation (or further if affected by the
+operation), and if combustible material exists, the action taken to protect the material from fire.
+f. State the provision and assignment of a fire watch.
+g. Affirm that conditions at work site (ventilation, temporary lighting, and accesses) permit the fire watch(es) to have a
+clear view of and immediate access to all areas included in the fire watch.
+h. Affirm that a suitable fully charged fire extinguisher is available at the job site.
+i. Provide for an inspection of the area 30 minutes after completion of the hot work or the cessation of hot work at the
+job site as the final action to complete the notice. If after 30 minutes the job site is not cool to the touch, do not
+leave the job site, and notify the nearest watch-stander/manager. When strip heaters are in use for post weld heat
+treatment, the fire watch shall remain in the hot work area for at least 30 minutes after completion of the welding,
+and shall survey the exposed area(s), and make a determination that there is no further fire hazard prior to
+completing the notice and leaving the area.
+4.2.2 Signing Authority. The notice shall be signed by a supervisor specifically designated as responsible for coordination of
+the hot work and the fire watch requirement.
+4.2.3 Posting of Notice. One copy of each notice shall be conspicuously posted at the location where the hot work is being
+accomplished, and the Commanding Officer’s designated representative shall be notified of all areas where hot work is being
+performed.
+4.2.4 Notice to the CO’s Representative. The notice to the Commanding Officer’s designated representative shall precede
+the initiation of the actual hot work in order to permit the Commanding Officer to designate a member of the crew to observe
+the operation, if desired.
+4.3 GAS-FREE PROCEDURES AND SPECIAL HAZARDS.
+4.3.1 Governance for Gas Free Procedures. The Navy Maritime Confined Space Program shall be the governing authority
+for gas-free procedures. All gas-free procedures shall be in accordance with references (d) through (f).
+4.3.1.1 For Naval activities, gas-free procedures shall also be in accordance with reference (b).
+4.3.1.2 For contractor activities, gas-free procedures shall also be in accordance with reference (g).
+4.3.2 Restricted Areas for Hot Work. Hot work shall not be conducted in closed or poorly ventilated spaces as defined in
+reference (b), subject to the risk of fire, explosion, exposure to toxic substances, or suffocation or asphyxiation, until
+appropriate test and procedures have been conducted in accordance with references (b) and (c).
+4.3.3 Coverings. Fire-resistant coverings meeting the requirements of chapter 5 of this manual shall be secured in place
+prior to commencing hot work to adequately protect piping and equipment.
+4.3.4 Lines/Piping Containing Flammable or Combustible Fluids. Lines/piping containing flammable and/or combustible
+fluids shall be depressurized and protected from damage/heat while conducting welding or hot work operations adjacent to
+these lines/pipes.
+DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
+4-2
+DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
+S0570-AC-
+CCM-010/8010
+4.3.5 Proximity of Flammables and Combustibles. Consistent with references (a) and (c), where practicable relocate all
+flammables and combustibles at least 35 feet from hot work operations to prevent the spread of fire unless the requirements
+of paragraph 4.1.1.(c) are met. Where relocation is impracticable, protect combustibles with metal or guards and curtains
+constructed of material meeting the requirements of sections 5.1.3.1 or 5.1.3.2.
+4.3.6 Ammunition or Explosives. Hot work operations in or adjacent to areas containing ammunition or explosive material
+or substance shall be conducted in accordance with reference (h).
+4.3.6.1 Hot work shall not be conducted during any logistics or maintenance movement of ammunition or explosives.
+4.3.6.2 Hot work shall not be conducted during any fueling operations without approval by the FSC and risk mitigation
+implemented.
+4.3.7 Battery Charging Operations. The following precautions shall be employed during battery charging operations:
+a. Care taken to prevent accidental sparking of electrical apparatus.
+b. Suspension of hot work except for submarines which have the Submarine Valve Regulated Lead Acid (SVRLA)
+battery that have ventilation and atmospheric control equipment lined up in accordance with the class Ship Systems
+Manual and the battery is being operated in accordance with the appropriate SVRLA battery technical manual.
+4.3.8 Additional Precautions. Necessary safety precautions shall be taken prior to conducting hot work on tanks, piping
+systems, or components which have previously contained flammable liquids. This includes hot work operations within 35
+feet of tanks or piping that contain or previously contained flammable liquids in accordance with reference (b).
+4.4 FIRE WATCH REQUIREMENTS AND TRAINING.
+4.4.1 Fire Watch Policy. Each SRCA shall create and maintain a written fire watch policy meeting the requirements of
+reference (c). Personnel, including SF, performing hot work and/or hot work watch standing shall undergo a training
+program that covers their specific responsibilities in accordance with reference (c).
+4.4.2 Additional Duties During Hot Work. The fire watch shall not accomplish other duties while hot work is in progress.
+4.4.3 Limitations to Single Fire Watch with Multiple Hot Workers. A single fire watch may provide protection where
+several hot workers are performing hot work in a single work area with the following limitations:
+a. The fire watch must have an unobstructed view, without turning, of all hot work operations and exposed areas from
+a single fixed location at which he is stationed and have no physical obstructions or barriers that would prevent
+immediate access by the fire watch to the hot work operation should a fire occur.
+b. No more than four hot workers shall be attended by a single fire watch.
+c. The fire watch cannot rove from one compartment/area to another in carrying out their duties as a fire watch in a
+way which would affect the requirement of maintaining a continuous line of sight view of all hot work.
+d. A means of communicating between the fire watch and all hot workers shall be provided such that in the event of a
+fire, the fire watch can immediately notify all hot workers to stop operations.
+4.4.4 Hot Work Involving Multiple Levels. In cases in which hot material from hot work may involve more than one level,
+as in trunks, machinery spaces, and on scaffolding, a fire watch shall be stationed at each level unless positive means are
+available to prevent the spread or fall of hot material.
+4.4.5 Bulkhead or Deck Hot Work. In cases where hot work is to be accomplished on a bulkhead or deck, combustible
+material shall be removed from the vicinity of the hot work on the opposite side of the bulkhead, overhead, or deck, and a fire
+watch shall be posted at each location.
+4.4.6 Blind Compartment Hot Work. If multiple blind compartments are involved in any hot work job, fire watches shall be
+posted simultaneously in each blind area.
+4.4.7 Communication Between Fire Watches. When more than one fire watch is required, a communication means between
+the fire watches shall be established.
+DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
+4-3
+DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
+S0570-AC-
+CCM-010/8010
+4.4.8 Fire Extinguishers. Fire extinguishers used for hot work shall be provided by the performing activity and shall not be a
+ship’s installed extinguisher.
+4.4.9 Fire Watch Training. All fire watches shall undergo a training program in accordance with references (a) and (c) that
+covers, at a minimum, their responsibilities, use of fire extinguishing and other required safety equipment, inspection of
+immediate and surrounding areas before, during, and after hot work, assigned station during actual hot work, method of
+communication between fire watch and hot work operator, the appropriate reporting procedure for a fire while assigned as a
+fire watch and the sounding of fire alarms.
+DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
+4-4

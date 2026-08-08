@@ -5,6 +5,69 @@ next, what was decided but not built" so this can be picked back up cold.
 
 ---
 
+## Session 5 — 2026-08-08 — Phase 1 build: local RAG proof
+
+**Status:** Phase 1 complete. Definition of Done met and verified by test,
+not eyeballed — see MIGRATION.md's Phase 1 section for the exact assertion.
+
+**What happened:** Chapters 4 and 11's extracted text (sourced the same
+session, via `pdfplumber` against the primary PDF Donnie uploaded directly —
+see root PASSDOWN.md for that extraction's own story) landed in
+`retrieval/sources/`. All five Phase 0 skeleton modules got real logic:
+
+- `chunker.py` — sentence-boundary-respecting chunking with overlap, tags
+  each chunk with the NAVSEA-style section number in force.
+- `embedder.py` — wired to `sentence-transformers` (`all-MiniLM-L6-v2`),
+  lazy-loaded and cached.
+- `vector_store.py` — wired to Chroma, ephemeral in-memory by default,
+  persistent when given a directory.
+- `retriever.py` — real `retrieve()`, `embed_fn` injectable for tests.
+- `citation_formatter.py` — real `format_citation()` with a `SOURCE_TITLES`
+  registry.
+- `ingest.py` — new module, wires the whole pipeline end-to-end for real
+  corpus documents (8010 Ch4/Ch11 text + `case_data/cases_v1.json`, one
+  chunk per case). Runnable by hand via `python -m retrieval.ingest`.
+
+Two real bugs surfaced by the new tests, both fixed the same pass rather
+than left open (see ARCHITECTURE.md ADR-006 for the full writeup):
+section-citation not carrying forward into a chunk that continues a section
+without repeating its header, and CI's install step not picking up the new
+`retrieval` optional-dependency group (caught by actually installing into a
+fresh venv and running bare `pytest`, not by trusting a local
+`python -m pytest` pass — this repo already documents that exact gap once,
+in root AOSE.md, over `eval/`; caught here before it repeated, not after).
+
+sentence-transformers and chromadb are both real network/model dependencies
+this sandbox couldn't reach Hugging Face to download a model through (403
+from the proxy allowlist) — same class of block as the NAVSEA PDF fetch
+earlier this session. Worked around the same way testing in this repo
+always avoids live-network dependence: `embedder._load_model()` and the
+real model path are never exercised by the test suite, which injects a
+deterministic offline embedding function instead (a real, if crude,
+hashed-bag-of-words vectorizer in `test_retrieval_integration.py` — word-
+overlap-sensitive, not a no-op stub). The real model path is believed
+correct by code review and by chromadb's own real (non-mocked) storage/
+query logic being exercised directly, but has not been run end-to-end with
+the real model inside this environment — that verification still needs to
+happen on a machine with real network access (Donnie's, or CI) before it's
+fully trusted, not just this session's code review.
+
+**Not done, deliberately:** OSHA CFR 1915 excerpts — the third planned
+Phase 1 corpus source — are not sourced. Same PDF-extraction effort as
+ADR-005 describes for 8010 hasn't been run against 29 CFR 1915 yet. Doesn't
+block Phase 1's DoD (met against the 8010 + cases_v1 corpus already
+ingested) but the real corpus is smaller than originally scoped until this
+lands.
+
+**Next up:** Phase 2 — hybrid retrieval (BM25 + reranking + context
+compression, small eval set). Before that, worth running
+`python -m retrieval.ingest` for real on a machine with live network (to
+actually download `all-MiniLM-L6-v2` and confirm the real model path works,
+not just the injected-fake-embedder path the tests cover), and sourcing the
+OSHA CFR 1915 excerpts to round out the Phase 1 corpus.
+
+---
+
 ## Session 1 — 2026-08-04 — Phase 0 scaffold
 
 **Status:** Phase 0 complete. Nothing before this session; this is the

@@ -1,0 +1,67 @@
+DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
+S0570-AC-
+CCM-010/8010
+Chapter 11
+FIRE AND SMOKE BOUNDARIES
+Introduction
+This chapter provides requirements for sustaining fire zone boundaries and fire and smoke boundaries during industrial
+availabilities. This chapter applies to all platforms – submarines, surface ships, and aircraft carriers.
+In an industrial environment, it is imperative to maintain the integrity of ships’ fire zone boundaries in order to contain a fire
+in its originating compartment/fire zone, and limit the fire from spreading to other locations in the ship. While ships are
+designed and built with fire zone boundaries, maintenance availabilities present unique circumstances where these as-built
+boundaries may become compromised. The FSC is empowered to mitigate the risks associated with compromised fire zone
+boundaries, and guidance, including the use of non-combustible fume tight closures and smoke curtains during these
+situations, is provided here-in for implementation.
+11.1 FIRE ZONE BOUNDARIES. A fire zone boundary is a permanent, continuous, interior bulkhead or deck system
+designed to limit the passage of flame and smoke beyond a fire zone and provides protected staging areas for firefighters.
+11.1.1 Requirements for Fire Zone Boundaries. The ship’s permanent fire zone boundaries shall be maintained to the extent
+practicable throughout the availability. This includes maintaining the capability of fire insulation where installed, fire-rated
+penetrations such as multi-cable transits (MCTs) and pipe penetrations, fume-tightness of the boundary, etc. Existing
+transverse watertight, airtight, and fume-tight bulkheads shall be used on ships built prior to the requirement for fire zones.
+Where ships have fire zones by design, the designated bulkheads and decks shall be used. When authorized industrial work
+requires disestablishment of ship’s permanent fire zone boundaries, alternate fire zone boundaries shall be designated by the
+FSC. The fire zone boundary shall be continuous throughout the vertical extent of the ship, from keel up to the flight deck on
+carrier type ships and from keel up to the main deck on other ships unless designated higher.
+11.1.2 Fire Zone Boundaries (Submarines). For submarines, fire zone boundaries shall consist of the watertight transverse
+bulkheads between the engine room, missile compartment (when applicable), and forward compartment.
+11.1.3 Temporary Access Cuts through Fire Zone Boundaries. Temporary access cuts through fire zone boundaries shall be
+minimized. Where unavoidable, they shall be provided with non-combustible fume-tight closures. Aluminum shall not be
+used as a closure.
+11.1.4 Disabling/Degrading Fire Zone Boundaries. The disabling or degrading of fire zone boundary closures or
+penetrations shall be approved by the FSC and will require a temporary closure system, such as fire resistant smoke curtains,
+strategically placed with an ability to drop quickly, which can be set by personnel leaving the space.
+11.1.5 Marking Fire Zone Boundaries. Each designated fire zone boundary shall be identified with a sign on each side of the
+access through the boundary.
+11.1.6 Record of Boundary Openings. An up-to-date record of boundary openings and access cuts, and their locations shall
+be kept aboard ship by ship’s force. The location of fire zone boundaries and designated fire and smoke boundaries shall be
+noted on drawings at the CASCON Station and/or DCC/Quarterdeck.
+11.1.7 Boundaries on Carrier Type Ships. On carrier type ships, the hangar division door travel paths shall remain free of
+obstructions such that they can be freely operated in the event of a fire. A means (such as a chain-fall) shall be provided to
+close the hangar division doors in case of fire, in the event division doors are mechanically inoperable because of
+maintenance actions. In the event maintenance actions will render a division door totally immovable, work shall be
+sequenced and approved by the FSC, such that one set of doors will always be available to close in the event of a fire. Any
+exceptions shall be submitted for approval to the FSC.
+11.2 FIRE AND SMOKE BOUNDARIES.
+11.2.1 Fire Boundaries. A fire boundary is a temporary boundary set during a fire by immediate fire responders or
+firefighters by closing doors, hatches, and other closures. A fire boundary is intended to limit fire and smoke spread from a
+space, group of spaces, deck(s), or compartment/fire zone within a ship, and provide staging areas for fire parties. Watertight
+transverse bulkheads are typically utilized as fire boundaries.
+DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
+11-1
+DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
+S0570-AC-
+CCM-010/8010
+11.2.2 Smoke Boundaries. A smoke boundary is a bulkhead, deck, or other fume-tight boundary which is set during a fire to
+limit smoke spread and air supply to a fire. On submarines, a smoke boundary is a designated boundary between spaces
+within a major compartment, or at a fire zone boundary or hull penetration which is pre-rigged or set during a fire to contain
+smoke. Fume-tightness may be achieved by rigging a smoke curtain. Smoke boundaries may not be designed to serve as a
+fire barrier.
+11.2.3 Traverse Bulkheads versus Compartments. Although watertight transverse bulkheads separating submarine
+compartments serve as fire and smoke boundaries, fire and smoke boundaries generally cannot be set within compartments,
+such as the engine room and missile compartment, since complete bulkheads and decks do not exist.
+11.2.4 Acceptable Boundaries. The boundary of certain spaces within a submarine compartment, such as auxiliary
+machinery room, radio and Electronic Control Management (ECM) room, and sonar control room, are generally of sufficient
+tightness to serve as a fire and smoke boundary. Doors and hatches serving such spaces should be kept closed during a fire to
+minimize fire and smoke spread.
+DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
+11-2

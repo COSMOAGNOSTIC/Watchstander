@@ -15,5 +15,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[dev]"
+      # "retrieval" added alongside the Phase 1 real-logic build
+      # (retrieval/MIGRATION.md) -- VectorStore now imports chromadb for
+      # real (tests exercise real Chroma storage/query logic, only the
+      # embedding vectors themselves are faked), so it's a real test
+      # dependency here, not just a runtime-only extra. Installing only
+      # ".[dev]" would repeat the exact CI-vs-local install-path gap
+      # documented in AOSE.md's "verification blind spot" section (the
+      # eval/ package import failure) -- caught here proactively instead.
+      - run: pip install -e ".[dev,retrieval]"
       - run: pytest -v

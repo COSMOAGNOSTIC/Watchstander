@@ -39,32 +39,61 @@ imports cleanly, including under a CI-style install.
 
 ## Phase 1 — Local RAG proof
 
-- [ ] Ingest the Watchstander corpus: NAVSEA 8010 Manual — original manual
+- [x] Ingest the Watchstander corpus: NAVSEA 8010 Manual — original manual
       text, Chapters 4 ("Hot Work and Fire Watch") and 11 ("Fire and Smoke
-      Boundaries"), pulled fresh from the source PDF, not the pre-extracted
-      `case_data/navsea_8010_psns_v2014.json` summaries (decided 2026-08-08,
-      see ARCHITECTURE.md ADR-005) — plus OSHA CFR 1915 excerpts and
-      `case_data/cases_v1.json`.
-- [ ] `chunker.py`: real sentence/paragraph-aware chunking (not a blind
-      character-count cut).
-- [ ] `embedder.py`: wire to `sentence-transformers` (e.g.
-      `all-MiniLM-L6-v2`).
-- [ ] `vector_store.py`: wire to Chroma (local, persistent collection).
-- [ ] `retriever.py`: real `retrieve()` — embed query, hit the vector store,
-      return top-k `RetrievalResult`s.
-- [ ] `citation_formatter.py`: real `format_citation()` — resolve chunk
-      provenance to a human-readable citation (document title +
-      section/chapter, not just a raw chunk_id).
-- [ ] Add `retrieval` optional-dependency group to `pyproject.toml`
-      (`sentence-transformers`, `chromadb`) once these are actually used —
-      don't add unused deps in Phase 0.
-- [ ] Tests replace the Phase 0 `NotImplementedError` assertions with real
-      behavior assertions.
-- [ ] `pytest -v` still green.
+      Boundaries"), pulled fresh from the source PDF (see ARCHITECTURE.md
+      ADR-005), plus `case_data/cases_v1.json` (one chunk per sourced case).
+      OSHA CFR 1915 excerpts NOT yet sourced — same PDF-extraction effort
+      as 8010 hasn't been run against it; open item, not stubbed with
+      placeholder text (ARCHITECTURE.md §5).
+- [x] `chunker.py`: real sentence-boundary chunking (never splits a
+      sentence across chunks; never drops an oversized sentence), tags
+      each chunk with the NAVSEA-style section number in force, carried
+      forward across continuation chunks that don't repeat the header
+      (ADR-006 — a real bug the integration test caught and fixed this
+      pass).
+- [x] `embedder.py`: wired to `sentence-transformers`
+      (`all-MiniLM-L6-v2`), lazy-loaded and cached. Real model download
+      needs live network on first use — not exercised by the test suite,
+      which injects a deterministic offline `embed_fn` instead.
+- [x] `vector_store.py`: wired to Chroma — in-memory ephemeral by default
+      (what tests use), persistent when given a directory
+      (`retrieval/ingest.py`'s default: `retrieval/.chroma_store/`,
+      gitignored).
+- [x] `retriever.py`: real `retrieve()` — embeds the query (via an
+      injectable `embed_fn`, defaulting to `embedder.embed_text`), queries
+      the vector store, returns top-k `RetrievalResult`s.
+- [x] `citation_formatter.py`: real `format_citation()` — `SOURCE_TITLES`
+      registry resolves `source_id` to a document title; combined with
+      `section` when present ("NAVSEA 8010 Manual ..., Sec. 4.4.3"), falls
+      back to `(chunk_id)` when it isn't (e.g. non-numbered sources),
+      falls back to the raw `source_id` for anything unregistered rather
+      than guessing a title.
+- [x] `retrieval` optional-dependency group added to `pyproject.toml`
+      (`sentence-transformers`, `chromadb`). CI's install step
+      (`.github/workflows/tests.yml`) updated to include it — verified by
+      installing into a genuinely fresh venv and running bare `pytest`
+      (not `python -m pytest`) before pushing, the same discipline root
+      AOSE.md already argues for after the `eval/` package gap.
+- [x] Tests replace the Phase 0 `NotImplementedError` assertions with real
+      behavior assertions (`test_retrieval_chunker.py`,
+      `test_retrieval_embedder.py`, `test_retrieval_vector_store.py`,
+      `test_retrieval_retriever.py`, `test_retrieval_citation_formatter.py`),
+      plus two new files: `test_retrieval_ingest.py` (ingest.py's own
+      chunking/upsert logic) and `test_retrieval_integration.py` (the full
+      pipeline against real Chapter 4/11 source text — this is what
+      satisfies the Definition of Done below).
+- [x] `pytest -v` green — 101/101, including under a fresh-venv CI-equivalent
+      bare `pytest` invocation with `.[dev,retrieval]` installed.
 
 **Definition of done:** A real query against the ingested corpus returns the
 correct chunk and an accurate, human-readable citation — verified by a test,
-not just eyeballed once.
+not just eyeballed once. Met: `test_retrieval_integration.py` chunks the real
+Chapter 4 source text, retrieves against the query "how many hot workers can
+a single fire watch attend," gets back the chunk containing "No more than
+four hot workers shall be attended by a single fire watch," tagged
+`section == "4.4.3"`, and formats it as "NAVSEA 8010 Manual
+(S0570-AC-CCM-010/8010), Sec. 4.4.3."
 
 ---
 

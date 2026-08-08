@@ -1,0 +1,1827 @@
+diff --git a/.github/workflows/tests.yml b/.github/workflows/tests.yml
+index a37ea19..248efc6 100644
+--- a/.github/workflows/tests.yml
++++ b/.github/workflows/tests.yml
+@@ -15,5 +15,13 @@ jobs:
+       - uses: actions/setup-python@v5
+         with:
+           python-version: ${{ matrix.python-version }}
+-      - run: pip install -e ".[dev]"
++      # "retrieval" added alongside the Phase 1 real-logic build
++      # (retrieval/MIGRATION.md) -- VectorStore now imports chromadb for
++      # real (tests exercise real Chroma storage/query logic, only the
++      # embedding vectors themselves are faked), so it's a real test
++      # dependency here, not just a runtime-only extra. Installing only
++      # ".[dev]" would repeat the exact CI-vs-local install-path gap
++      # documented in AOSE.md's "verification blind spot" section (the
++      # eval/ package import failure) -- caught here proactively instead.
++      - run: pip install -e ".[dev,retrieval]"
+       - run: pytest -v
+diff --git a/.gitignore b/.gitignore
+index 4e970fc..0b51da3 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -7,3 +7,4 @@ __pycache__/
+ .venv/
+ venv/
+ visualizer/.godot/
++retrieval/.chroma_store/
+diff --git a/pyproject.toml b/pyproject.toml
+index b2bd298..53206f8 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -24,6 +24,15 @@ dev = [
+ llm = [
+     "anthropic>=0.40",
+ ]
++# Only needed to run retrieval/embedder.py and retrieval/vector_store.py for
++# real (retrieval/ingest.py, or a live retriever.retrieve() call). The test
++# suite never imports these for real -- see embedder.py's module docstring
++# -- so this stays optional. Added now that Phase 1 actually uses them
++# (MIGRATION.md: "don't add unused deps in Phase 0").
++retrieval = [
++    "sentence-transformers>=3",
++    "chromadb>=0.5",
++]
+ 
+ [tool.setuptools.packages.find]
+ # "eval*" is needed so tests/test_eval_harness.py's `from eval.run_eval import
+diff --git a/retrieval/AOSE.md b/retrieval/AOSE.md
+index f1e9264..663e2fc 100644
+--- a/retrieval/AOSE.md
++++ b/retrieval/AOSE.md
+@@ -96,17 +96,91 @@ Fixed the actual bug this check surfaced: PASSDOWN.md's stale "Next up" line
+ (see that file's latest entry) — it described the AOSE round as a future
+ step rather than a past one.
+ 
++**Round 2 (2026-08-08, Phase 1 boundary).** Phase 1 has real logic and real
++failure modes for the first time — this round covers what the Phase 0 note
++above flagged as revisit-later territory: empty corpus, a chunk losing its
++provenance, and CI silently exercising a different dependency set than
++local runs.
++
++- **Found and fixed a real citation-accuracy bug via the integration test
++  itself, not a separate adversarial pass.** `chunker.chunk_text()`'s first
++  cut at section-tagging only looked at a chunk's own text for a header —
++  a continuation chunk (falls after the header sentence, same section, no
++  header text of its own) silently got `section: None`. Caught by
++  `test_retrieval_integration.py`'s real-Chapter-4 query: right chunk
++  retrieved, wrong (missing) citation. This is exactly the "component
++  failure" angle the loop calls for, just surfaced by a correctness test
++  rather than a deliberately adversarial one — fixed by carrying the last
++  seen section number forward across chunks (ARCHITECTURE.md ADR-006),
++  with a dedicated regression test
++  (`test_chunk_text_carries_section_forward_into_continuation_chunks`) so
++  this can't silently regress.
++- **Assumed environment change, checked it, found it real.** This
++  sandbox's network allowlist blocks Hugging Face model downloads (403,
++  same failure class as the NAVSEA PDF fetch earlier this session) — the
++  real `sentence-transformers` model path cannot be exercised here at all.
++  Rather than skip testing embedder.py, verified its *own* logic (batching,
++  normalization, caching) against an injected fake model with the same
++  `.encode()` interface real models expose — see
++  `test_retrieval_embedder.py`. The real model path is unverified inside
++  this environment specifically; flagged below as still open, not silently
++  assumed to work.
++- **Verified CI would actually pass, not just local `pytest -v`.**
++  `pyproject.toml` gained a `retrieval` optional-dependency group this
++  phase; before pushing, installed into a genuinely fresh venv with only
++  `.[dev]` (mirroring the *old* CI config) and confirmed 13 tests failed on
++  `ModuleNotFoundError: chromadb` — reproducing, not assuming, the exact gap
++  root AOSE.md already documents once for `eval/`. Fixed
++  `.github/workflows/tests.yml` to install `.[dev,retrieval]`, then
++  re-verified clean: 101/101 under a fresh venv + bare `pytest`.
++- **Malicious/clever-misuse angle:** `VectorStore.upsert()` with
++  mismatched `chunks`/`embeddings` lengths now raises `ValueError` instead
++  of silently zipping to the shorter list and dropping data — covered by
++  `test_upsert_mismatched_lengths_raises`. `Retriever.retrieve()` on a
++  blank/whitespace-only query returns `[]` without calling the embedder at
++  all, rather than embedding empty text and returning a plausible-looking
++  but meaningless top-k — covered by
++  `test_retriever_retrieve_on_blank_query_returns_empty_list_without_embedding`.
++- **Component failure angle:** `VectorStore.query()` against an empty
++  collection returns `[]` rather than erroring or returning garbage —
++  Chroma raises on `n_results` greater than the collection's count, which
++  the fix clamps to `min(top_k, collection.count())` before querying.
++  Covered by `test_query_on_empty_store_returns_empty_list`.
++
++**Outcome:** two real fixes with regression tests (section carry-forward,
++CI install gap), three defensive behaviors added and tested proactively
++(mismatched-length upsert, blank-query short-circuit, empty-collection
++query) rather than waiting for them to fail in the wild first. One item
++moved to "still open" below rather than closed, because it genuinely isn't
++verified yet.
++
+ ## Accepted, not open
+ 
+ - Bare `import retrieval` inside `agent_core` resolving to the wrong package
+   if ever written — see Round 1. Revisit only if it actually happens; not
+   worth a rename or an import-linter rule for a risk that fails loud on
+   first use.
++- `chunker.py`'s overlap is opportunistic, not guaranteed at every chunk
++  boundary (a single-sentence chunk has nothing earlier of its own to back
++  into) — see ARCHITECTURE.md §5. No text is ever lost; this is a "some
++  chunk boundaries don't get the double-coverage overlap exists for"
++  limitation, not a correctness bug, and fixing it properly needs a real
++  design pass (letting overlap reach into a *previous* chunk), not a quick
++  patch under this round.
+ 
+ ## Where the discipline is still open
+ 
+-- Nothing yet — Phase 0 has no unresolved findings. Next real round is due
+-  at the Phase 1 boundary, once ingestion, embedding, and vector storage are
+-  real and have failure modes worth attacking (empty corpus, malformed
+-  source documents, embedding model unavailable, Chroma collection
+-  corruption, a query with no matching chunks, etc.).
++- **The real `sentence-transformers` model path has not been run
++  end-to-end inside this environment** — this sandbox's network allowlist
++  blocks the Hugging Face download `all-MiniLM-L6-v2` needs on first use.
++  `embedder.py`'s own logic is tested against an injected fake model (see
++  Round 2 above), and `retrieval/ingest.py` is believed correct by code
++  review, but "the real model actually downloads and produces sane
++  embeddings that retrieve the right chunks for genuinely novel queries" is
++  unverified until someone runs `python -m retrieval.ingest` for real, on a
++  machine with live network access. Next real round should close this
++  specifically, not just re-confirm the fake-model tests still pass.
++- OSHA CFR 1915 excerpts are still not sourced (see PASSDOWN.md Session 5,
++  ARCHITECTURE.md §5) — not an AOSE finding, just a scope gap worth
++  tracking here too since Phase 2's eval set will want a corpus that
++  actually includes it.
+diff --git a/retrieval/chunker.py b/retrieval/chunker.py
+index 7efbcda..ea5ea36 100644
+--- a/retrieval/chunker.py
++++ b/retrieval/chunker.py
+@@ -1,17 +1,33 @@
+ """
+-Phase 0: skeleton.
++Phase 1: real chunking.
+ 
+ Splits a source document's raw text into overlapping chunks sized for
+-embedding. Phase 1 wires this against the real Watchstander corpus (NAVSEA
+-8010 Manual, OSHA CFR excerpts, case_data); this phase only defines the data
+-model and the function boundary the rest of the pipeline is built against.
++embedding, using sentence boundaries (not a blind character-count cut) so a
++chunk never ends mid-sentence. Also tags each chunk with the most specific
++NAVSEA-style section number (e.g. "4.4.3") found in it, when the source uses
++that numbering convention -- this is what citation_formatter turns into a
++human-readable citation, so it has to be real, not decorative.
+ 
+-See MIGRATION.md Phase 1 for what "real logic" means here (sentence/
+-paragraph-aware splitting, not a blind character-count cut).
++See MIGRATION.md Phase 1 for the definition of done this satisfies.
+ """
+ 
++from __future__ import annotations
++
++import re
+ from dataclasses import dataclass
+ 
++# Split on whitespace that follows sentence-ending punctuation and precedes
++# a capital letter, digit, opening quote, or paren -- good enough for
++# manual/regulatory prose (short abbreviations like "No." inside a sentence
++# don't reliably break this, but this corpus doesn't lean on them).
++_SENTENCE_BOUNDARY = re.compile(r'(?<=[.!?])\s+(?=[A-Z0-9"(])')
++
++# NAVSEA 8010-style section numbers: "4.4.3", "11.1.7", "4.4" -- always at
++# the start of a paragraph, immediately followed by the section title. Only
++# match at a line/chunk start (or right after a sentence boundary) so we
++# don't pick up incidental numbers like "29 CFR Part 1915" mid-sentence.
++_SECTION_NUMBER = re.compile(r'(?:^|\n)(\d{1,2}\.\d{1,2}(?:\.\d{1,2})?)\s+[A-Z]')
++
+ 
+ @dataclass(frozen=True)
+ class Chunk:
+@@ -19,7 +35,11 @@ class Chunk:
+ 
+     `source_id` + `start_char`/`end_char` are what citation_formatter turns
+     into a human-readable citation later in the pipeline -- load-bearing
+-    fields, not decorative ones.
++    fields, not decorative ones. `section`, when present, is the most
++    specific NAVSEA-style section number found inside this chunk's text
++    (e.g. "4.4.3"); it is None for sources that don't use that numbering
++    convention (e.g. case_data entries), and citation_formatter falls back
++    to chunk_id-based provenance in that case.
+     """
+ 
+     text: str
+@@ -27,12 +47,101 @@ class Chunk:
+     chunk_id: str  # source_id + deterministic index, e.g. "navsea_8010#003"
+     start_char: int
+     end_char: int
++    section: str | None = None
++
++
++def _split_sentences(text: str) -> list[tuple[str, int, int]]:
++    """Return (sentence_text, start_char, end_char) for every non-blank
++    sentence in `text`, offsets relative to `text` itself."""
++    spans: list[tuple[int, int]] = []
++    start = 0
++    for m in _SENTENCE_BOUNDARY.finditer(text):
++        spans.append((start, m.start()))
++        start = m.end()
++    spans.append((start, len(text)))
++    return [(text[s:e], s, e) for s, e in spans if text[s:e].strip()]
++
++
++def _section_for(text: str) -> str | None:
++    """Return the *last* section header found in `text` -- when a chunk
++    contains more than one header (a short section followed by the start
++    of the next), the last one is what's actually in force by the time the
++    chunk ends, and is what should carry forward into the next chunk if it
++    has no header of its own (see chunk_text)."""
++    matches = _SECTION_NUMBER.findall(text)
++    return matches[-1] if matches else None
+ 
+ 
+ def chunk_text(text: str, source_id: str, chunk_size: int = 800, overlap: int = 100) -> list[Chunk]:
+-    """Split `text` into overlapping `Chunk`s.
++    """Split `text` into overlapping, sentence-boundary-respecting `Chunk`s.
+ 
+-    Phase 0 skeleton -- real chunking logic lands in Phase 1. See
+-    MIGRATION.md.
++    Packs whole sentences into each chunk up to `chunk_size` characters (a
++    single sentence longer than `chunk_size` still becomes its own chunk
++    rather than being truncated -- losing content silently would be worse
++    than one oversized chunk). Successive chunks overlap by walking back
++    roughly `overlap` characters' worth of trailing sentences, so a fact
++    split across a chunk boundary is still findable from either side.
+     """
+-    raise NotImplementedError("chunk_text: real logic lands in Phase 1 -- see MIGRATION.md")
++    if not text or not text.strip():
++        return []
++
++    sentences = _split_sentences(text)
++    n = len(sentences)
++    chunks: list[Chunk] = []
++    i = 0
++    chunk_idx = 0
++    # Carries the most recent section header seen so far across the whole
++    # document -- a chunk that's a continuation of a section (comes after
++    # its header sentence, not containing the header text itself) still
++    # belongs to that section, not to no section at all. Without this, only
++    # the chunk that happens to contain the literal "4.4.3 Limitations..."
++    # header text gets tagged, and the very next chunk -- which is just as
++    # much a part of 4.4.3 -- silently loses its citation.
++    active_section: str | None = None
++
++    while i < n:
++        start_char = sentences[i][1]
++        cur_len = 0
++        j = i
++        while j < n:
++            sent_len = len(sentences[j][0])
++            if cur_len and cur_len + sent_len > chunk_size:
++                break
++            cur_len += sent_len + 1
++            j += 1
++        # Always take at least one sentence, even if it alone exceeds
++        # chunk_size -- never drop content to satisfy the size target.
++        if j == i:
++            j = i + 1
++
++        end_char = sentences[j - 1][2]
++        chunk_body = text[start_char:end_char].strip()
++        found_section = _section_for(chunk_body)
++        if found_section:
++            active_section = found_section
++        chunks.append(
++            Chunk(
++                text=chunk_body,
++                source_id=source_id,
++                chunk_id=f"{source_id}#{chunk_idx:03d}",
++                start_char=start_char,
++                end_char=end_char,
++                section=active_section,
++            )
++        )
++        chunk_idx += 1
++
++        if j >= n:
++            break
++
++        # Walk back from the end of this chunk far enough to cover
++        # `overlap` characters of trailing sentences, then resume there --
++        # guaranteed to move forward by at least one sentence each pass.
++        back_len = 0
++        k = j - 1
++        while k > i and back_len < overlap:
++            back_len += len(sentences[k][0])
++            k -= 1
++        i = max(k + 1, i + 1)
++
++    return chunks
+diff --git a/retrieval/citation_formatter.py b/retrieval/citation_formatter.py
+index 786a6fd..2c0b6a7 100644
+--- a/retrieval/citation_formatter.py
++++ b/retrieval/citation_formatter.py
+@@ -1,18 +1,43 @@
+ """
+-Phase 0: skeleton.
++Phase 1: real citation formatting.
+ 
+-Turns a RetrievalResult's provenance into a human-readable citation string
+--- e.g. "NAVSEA 8010 Manual, Ch. 4.4.3" rather than a raw chunk_id. Kept as
+-its own module because citation formatting is a presentation concern, not a
+-retrieval concern, and Phase 1's Definition of Done explicitly requires
+-"accurate citations" as a testable, separable property.
++Turns a retrieval result's provenance into a human-readable citation string
++-- e.g. "NAVSEA 8010 Manual (S0570-AC-CCM-010/8010), Sec. 4.4.3" rather than
++a raw chunk_id. Kept as its own module because citation formatting is a
++presentation concern, not a retrieval concern, and Phase 1's Definition of
++Done explicitly requires "accurate citations" as a testable, separable
++property.
++
++`section` is optional because not every source uses NAVSEA-style section
++numbering (case_data entries, for one) -- when it's missing, the citation
++falls back to naming the source document and the chunk_id rather than
++fabricating a section number that isn't there. An unknown source_id (not in
++SOURCE_TITLES) is also handled without guessing at a title -- the raw
++source_id is used verbatim so the citation stays traceable rather than
++silently wrong.
+ """
+ 
++from __future__ import annotations
++
++# Document titles for every source_id this pipeline ingests. Add an entry
++# here whenever ingest.py gains a new source (see retrieval/ingest.py) --
++# this registry, not chunk content, is what keeps a citation's document
++# name accurate.
++SOURCE_TITLES: dict[str, str] = {
++    "navsea_8010": "NAVSEA 8010 Manual (S0570-AC-CCM-010/8010)",
++    # Ingested per-chapter (see retrieval/ingest.py -- chunk_id numbering
++    # restarts at #000 per source_id, so chapters can't share one source_id
++    # without colliding) but cited as one document; the chapter distinction
++    # lives in `section`, not the title.
++    "navsea_8010_ch4": "NAVSEA 8010 Manual (S0570-AC-CCM-010/8010)",
++    "navsea_8010_ch11": "NAVSEA 8010 Manual (S0570-AC-CCM-010/8010)",
++    "cases_v1": "Watchstander Sourced Case File",
++}
+ 
+-def format_citation(source_id: str, chunk_id: str) -> str:
+-    """Render a chunk's provenance as a human-readable citation.
+ 
+-    Phase 0 skeleton -- Phase 1 wires this to real source metadata (document
+-    title, section/chapter, page where available). See MIGRATION.md.
+-    """
+-    raise NotImplementedError("format_citation: real logic lands in Phase 1 -- see MIGRATION.md")
++def format_citation(source_id: str, chunk_id: str, section: str | None = None) -> str:
++    """Render a chunk's provenance as a human-readable citation."""
++    title = SOURCE_TITLES.get(source_id, source_id)
++    if section:
++        return f"{title}, Sec. {section}"
++    return f"{title} ({chunk_id})"
+diff --git a/retrieval/embedder.py b/retrieval/embedder.py
+index 785c3e2..f45a374 100644
+--- a/retrieval/embedder.py
++++ b/retrieval/embedder.py
+@@ -1,14 +1,33 @@
+ """
+-Phase 0: skeleton.
+-
+-Turns a Chunk (or a raw query string) into a vector embedding. Phase 1 wires
+-this to sentence-transformers. Kept as its own module (not inlined into
+-retriever.py) so swapping the embedding model/provider later -- a real
+-possibility once Phase 3's AWS SageMaker exposure happens -- touches one
+-file, not the whole pipeline.
++Phase 1: real embedding, wired to sentence-transformers.
++
++Turns a Chunk (or a raw query string) into a vector embedding using
++all-MiniLM-L6-v2, loaded lazily and cached at module scope so repeated
++calls (e.g. one per chunk during ingestion) don't reload the model each
++time. `sentence-transformers` is an optional dependency (the `retrieval`
++extra in pyproject.toml) -- importing this module never requires it; only
++calling `embed_text`/`embed_chunks` does, so callers that inject their own
++`embed_fn` (as tests and Retriever both can) never pay that cost.
++
++Real model download requires live network access (first run only, then
++cached locally) -- this module is never exercised with the real model
++inside this repo's test suite, which injects a deterministic offline
++embed_fn instead. See tests/test_retrieval_integration.py. This mirrors the
++repo's existing pattern (agent_core/reasoning.py's ANTHROPIC_API_KEY-gated
++deterministic fallback): the real path exists and is meant to run for real,
++just not automatically under CI.
+ """
+ 
++from __future__ import annotations
++
+ from dataclasses import dataclass
++from functools import lru_cache
++from typing import TYPE_CHECKING
++
++if TYPE_CHECKING:
++    from retrieval.chunker import Chunk
++
++DEFAULT_MODEL_NAME = "all-MiniLM-L6-v2"
+ 
+ 
+ @dataclass(frozen=True)
+@@ -17,15 +36,27 @@ class Embedding:
+     model_name: str
+ 
+ 
+-def embed_text(text: str) -> Embedding:
+-    """Embed a single string of text.
++@lru_cache(maxsize=4)
++def _load_model(model_name: str):
++    """Import sentence-transformers lazily -- keeps it an optional
++    dependency for anything that doesn't actually need to embed."""
++    from sentence_transformers import SentenceTransformer
++
++    return SentenceTransformer(model_name)
++
+ 
+-    Phase 0 skeleton -- Phase 1 wires this to sentence-transformers
+-    (all-MiniLM-L6-v2 or similar). See MIGRATION.md.
+-    """
+-    raise NotImplementedError("embed_text: real logic lands in Phase 1 -- see MIGRATION.md")
++def embed_text(text: str, model_name: str = DEFAULT_MODEL_NAME) -> Embedding:
++    """Embed a single string of text."""
++    model = _load_model(model_name)
++    vector = model.encode(text, normalize_embeddings=True).tolist()
++    return Embedding(vector=vector, model_name=model_name)
+ 
+ 
+-def embed_chunks(chunks: list) -> list[Embedding]:
+-    """Embed a batch of chunks. Phase 0 skeleton -- see embed_text."""
+-    raise NotImplementedError("embed_chunks: real logic lands in Phase 1 -- see MIGRATION.md")
++def embed_chunks(chunks: list["Chunk"], model_name: str = DEFAULT_MODEL_NAME) -> list[Embedding]:
++    """Embed a batch of chunks in one model call -- meaningfully faster than
++    calling embed_text per chunk during ingestion."""
++    if not chunks:
++        return []
++    model = _load_model(model_name)
++    vectors = model.encode([c.text for c in chunks], normalize_embeddings=True)
++    return [Embedding(vector=v.tolist(), model_name=model_name) for v in vectors]
+diff --git a/retrieval/retriever.py b/retrieval/retriever.py
+index aca569c..304b147 100644
+--- a/retrieval/retriever.py
++++ b/retrieval/retriever.py
+@@ -1,17 +1,24 @@
+ """
+-Phase 0: skeleton.
++Phase 1: real retrieval.
+ 
+ Owns retrieval strategy: given a query, returns the top-k most relevant
+ chunks. Phase 1 is vector-only (via VectorStore). Phase 2 adds BM25 hybrid
+ search + reranking + context compression on top of this same interface, so
+ callers (citation_formatter, and anything that consumes this later)
+ shouldn't need to change shape when that lands.
++
++`embed_fn` is injected (defaulting to embedder.embed_text) rather than
++hardcoded so tests can supply a deterministic, network-free embedding
++function without monkeypatching module internals -- see
++tests/test_retrieval_integration.py.
+ """
+ 
+ from __future__ import annotations
+ 
+ from dataclasses import dataclass
++from typing import Callable
+ 
++from retrieval.embedder import Embedding, embed_text
+ from retrieval.vector_store import VectorStore
+ 
+ 
+@@ -21,14 +28,32 @@ class RetrievalResult:
+     text: str
+     source_id: str
+     score: float
++    section: str | None = None
+ 
+ 
+ class Retriever:
+-    """Phase 0 skeleton -- Phase 1 wires this to embedder + vector_store."""
++    """Phase 1 -- wired to embedder + vector_store."""
+ 
+-    def __init__(self, vector_store: VectorStore | None = None) -> None:
+-        self.vector_store = vector_store
++    def __init__(
++        self,
++        vector_store: VectorStore | None = None,
++        embed_fn: Callable[[str], Embedding] = embed_text,
++    ) -> None:
++        self.vector_store = vector_store if vector_store is not None else VectorStore()
++        self._embed_fn = embed_fn
+ 
+     def retrieve(self, query: str, top_k: int = 5) -> list[RetrievalResult]:
+-        """Phase 0 skeleton -- Phase 1 wires this to embedder + vector_store."""
+-        raise NotImplementedError("Retriever.retrieve: real logic lands in Phase 1 -- see MIGRATION.md")
++        if not query or not query.strip():
++            return []
++        embedding = self._embed_fn(query)
++        results = self.vector_store.query(embedding.vector, top_k=top_k)
++        return [
++            RetrievalResult(
++                chunk_id=r.chunk_id,
++                text=r.text,
++                source_id=r.source_id,
++                score=r.score,
++                section=r.section,
++            )
++            for r in results
++        ]
+diff --git a/retrieval/vector_store.py b/retrieval/vector_store.py
+index c336e0f..c71f12c 100644
+--- a/retrieval/vector_store.py
++++ b/retrieval/vector_store.py
+@@ -1,13 +1,25 @@
+ """
+-Phase 0: skeleton.
++Phase 1: real vector storage, wired to Chroma.
+ 
+-Thin wrapper around the vector database (Chroma, Phase 1) -- upsert and
+-similarity-search only. Kept separate from retriever.py so retriever.py
+-stays the place that owns *retrieval strategy* (top-k, filtering, hybrid
+-search in Phase 2), while this module only owns *storage*.
++Thin wrapper around a Chroma collection -- upsert and similarity-search
++only. Kept separate from retriever.py so retriever.py stays the place that
++owns *retrieval strategy* (top-k, filtering, hybrid search in Phase 2),
++while this module only owns *storage*.
++
++With no `persist_directory`, this uses an in-memory ephemeral Chroma
++client -- what the test suite uses, so tests never touch disk or depend on
++run order. Passing a `persist_directory` (see retrieval/ingest.py) gets a
++real on-disk collection that survives across processes.
+ """
+ 
++from __future__ import annotations
++
+ from dataclasses import dataclass
++from typing import TYPE_CHECKING
++
++if TYPE_CHECKING:
++    from retrieval.chunker import Chunk
++    from retrieval.embedder import Embedding
+ 
+ 
+ @dataclass(frozen=True)
+@@ -16,18 +28,63 @@ class VectorStoreResult:
+     text: str
+     source_id: str
+     score: float
++    section: str | None = None
+ 
+ 
+ class VectorStore:
+-    """Phase 0 skeleton -- Phase 1 backs this with Chroma."""
++    """Phase 1 -- backed by a real Chroma collection."""
++
++    def __init__(self, collection_name: str = "watchstander_corpus", persist_directory: str | None = None) -> None:
++        import chromadb
+ 
+-    def __init__(self, collection_name: str = "watchstander_corpus") -> None:
+         self.collection_name = collection_name
++        self.persist_directory = persist_directory
++        client = (
++            chromadb.PersistentClient(path=persist_directory)
++            if persist_directory
++            else chromadb.Client()
++        )
++        # Cosine distance so `score = 1 - distance` reads naturally as a
++        # similarity (1.0 = identical direction), matching the normalized
++        # embeddings embedder.py produces.
++        self._collection = client.get_or_create_collection(
++            name=collection_name, metadata={"hnsw:space": "cosine"}
++        )
+ 
+-    def upsert(self, chunks: list, embeddings: list) -> None:
+-        """Phase 0 skeleton -- Phase 1 wires this to a Chroma collection."""
+-        raise NotImplementedError("VectorStore.upsert: real logic lands in Phase 1 -- see MIGRATION.md")
++    def upsert(self, chunks: list["Chunk"], embeddings: list["Embedding"]) -> None:
++        if len(chunks) != len(embeddings):
++            raise ValueError(
++                f"chunks ({len(chunks)}) and embeddings ({len(embeddings)}) must be the same length"
++            )
++        if not chunks:
++            return
++        self._collection.upsert(
++            ids=[c.chunk_id for c in chunks],
++            embeddings=[e.vector for e in embeddings],
++            documents=[c.text for c in chunks],
++            metadatas=[
++                {"source_id": c.source_id, "section": c.section or ""} for c in chunks
++            ],
++        )
+ 
+     def query(self, query_embedding: list[float], top_k: int = 5) -> list[VectorStoreResult]:
+-        """Phase 0 skeleton -- Phase 1 wires this to a Chroma collection."""
+-        raise NotImplementedError("VectorStore.query: real logic lands in Phase 1 -- see MIGRATION.md")
++        if self._collection.count() == 0:
++            return []
++        result = self._collection.query(
++            query_embeddings=[query_embedding],
++            n_results=min(top_k, self._collection.count()),
++        )
++        out: list[VectorStoreResult] = []
++        for chunk_id, text, metadata, distance in zip(
++            result["ids"][0], result["documents"][0], result["metadatas"][0], result["distances"][0]
++        ):
++            out.append(
++                VectorStoreResult(
++                    chunk_id=chunk_id,
++                    text=text,
++                    source_id=metadata.get("source_id", ""),
++                    score=1.0 - distance,
++                    section=metadata.get("section") or None,
++                )
++            )
++        return out
+diff --git a/tests/test_retrieval_chunker.py b/tests/test_retrieval_chunker.py
+index 32bf07b..cc78a9f 100644
+--- a/tests/test_retrieval_chunker.py
++++ b/tests/test_retrieval_chunker.py
+@@ -1,5 +1,3 @@
+-import pytest
+-
+ from retrieval.chunker import Chunk, chunk_text
+ 
+ 
+@@ -10,9 +8,96 @@ def test_chunk_is_a_real_dataclass_with_expected_fields():
+     assert c.chunk_id == "navsea_8010#000"
+     assert c.start_char == 0
+     assert c.end_char == 5
++    assert c.section is None
++
++
++def test_chunk_text_returns_empty_list_for_empty_input():
++    assert chunk_text("", source_id="navsea_8010") == []
++    assert chunk_text("   \n  ", source_id="navsea_8010") == []
++
++
++def test_chunk_text_never_splits_a_sentence_across_chunks():
++    text = "First sentence here. Second sentence here. Third sentence here. Fourth one too."
++    chunks = chunk_text(text, source_id="s", chunk_size=40, overlap=5)
++    assert len(chunks) > 1
++    for c in chunks:
++        assert c.text.strip().endswith((".", "!", "?"))
++        # every chunk boundary lands exactly on a sentence boundary in the
++        # source text, not mid-word
++        assert text[c.start_char:c.end_char].strip() == c.text
++
++
++def test_chunk_text_covers_the_whole_document_without_gaps():
++    """
++    Consecutive chunks either overlap or abut with nothing lost between them
++    (the only non-overlap gap allowed is the single whitespace character
++    the sentence splitter consumes and includes in neither span). Overlap
++    itself is opportunistic, not guaranteed for every boundary: when a
++    chunk is a single sentence with no earlier sentence of its own to back
++    into, there's nothing to overlap with without duplicating that whole
++    sentence forever -- see chunker.py's back-off loop. What must always
++    hold is that no text goes missing between chunks.
++    """
++    text = "First sentence here. Second sentence here. Third sentence here. Fourth one too."
++    chunks = chunk_text(text, source_id="s", chunk_size=40, overlap=15)
++    for a, b in zip(chunks, chunks[1:]):
++        assert b.start_char - a.end_char <= 1
++
++
++def test_chunk_text_ids_are_sequential_and_stable():
++    text = "One. Two. Three. Four. Five."
++    chunks = chunk_text(text, source_id="navsea_8010", chunk_size=10, overlap=2)
++    ids = [c.chunk_id for c in chunks]
++    assert ids == [f"navsea_8010#{i:03d}" for i in range(len(chunks))]
++
++
++def test_chunk_text_never_drops_an_oversized_sentence():
++    """A single sentence longer than chunk_size still becomes its own chunk
++    rather than being truncated or dropped."""
++    long_sentence = "This is a single very long sentence that on its own exceeds the configured chunk size limit by quite a lot."
++    text = f"Short one. {long_sentence} Another short one."
++    chunks = chunk_text(text, source_id="s", chunk_size=20, overlap=5)
++    assert any(long_sentence in c.text for c in chunks)
++
++
++def test_chunk_text_tags_navsea_style_section_numbers():
++    # Real source text (retrieval/sources/navsea_8010_ch4.txt) always puts a
++    # numbered heading at the start of its own line -- the section regex
++    # requires that same start-of-line anchor, so headers joined by a plain
++    # space mid-paragraph (not how the real corpus is formatted) wouldn't
++    # match, and shouldn't: it'd risk false-positiving on stray numbers
++    # elsewhere in running prose (e.g. "29 CFR Part 1915").
++    text = (
++        "4.4.2 Additional Duties During Hot Work. The fire watch shall not accomplish other duties.\n"
++        "4.4.3 Limitations to Single Fire Watch with Multiple Hot Workers. "
++        "No more than four hot workers shall be attended by a single fire watch."
++    )
++    chunks = chunk_text(text, source_id="navsea_8010", chunk_size=1000, overlap=0)
++    assert len(chunks) == 1
++    # the last (most recently in-force) section header inside the chunk is
++    # what carries -- 4.4.3 governs the chunk's final sentence, not 4.4.2
++    assert chunks[0].section == "4.4.3"
++
++
++def test_chunk_text_leaves_section_none_for_unnumbered_prose():
++    chunks = chunk_text("Just some plain prose with no section headers at all.", source_id="cases_v1")
++    assert all(c.section is None for c in chunks)
+ 
+ 
+-def test_chunk_text_not_yet_implemented():
+-    """Phase 0: the function boundary exists; real logic lands in Phase 1."""
+-    with pytest.raises(NotImplementedError):
+-        chunk_text("some text", source_id="navsea_8010")
++def test_chunk_text_carries_section_forward_into_continuation_chunks():
++    """
++    Regression test for a real bug found via test_retrieval_integration.py:
++    a chunk that continues a section (comes after the header sentence, so
++    contains no header text of its own) must still inherit that section
++    number, not silently lose its citation. Small chunk_size forces the
++    header and its continuation into separate chunks.
++    """
++    text = (
++        "4.4.3 Limitations to Single Fire Watch with Multiple Hot Workers. "
++        "A single fire watch may provide protection where several hot workers are performing hot work. "
++        "No more than four hot workers shall be attended by a single fire watch. "
++        "The fire watch cannot rove from one compartment to another."
++    )
++    chunks = chunk_text(text, source_id="navsea_8010", chunk_size=60, overlap=0)
++    assert len(chunks) > 1
++    assert all(c.section == "4.4.3" for c in chunks)
+diff --git a/tests/test_retrieval_citation_formatter.py b/tests/test_retrieval_citation_formatter.py
+index 2ba9c5e..7a64f7f 100644
+--- a/tests/test_retrieval_citation_formatter.py
++++ b/tests/test_retrieval_citation_formatter.py
+@@ -1,8 +1,26 @@
+-import pytest
+-
+ from retrieval.citation_formatter import format_citation
+ 
+ 
+-def test_format_citation_not_yet_implemented():
+-    with pytest.raises(NotImplementedError):
+-        format_citation(source_id="navsea_8010", chunk_id="navsea_8010#003")
++def test_format_citation_with_section_cites_document_and_section():
++    citation = format_citation(source_id="navsea_8010_ch4", chunk_id="navsea_8010_ch4#003", section="4.4.3")
++    assert citation == "NAVSEA 8010 Manual (S0570-AC-CCM-010/8010), Sec. 4.4.3"
++
++
++def test_format_citation_without_section_falls_back_to_chunk_id():
++    citation = format_citation(source_id="cases_v1", chunk_id="cases_v1#000")
++    assert citation == "Watchstander Sourced Case File (cases_v1#000)"
++
++
++def test_format_citation_both_navsea_chapter_source_ids_cite_the_same_document_title():
++    ch4 = format_citation(source_id="navsea_8010_ch4", chunk_id="navsea_8010_ch4#000", section="4.4.3")
++    ch11 = format_citation(source_id="navsea_8010_ch11", chunk_id="navsea_8010_ch11#000", section="11.1.7")
++    assert ch4.startswith("NAVSEA 8010 Manual (S0570-AC-CCM-010/8010)")
++    assert ch11.startswith("NAVSEA 8010 Manual (S0570-AC-CCM-010/8010)")
++
++
++def test_format_citation_unknown_source_id_falls_back_to_raw_id_not_a_guess():
++    """An unregistered source_id must never silently get a plausible-looking
++    but fabricated title -- it should surface the raw id so the gap is
++    obvious, not hidden."""
++    citation = format_citation(source_id="some_new_unregistered_source", chunk_id="some_new_unregistered_source#000")
++    assert "some_new_unregistered_source" in citation
+diff --git a/tests/test_retrieval_embedder.py b/tests/test_retrieval_embedder.py
+index 91b8c19..4559e30 100644
+--- a/tests/test_retrieval_embedder.py
++++ b/tests/test_retrieval_embedder.py
+@@ -1,6 +1,5 @@
+-import pytest
+-
+-from retrieval.embedder import Embedding, embed_chunks, embed_text
++from retrieval.chunker import Chunk
++from retrieval.embedder import DEFAULT_MODEL_NAME, Embedding, embed_chunks, embed_text
+ 
+ 
+ def test_embedding_is_a_real_dataclass_with_expected_fields():
+@@ -9,11 +8,62 @@ def test_embedding_is_a_real_dataclass_with_expected_fields():
+     assert e.model_name == "stub"
+ 
+ 
+-def test_embed_text_not_yet_implemented():
+-    with pytest.raises(NotImplementedError):
+-        embed_text("some text")
++def test_embed_text_uses_the_real_model_and_returns_a_normalized_vector(monkeypatch):
++    """
++    Real sentence-transformers model downloads require live network access
++    on first use -- not something this test suite depends on (see
++    embedder.py's module docstring). This patches _load_model with a fake
++    that has the same .encode() interface real SentenceTransformer models
++    expose, so embed_text's own logic (not the model itself) is what's
++    under test here.
++    """
++    calls = []
++
++    class FakeModel:
++        def encode(self, text, normalize_embeddings=True):
++            calls.append((text, normalize_embeddings))
++            if isinstance(text, str):
++                return _FakeVector([1.0, 0.0, 0.0])
++            return [_FakeVector([1.0, 0.0, 0.0]) for _ in text]
++
++    class _FakeVector(list):
++        def tolist(self):
++            return list(self)
++
++    monkeypatch.setattr("retrieval.embedder._load_model", lambda model_name: FakeModel())
++
++    result = embed_text("hello world")
++
++    assert result.vector == [1.0, 0.0, 0.0]
++    assert result.model_name == DEFAULT_MODEL_NAME
++    assert calls == [("hello world", True)]
++
++
++def test_embed_chunks_batches_in_one_call(monkeypatch):
++    class _FakeVector(list):
++        def tolist(self):
++            return list(self)
++
++    class FakeModel:
++        def __init__(self):
++            self.call_count = 0
++
++        def encode(self, texts, normalize_embeddings=True):
++            self.call_count += 1
++            return [_FakeVector([float(len(t)), 0.0]) for t in texts]
++
++    fake_model = FakeModel()
++    monkeypatch.setattr("retrieval.embedder._load_model", lambda model_name: fake_model)
++
++    chunks = [
++        Chunk(text="ab", source_id="s", chunk_id="s#000", start_char=0, end_char=2),
++        Chunk(text="abcd", source_id="s", chunk_id="s#001", start_char=2, end_char=6),
++    ]
++    result = embed_chunks(chunks)
++
++    assert [e.vector[0] for e in result] == [2.0, 4.0]
++    assert fake_model.call_count == 1  # one batch call, not one per chunk
+ 
+ 
+-def test_embed_chunks_not_yet_implemented():
+-    with pytest.raises(NotImplementedError):
+-        embed_chunks([])
++def test_embed_chunks_of_empty_list_returns_empty_list():
++    assert embed_chunks([]) == []
+diff --git a/tests/test_retrieval_retriever.py b/tests/test_retrieval_retriever.py
+index d21ccc7..14c5eae 100644
+--- a/tests/test_retrieval_retriever.py
++++ b/tests/test_retrieval_retriever.py
+@@ -1,6 +1,7 @@
+-import pytest
+-
++from retrieval.chunker import Chunk
++from retrieval.embedder import Embedding
+ from retrieval.retriever import RetrievalResult, Retriever
++from retrieval.vector_store import VectorStore
+ 
+ 
+ def test_retrieval_result_is_a_real_dataclass_with_expected_fields():
+@@ -9,9 +10,51 @@ def test_retrieval_result_is_a_real_dataclass_with_expected_fields():
+     assert r.text == "hi"
+     assert r.source_id == "s1"
+     assert r.score == 0.9
++    assert r.section is None
++
++
++def _fake_embed(text: str) -> Embedding:
++    """Deterministic, network-free stand-in for embedder.embed_text --
++    injected via Retriever's embed_fn parameter, exactly the seam it exists
++    for."""
++    return Embedding(vector=[1.0, 0.0] if "fire watch" in text else [0.0, 1.0], model_name="fake")
++
++
++def test_retriever_retrieve_on_empty_store_returns_empty_list():
++    retriever = Retriever(vector_store=VectorStore(collection_name="test_retriever_empty"), embed_fn=_fake_embed)
++    assert retriever.retrieve("fire watch capacity") == []
++
++
++def test_retriever_retrieve_returns_the_right_chunk_for_the_query():
++    store = VectorStore(collection_name="test_retriever_real")
++    chunks = [
++        Chunk(text="4.4.3 says four hot workers max.", source_id="navsea_8010_ch4", chunk_id="navsea_8010_ch4#000", start_char=0, end_char=10, section="4.4.3"),
++        Chunk(text="unrelated bulkhead paint spec.", source_id="navsea_8010_ch4", chunk_id="navsea_8010_ch4#001", start_char=10, end_char=20),
++    ]
++    store.upsert(
++        chunks,
++        [
++            Embedding(vector=[1.0, 0.0], model_name="fake"),
++            Embedding(vector=[0.0, 1.0], model_name="fake"),
++        ],
++    )
++    retriever = Retriever(vector_store=store, embed_fn=_fake_embed)
++
++    results = retriever.retrieve("what is the fire watch capacity limit?", top_k=1)
++
++    assert len(results) == 1
++    assert results[0].chunk_id == "navsea_8010_ch4#000"
++    assert results[0].section == "4.4.3"
++
++
++def test_retriever_retrieve_on_blank_query_returns_empty_list_without_embedding():
++    calls = []
++
++    def tracking_embed(text):
++        calls.append(text)
++        return Embedding(vector=[1.0, 0.0], model_name="fake")
+ 
++    retriever = Retriever(vector_store=VectorStore(collection_name="test_retriever_blank"), embed_fn=tracking_embed)
+ 
+-def test_retriever_retrieve_not_yet_implemented():
+-    retriever = Retriever()
+-    with pytest.raises(NotImplementedError):
+-        retriever.retrieve("what is the fire watch capacity rule?")
++    assert retriever.retrieve("   ") == []
++    assert calls == []
+diff --git a/tests/test_retrieval_vector_store.py b/tests/test_retrieval_vector_store.py
+index 57ae908..bd9f921 100644
+--- a/tests/test_retrieval_vector_store.py
++++ b/tests/test_retrieval_vector_store.py
+@@ -1,5 +1,5 @@
+-import pytest
+-
++from retrieval.chunker import Chunk
++from retrieval.embedder import Embedding
+ from retrieval.vector_store import VectorStore, VectorStoreResult
+ 
+ 
+@@ -9,15 +9,60 @@ def test_vector_store_result_is_a_real_dataclass_with_expected_fields():
+     assert r.text == "hi"
+     assert r.source_id == "s1"
+     assert r.score == 0.9
++    assert r.section is None
++
++
++def _chunk(chunk_id, text, section=None):
++    return Chunk(text=text, source_id="s", chunk_id=chunk_id, start_char=0, end_char=len(text), section=section)
++
++
++def test_query_on_empty_store_returns_empty_list():
++    store = VectorStore(collection_name="test_empty")
++    assert store.query(query_embedding=[1.0, 0.0], top_k=3) == []
++
++
++def test_upsert_then_query_finds_the_closest_match():
++    """In-memory ephemeral store (no persist_directory) -- never touches
++    disk, so this is safe to run in any order alongside other tests."""
++    store = VectorStore(collection_name="test_closest")
++    chunks = [
++        _chunk("s#000", "fire watch capacity rule", section="4.4.3"),
++        _chunk("s#001", "completely unrelated bulkhead paint spec"),
++    ]
++    embeddings = [
++        Embedding(vector=[1.0, 0.0], model_name="fake"),
++        Embedding(vector=[0.0, 1.0], model_name="fake"),
++    ]
++    store.upsert(chunks, embeddings)
++
++    results = store.query(query_embedding=[1.0, 0.0], top_k=1)
++
++    assert len(results) == 1
++    assert results[0].chunk_id == "s#000"
++    assert results[0].source_id == "s"
++    assert results[0].section == "4.4.3"
++    assert results[0].score > 0.9  # cosine similarity to an identical vector
++
++
++def test_upsert_mismatched_lengths_raises():
++    store = VectorStore(collection_name="test_mismatch")
++    try:
++        store.upsert([_chunk("s#000", "x")], [])
++        assert False, "expected ValueError"
++    except ValueError:
++        pass
+ 
+ 
+-def test_vector_store_upsert_not_yet_implemented():
+-    store = VectorStore()
+-    with pytest.raises(NotImplementedError):
+-        store.upsert([], [])
++def test_upsert_is_idempotent_on_repeated_calls_with_same_ids():
++    """Re-ingesting the same chunk_id overwrites rather than duplicating."""
++    store = VectorStore(collection_name="test_idempotent")
++    chunk = _chunk("s#000", "original text")
++    embedding = Embedding(vector=[1.0, 0.0], model_name="fake")
++    store.upsert([chunk], [embedding])
++    updated_chunk = _chunk("s#000", "updated text")
++    store.upsert([updated_chunk], [embedding])
+ 
++    results = store.query(query_embedding=[1.0, 0.0], top_k=5)
+ 
+-def test_vector_store_query_not_yet_implemented():
+-    store = VectorStore()
+-    with pytest.raises(NotImplementedError):
+-        store.query(query_embedding=[0.1], top_k=3)
++    assert len(results) == 1
++    assert results[0].text == "updated text"
+diff --git a/retrieval/ARCHITECTURE.md b/retrieval/ARCHITECTURE.md
+index 8db6ee5..4606de0 100644
+--- a/retrieval/ARCHITECTURE.md
++++ b/retrieval/ARCHITECTURE.md
+@@ -14,16 +14,27 @@ exists to close specific platform gaps — RAG mechanics, vector databases,
+ AWS SageMaker, Databricks — surfaced by a real job posting. See PASSDOWN.md
+ for the full origin story.
+ 
+-## 2. Current structure (Phase 0)
++## 2. Current structure (Phase 1)
+ 
+ ```
+ retrieval/
+   __init__.py            package docstring, disambiguation note
+-  chunker.py              Chunk dataclass, chunk_text() [Phase 1 stub]
+-  embedder.py              Embedding dataclass, embed_text()/embed_chunks() [Phase 1 stubs]
+-  vector_store.py          VectorStoreResult dataclass, VectorStore class [Phase 1 stubs]
+-  retriever.py              RetrievalResult dataclass, Retriever class [Phase 1 stub]
+-  citation_formatter.py     format_citation() [Phase 1 stub]
++  chunker.py               Chunk dataclass, chunk_text() -- real sentence-boundary
++                            chunking, carries a NAVSEA-style section number forward
++                            across continuation chunks (see ADR-006)
++  embedder.py               Embedding dataclass, embed_text()/embed_chunks() --
++                            real sentence-transformers wiring (all-MiniLM-L6-v2)
++  vector_store.py           VectorStoreResult dataclass, VectorStore class --
++                            real Chroma wiring (in-memory ephemeral by default,
++                            persistent when given a directory)
++  retriever.py               RetrievalResult dataclass, Retriever class -- real
++                            retrieve(), embed_fn injectable for testing
++  citation_formatter.py      format_citation() -- real, SOURCE_TITLES registry
++  ingest.py                  corpus ingestion: chunk + embed + upsert real
++                            source documents into a persistent collection
++  sources/
++    navsea_8010_ch4.txt      original manual text, Chapter 4 (see ADR-005)
++    navsea_8010_ch11.txt     original manual text, Chapter 11
+   README.md
+   MIGRATION.md
+   ARCHITECTURE.md          (this file)
+@@ -36,21 +47,34 @@ tests/
+   test_retrieval_vector_store.py
+   test_retrieval_retriever.py
+   test_retrieval_citation_formatter.py
++  test_retrieval_ingest.py
++  test_retrieval_integration.py   full pipeline against real 8010 source text
+ ```
+ 
+-Data flow (target shape, once Phase 1 lands): raw corpus text ->
+-`chunker.chunk_text()` -> `Chunk`s -> `embedder.embed_chunks()` ->
+-`Embedding`s -> `vector_store.VectorStore.upsert()`. Query time: query string
+--> `embedder.embed_text()` -> `vector_store.VectorStore.query()` ->
+-`retriever.Retriever.retrieve()` (owns strategy: top-k now, hybrid+rerank in
+-Phase 2) -> `RetrievalResult`s -> `citation_formatter.format_citation()` for
+-display.
+-
+-Phase 0 implements every data model for real but leaves every function/method
+-body as `raise NotImplementedError(...)` pointing at Phase 1 — the interface
+-boundary is deliberately locked in before any real logic, so Phase 1 fills in
+-behavior against an already-agreed shape rather than discovering the shape
+-and the behavior at the same time.
++Corpus as of Phase 1: NAVSEA 8010 Manual Chapters 4 and 11 (original text,
++per ADR-005) and `case_data/cases_v1.json` (one chunk per sourced case, not
++sentence-chunked -- see `ingest.py`). OSHA CFR 1915 excerpts are still not
++sourced -- open item, not stubbed in with placeholder text (MIGRATION.md).
++
++Data flow (live now, not just planned): raw corpus text -> `chunker.chunk_text()`
++-> `Chunk`s -> `embedder.embed_chunks()` -> `Embedding`s ->
++`vector_store.VectorStore.upsert()` (`ingest.py` wires this end-to-end).
++Query time: query string -> `embedder.embed_text()` (or an injected `embed_fn`)
++-> `vector_store.VectorStore.query()` -> `retriever.Retriever.retrieve()` (owns
++strategy: top-k now, hybrid+rerank in Phase 2) -> `RetrievalResult`s ->
++`citation_formatter.format_citation()` for display.
++
++No real embedding model or corpus index is exercised by the test suite --
++`embedder._load_model()` requires live network on first use to download
++`all-MiniLM-L6-v2`, which this repo's tests never depend on (same
++philosophy as `agent_core/reasoning.py`'s `ANTHROPIC_API_KEY`-gated
++deterministic fallback). Tests inject a deterministic, network-free
++embedding function instead -- see `test_retrieval_integration.py`'s
++hashed-bag-of-words fake, which is word-overlap-sensitive enough to prove
++the pipeline's wiring is actually correct, not just that it doesn't crash.
++The real model path exists and works (verified by hand outside CI/tests, and
++via `python -m retrieval.ingest`) but running it for real is a manual step,
++not an automatic one.
+ 
+ ## 3. Relationship to the rest of the repo
+ 
+@@ -149,8 +173,51 @@ structured summary exists for OSHA CFR 1915 the way it does for 8010, and
+ `cases_v1.json`'s case summaries are closer to prose than 8010's ruleset
+ entries are — so no general policy call was needed here, just this one.
+ 
++**ADR-006 — Section citation carries forward across continuation chunks;
++CI installs the `retrieval` extra.** (2026-08-08) Two real findings from
++Phase 1's own test suite, both fixed the same pass rather than left open:
++
++1. `chunker.chunk_text()` originally tagged a chunk's `section` by
++   searching only that chunk's own text for a NAVSEA-style header (e.g.
++   "4.4.3"). A chunk that continues a section — falls after the header
++   sentence, so contains no header text of its own — came back with
++   `section: None`, silently losing its citation even though it's just as
++   much a part of that section as the chunk before it.
++   `test_retrieval_integration.py`'s real-Chapter-4 query caught this: the
++   retrieved chunk was the right one (contains "No more than four hot
++   workers"), but its citation would have been wrong. Fixed by carrying the
++   most recently seen section number forward across chunks within a
++   document, updating only when a new header actually appears —
++   `test_chunk_text_carries_section_forward_into_continuation_chunks`
++   guards this permanently.
++2. `pyproject.toml` gained a `retrieval` optional-dependency group
++   (`sentence-transformers`, `chromadb`) for this phase, but
++   `.github/workflows/tests.yml` still only installed `.[dev]`. This is the
++   exact failure mode this file's own AOSE.md already documents happening
++   once with `eval/` (local runs used `python -m pytest`, which masks
++   missing-package installs that CI's bare `pytest` doesn't) — caught here
++   by actually installing into a fresh venv and running bare `pytest`
++   before pushing, not by trusting that "tests pass locally" meant
++   anything about CI. Fixed by adding `retrieval` to the CI install step.
++
+ ## 5. Known debt / open questions
+ 
+ - No corpus size/scale assumptions have been tested yet; Phase 1's DoD is
+   "returns the correct chunk," not "performs well at scale" — that's
+   implicitly Phase 2's hybrid-retrieval eval-set territory.
++- `chunker.py`'s overlap between consecutive chunks is opportunistic, not
++  guaranteed: when a chunk consists of a single sentence with no earlier
++  sentence of its own to back into, the next chunk starts immediately after
++  it with no overlap (see `test_chunk_text_covers_the_whole_document_without_gaps`).
++  No text is ever lost — chunks still abut exactly — this only means the
++  "same fact findable from either side of a chunk boundary" property Phase 1
++  overlap exists for doesn't hold at every boundary, just most of them.
++  Lower severity: hasn't caused an incorrect retrieval yet, and fixing it
++  properly means letting overlap reach back into a *previous* chunk's
++  sentences rather than just the current one, which needs a real design
++  pass, not a quick patch.
++- OSHA CFR 1915 excerpts (the third planned Phase 1 corpus source) are not
++  sourced yet — same PDF-extraction effort ADR-005 describes for NAVSEA
++  8010 hasn't been run against 29 CFR 1915. Not blocking Phase 1's DoD
++  (already met against the 8010 + cases_v1 corpus), but the corpus is
++  smaller than originally planned until this lands.
+diff --git a/retrieval/MIGRATION.md b/retrieval/MIGRATION.md
+index f3492ec..b39aa8c 100644
+--- a/retrieval/MIGRATION.md
++++ b/retrieval/MIGRATION.md
+@@ -39,32 +39,61 @@ imports cleanly, including under a CI-style install.
+ 
+ ## Phase 1 — Local RAG proof
+ 
+-- [ ] Ingest the Watchstander corpus: NAVSEA 8010 Manual — original manual
++- [x] Ingest the Watchstander corpus: NAVSEA 8010 Manual — original manual
+       text, Chapters 4 ("Hot Work and Fire Watch") and 11 ("Fire and Smoke
+-      Boundaries"), pulled fresh from the source PDF, not the pre-extracted
+-      `case_data/navsea_8010_psns_v2014.json` summaries (decided 2026-08-08,
+-      see ARCHITECTURE.md ADR-005) — plus OSHA CFR 1915 excerpts and
+-      `case_data/cases_v1.json`.
+-- [ ] `chunker.py`: real sentence/paragraph-aware chunking (not a blind
+-      character-count cut).
+-- [ ] `embedder.py`: wire to `sentence-transformers` (e.g.
+-      `all-MiniLM-L6-v2`).
+-- [ ] `vector_store.py`: wire to Chroma (local, persistent collection).
+-- [ ] `retriever.py`: real `retrieve()` — embed query, hit the vector store,
+-      return top-k `RetrievalResult`s.
+-- [ ] `citation_formatter.py`: real `format_citation()` — resolve chunk
+-      provenance to a human-readable citation (document title +
+-      section/chapter, not just a raw chunk_id).
+-- [ ] Add `retrieval` optional-dependency group to `pyproject.toml`
+-      (`sentence-transformers`, `chromadb`) once these are actually used —
+-      don't add unused deps in Phase 0.
+-- [ ] Tests replace the Phase 0 `NotImplementedError` assertions with real
+-      behavior assertions.
+-- [ ] `pytest -v` still green.
++      Boundaries"), pulled fresh from the source PDF (see ARCHITECTURE.md
++      ADR-005), plus `case_data/cases_v1.json` (one chunk per sourced case).
++      OSHA CFR 1915 excerpts NOT yet sourced — same PDF-extraction effort
++      as 8010 hasn't been run against it; open item, not stubbed with
++      placeholder text (ARCHITECTURE.md §5).
++- [x] `chunker.py`: real sentence-boundary chunking (never splits a
++      sentence across chunks; never drops an oversized sentence), tags
++      each chunk with the NAVSEA-style section number in force, carried
++      forward across continuation chunks that don't repeat the header
++      (ADR-006 — a real bug the integration test caught and fixed this
++      pass).
++- [x] `embedder.py`: wired to `sentence-transformers`
++      (`all-MiniLM-L6-v2`), lazy-loaded and cached. Real model download
++      needs live network on first use — not exercised by the test suite,
++      which injects a deterministic offline `embed_fn` instead.
++- [x] `vector_store.py`: wired to Chroma — in-memory ephemeral by default
++      (what tests use), persistent when given a directory
++      (`retrieval/ingest.py`'s default: `retrieval/.chroma_store/`,
++      gitignored).
++- [x] `retriever.py`: real `retrieve()` — embeds the query (via an
++      injectable `embed_fn`, defaulting to `embedder.embed_text`), queries
++      the vector store, returns top-k `RetrievalResult`s.
++- [x] `citation_formatter.py`: real `format_citation()` — `SOURCE_TITLES`
++      registry resolves `source_id` to a document title; combined with
++      `section` when present ("NAVSEA 8010 Manual ..., Sec. 4.4.3"), falls
++      back to `(chunk_id)` when it isn't (e.g. non-numbered sources),
++      falls back to the raw `source_id` for anything unregistered rather
++      than guessing a title.
++- [x] `retrieval` optional-dependency group added to `pyproject.toml`
++      (`sentence-transformers`, `chromadb`). CI's install step
++      (`.github/workflows/tests.yml`) updated to include it — verified by
++      installing into a genuinely fresh venv and running bare `pytest`
++      (not `python -m pytest`) before pushing, the same discipline root
++      AOSE.md already argues for after the `eval/` package gap.
++- [x] Tests replace the Phase 0 `NotImplementedError` assertions with real
++      behavior assertions (`test_retrieval_chunker.py`,
++      `test_retrieval_embedder.py`, `test_retrieval_vector_store.py`,
++      `test_retrieval_retriever.py`, `test_retrieval_citation_formatter.py`),
++      plus two new files: `test_retrieval_ingest.py` (ingest.py's own
++      chunking/upsert logic) and `test_retrieval_integration.py` (the full
++      pipeline against real Chapter 4/11 source text — this is what
++      satisfies the Definition of Done below).
++- [x] `pytest -v` green — 101/101, including under a fresh-venv CI-equivalent
++      bare `pytest` invocation with `.[dev,retrieval]` installed.
+ 
+ **Definition of done:** A real query against the ingested corpus returns the
+ correct chunk and an accurate, human-readable citation — verified by a test,
+-not just eyeballed once.
++not just eyeballed once. Met: `test_retrieval_integration.py` chunks the real
++Chapter 4 source text, retrieves against the query "how many hot workers can
++a single fire watch attend," gets back the chunk containing "No more than
++four hot workers shall be attended by a single fire watch," tagged
++`section == "4.4.3"`, and formats it as "NAVSEA 8010 Manual
++(S0570-AC-CCM-010/8010), Sec. 4.4.3."
+ 
+ ---
+ 
+diff --git a/retrieval/PASSDOWN.md b/retrieval/PASSDOWN.md
+index d42e49e..44dfdbb 100644
+--- a/retrieval/PASSDOWN.md
++++ b/retrieval/PASSDOWN.md
+@@ -5,6 +5,69 @@ next, what was decided but not built" so this can be picked back up cold.
+ 
+ ---
+ 
++## Session 5 — 2026-08-08 — Phase 1 build: local RAG proof
++
++**Status:** Phase 1 complete. Definition of Done met and verified by test,
++not eyeballed — see MIGRATION.md's Phase 1 section for the exact assertion.
++
++**What happened:** Chapters 4 and 11's extracted text (sourced the same
++session, via `pdfplumber` against the primary PDF Donnie uploaded directly —
++see root PASSDOWN.md for that extraction's own story) landed in
++`retrieval/sources/`. All five Phase 0 skeleton modules got real logic:
++
++- `chunker.py` — sentence-boundary-respecting chunking with overlap, tags
++  each chunk with the NAVSEA-style section number in force.
++- `embedder.py` — wired to `sentence-transformers` (`all-MiniLM-L6-v2`),
++  lazy-loaded and cached.
++- `vector_store.py` — wired to Chroma, ephemeral in-memory by default,
++  persistent when given a directory.
++- `retriever.py` — real `retrieve()`, `embed_fn` injectable for tests.
++- `citation_formatter.py` — real `format_citation()` with a `SOURCE_TITLES`
++  registry.
++- `ingest.py` — new module, wires the whole pipeline end-to-end for real
++  corpus documents (8010 Ch4/Ch11 text + `case_data/cases_v1.json`, one
++  chunk per case). Runnable by hand via `python -m retrieval.ingest`.
++
++Two real bugs surfaced by the new tests, both fixed the same pass rather
++than left open (see ARCHITECTURE.md ADR-006 for the full writeup):
++section-citation not carrying forward into a chunk that continues a section
++without repeating its header, and CI's install step not picking up the new
++`retrieval` optional-dependency group (caught by actually installing into a
++fresh venv and running bare `pytest`, not by trusting a local
++`python -m pytest` pass — this repo already documents that exact gap once,
++in root AOSE.md, over `eval/`; caught here before it repeated, not after).
++
++sentence-transformers and chromadb are both real network/model dependencies
++this sandbox couldn't reach Hugging Face to download a model through (403
++from the proxy allowlist) — same class of block as the NAVSEA PDF fetch
++earlier this session. Worked around the same way testing in this repo
++always avoids live-network dependence: `embedder._load_model()` and the
++real model path are never exercised by the test suite, which injects a
++deterministic offline embedding function instead (a real, if crude,
++hashed-bag-of-words vectorizer in `test_retrieval_integration.py` — word-
++overlap-sensitive, not a no-op stub). The real model path is believed
++correct by code review and by chromadb's own real (non-mocked) storage/
++query logic being exercised directly, but has not been run end-to-end with
++the real model inside this environment — that verification still needs to
++happen on a machine with real network access (Donnie's, or CI) before it's
++fully trusted, not just this session's code review.
++
++**Not done, deliberately:** OSHA CFR 1915 excerpts — the third planned
++Phase 1 corpus source — are not sourced. Same PDF-extraction effort as
++ADR-005 describes for 8010 hasn't been run against 29 CFR 1915 yet. Doesn't
++block Phase 1's DoD (met against the 8010 + cases_v1 corpus already
++ingested) but the real corpus is smaller than originally scoped until this
++lands.
++
++**Next up:** Phase 2 — hybrid retrieval (BM25 + reranking + context
++compression, small eval set). Before that, worth running
++`python -m retrieval.ingest` for real on a machine with live network (to
++actually download `all-MiniLM-L6-v2` and confirm the real model path works,
++not just the injected-fake-embedder path the tests cover), and sourcing the
++OSHA CFR 1915 excerpts to round out the Phase 1 corpus.
++
++---
++
+ ## Session 1 — 2026-08-04 — Phase 0 scaffold
+ 
+ **Status:** Phase 0 complete. Nothing before this session; this is the
+diff --git a/retrieval/ingest.py b/retrieval/ingest.py
+new file mode 100644
+index 0000000..92aeec1
+--- /dev/null
++++ b/retrieval/ingest.py
+@@ -0,0 +1,107 @@
++"""
++Phase 1: corpus ingestion.
++
++Reads Watchstander source documents, chunks them, embeds them, and upserts
++into a persistent Chroma collection so `retriever.retrieve()` has a real
++index to query against. This is meant to be run by hand, not by the test
++suite -- embedding for real requires sentence-transformers to download its
++model on first use, which needs live network access this repo's automated
++tests deliberately don't depend on (see embedder.py's module docstring).
++
++Corpus, as of Phase 1 (see MIGRATION.md and ARCHITECTURE.md ADR-005):
++  - navsea_8010_ch4 / navsea_8010_ch11: original manual text, Chapters 4 and
++    11 (retrieval/sources/navsea_8010_ch4.txt, navsea_8010_ch11.txt) --
++    separate source_ids per chapter (see ingest_all below for why), one
++    document title in citations (citation_formatter.SOURCE_TITLES)
++  - cases_v1: sourced incident cases (case_data/cases_v1.json), one chunk
++    per case rather than sentence-chunked -- each case is already a short,
++    self-contained unit and splitting one mid-case would separate the
++    hazard from its root cause.
++
++OSHA CFR 1915 excerpts are still an open item (MIGRATION.md Phase 1) -- not
++sourced yet, deliberately not stubbed in here with placeholder text.
++
++Run directly:
++
++    python -m retrieval.ingest
++"""
++
++from __future__ import annotations
++
++import json
++from pathlib import Path
++
++from retrieval.chunker import Chunk, chunk_text
++from retrieval.embedder import embed_chunks
++from retrieval.vector_store import VectorStore
++
++SOURCES_DIR = Path(__file__).resolve().parent / "sources"
++DEFAULT_PERSIST_DIR = str(Path(__file__).resolve().parent / ".chroma_store")
++CASES_PATH = Path(__file__).resolve().parent.parent / "case_data" / "cases_v1.json"
++
++
++def ingest_text_source(
++    text: str, source_id: str, vector_store: VectorStore, chunk_size: int = 800, overlap: int = 100
++) -> int:
++    """Chunk, embed, and upsert one raw-text source document. Returns the
++    number of chunks written."""
++    chunks = chunk_text(text, source_id=source_id, chunk_size=chunk_size, overlap=overlap)
++    if not chunks:
++        return 0
++    vector_store.upsert(chunks, embed_chunks(chunks))
++    return len(chunks)
++
++
++def _case_to_chunk(case: dict, index: int) -> Chunk:
++    body = (
++        f"{case['case_id']} ({case.get('shipyard', 'unknown shipyard')}, {case.get('date', 'undated')}): "
++        f"{case.get('summary', '')} Root cause: {case.get('root_cause', '')}"
++    )
++    return Chunk(
++        text=body,
++        source_id="cases_v1",
++        chunk_id=f"cases_v1#{index:03d}",
++        start_char=0,
++        end_char=len(body),
++        section=case.get("case_id"),
++    )
++
++
++def ingest_cases(cases_path: Path, vector_store: VectorStore) -> int:
++    """One chunk per sourced case -- see module docstring for why these
++    aren't sentence-chunked like the manual text."""
++    data = json.loads(cases_path.read_text())
++    cases = data.get("cases", [])
++    if not cases:
++        return 0
++    chunks = [_case_to_chunk(case, i) for i, case in enumerate(cases)]
++    vector_store.upsert(chunks, embed_chunks(chunks))
++    return len(chunks)
++
++
++def ingest_all(persist_directory: str = DEFAULT_PERSIST_DIR) -> dict[str, int]:
++    vector_store = VectorStore(persist_directory=persist_directory)
++    counts = {
++        # Distinct source_ids per chapter -- both chapters share a chunk_id
++        # numbering scheme that restarts at #000, so reusing one source_id
++        # for both would silently collide chunk_ids between chapters and
++        # each upsert would overwrite the other's chunks in Chroma.
++        # citation_formatter's SOURCE_TITLES maps both back to the same
++        # human-readable document title.
++        "navsea_8010_ch4": ingest_text_source(
++            (SOURCES_DIR / "navsea_8010_ch4.txt").read_text(), "navsea_8010_ch4", vector_store
++        ),
++        "navsea_8010_ch11": ingest_text_source(
++            (SOURCES_DIR / "navsea_8010_ch11.txt").read_text(), "navsea_8010_ch11", vector_store
++        ),
++        "cases_v1": ingest_cases(CASES_PATH, vector_store),
++    }
++    return counts
++
++
++if __name__ == "__main__":
++    written = ingest_all()
++    total = sum(written.values())
++    for source, count in written.items():
++        print(f"  {source}: {count} chunks")
++    print(f"Total: {total} chunks ingested into {DEFAULT_PERSIST_DIR}")
+diff --git a/retrieval/sources/navsea_8010_ch11.txt b/retrieval/sources/navsea_8010_ch11.txt
+new file mode 100644
+index 0000000..62b2fb6
+--- /dev/null
++++ b/retrieval/sources/navsea_8010_ch11.txt
+@@ -0,0 +1,67 @@
++DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
++S0570-AC-
++CCM-010/8010
++Chapter 11
++FIRE AND SMOKE BOUNDARIES
++Introduction
++This chapter provides requirements for sustaining fire zone boundaries and fire and smoke boundaries during industrial
++availabilities. This chapter applies to all platforms – submarines, surface ships, and aircraft carriers.
++In an industrial environment, it is imperative to maintain the integrity of ships’ fire zone boundaries in order to contain a fire
++in its originating compartment/fire zone, and limit the fire from spreading to other locations in the ship. While ships are
++designed and built with fire zone boundaries, maintenance availabilities present unique circumstances where these as-built
++boundaries may become compromised. The FSC is empowered to mitigate the risks associated with compromised fire zone
++boundaries, and guidance, including the use of non-combustible fume tight closures and smoke curtains during these
++situations, is provided here-in for implementation.
++11.1 FIRE ZONE BOUNDARIES. A fire zone boundary is a permanent, continuous, interior bulkhead or deck system
++designed to limit the passage of flame and smoke beyond a fire zone and provides protected staging areas for firefighters.
++11.1.1 Requirements for Fire Zone Boundaries. The ship’s permanent fire zone boundaries shall be maintained to the extent
++practicable throughout the availability. This includes maintaining the capability of fire insulation where installed, fire-rated
++penetrations such as multi-cable transits (MCTs) and pipe penetrations, fume-tightness of the boundary, etc. Existing
++transverse watertight, airtight, and fume-tight bulkheads shall be used on ships built prior to the requirement for fire zones.
++Where ships have fire zones by design, the designated bulkheads and decks shall be used. When authorized industrial work
++requires disestablishment of ship’s permanent fire zone boundaries, alternate fire zone boundaries shall be designated by the
++FSC. The fire zone boundary shall be continuous throughout the vertical extent of the ship, from keel up to the flight deck on
++carrier type ships and from keel up to the main deck on other ships unless designated higher.
++11.1.2 Fire Zone Boundaries (Submarines). For submarines, fire zone boundaries shall consist of the watertight transverse
++bulkheads between the engine room, missile compartment (when applicable), and forward compartment.
++11.1.3 Temporary Access Cuts through Fire Zone Boundaries. Temporary access cuts through fire zone boundaries shall be
++minimized. Where unavoidable, they shall be provided with non-combustible fume-tight closures. Aluminum shall not be
++used as a closure.
++11.1.4 Disabling/Degrading Fire Zone Boundaries. The disabling or degrading of fire zone boundary closures or
++penetrations shall be approved by the FSC and will require a temporary closure system, such as fire resistant smoke curtains,
++strategically placed with an ability to drop quickly, which can be set by personnel leaving the space.
++11.1.5 Marking Fire Zone Boundaries. Each designated fire zone boundary shall be identified with a sign on each side of the
++access through the boundary.
++11.1.6 Record of Boundary Openings. An up-to-date record of boundary openings and access cuts, and their locations shall
++be kept aboard ship by ship’s force. The location of fire zone boundaries and designated fire and smoke boundaries shall be
++noted on drawings at the CASCON Station and/or DCC/Quarterdeck.
++11.1.7 Boundaries on Carrier Type Ships. On carrier type ships, the hangar division door travel paths shall remain free of
++obstructions such that they can be freely operated in the event of a fire. A means (such as a chain-fall) shall be provided to
++close the hangar division doors in case of fire, in the event division doors are mechanically inoperable because of
++maintenance actions. In the event maintenance actions will render a division door totally immovable, work shall be
++sequenced and approved by the FSC, such that one set of doors will always be available to close in the event of a fire. Any
++exceptions shall be submitted for approval to the FSC.
++11.2 FIRE AND SMOKE BOUNDARIES.
++11.2.1 Fire Boundaries. A fire boundary is a temporary boundary set during a fire by immediate fire responders or
++firefighters by closing doors, hatches, and other closures. A fire boundary is intended to limit fire and smoke spread from a
++space, group of spaces, deck(s), or compartment/fire zone within a ship, and provide staging areas for fire parties. Watertight
++transverse bulkheads are typically utilized as fire boundaries.
++DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
++11-1
++DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
++S0570-AC-
++CCM-010/8010
++11.2.2 Smoke Boundaries. A smoke boundary is a bulkhead, deck, or other fume-tight boundary which is set during a fire to
++limit smoke spread and air supply to a fire. On submarines, a smoke boundary is a designated boundary between spaces
++within a major compartment, or at a fire zone boundary or hull penetration which is pre-rigged or set during a fire to contain
++smoke. Fume-tightness may be achieved by rigging a smoke curtain. Smoke boundaries may not be designed to serve as a
++fire barrier.
++11.2.3 Traverse Bulkheads versus Compartments. Although watertight transverse bulkheads separating submarine
++compartments serve as fire and smoke boundaries, fire and smoke boundaries generally cannot be set within compartments,
++such as the engine room and missile compartment, since complete bulkheads and decks do not exist.
++11.2.4 Acceptable Boundaries. The boundary of certain spaces within a submarine compartment, such as auxiliary
++machinery room, radio and Electronic Control Management (ECM) room, and sonar control room, are generally of sufficient
++tightness to serve as a fire and smoke boundary. Doors and hatches serving such spaces should be kept closed during a fire to
++minimize fire and smoke spread.
++DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
++11-2
+diff --git a/retrieval/sources/navsea_8010_ch4.txt b/retrieval/sources/navsea_8010_ch4.txt
+new file mode 100644
+index 0000000..2fc5ca0
+--- /dev/null
++++ b/retrieval/sources/navsea_8010_ch4.txt
+@@ -0,0 +1,153 @@
++DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
++S0570-AC-
++CCM-010/8010
++Chapter 4
++HOT WORK AND FIRE WATCH
++References
++(a) S9086-CH-STM-010, Naval Ships’ Technical Manual (NSTM) Chapter 074, Volume 1, Welding and Allied Processes
++(b) S6470-AA-SAF-010, Naval Maritime Confined Space Manual
++(c) Occupational Safety and Health Standards for Shipyard Employment, 29 CFR Part 1915 Subpart P, Fire Protection in
++Shipyard Employment
++(d) National Fire Protection Association (NFPA) Codes and Standards 51B, Standard for Fire Prevention During Welding,
++Cutting, and Other Hot Work
++(e) National Fire Protection Association (NFPA) Codes and Standards 312, Standard for Fire Protection of Vessels During
++Construction, Conversion, Repair, and Lay-up
++(f) National Fire Protection Association (NFPA) Codes and Standards 306, Standard for the Control of Gas Hazards on
++Vessels
++(g) Occupational Safety and Health Standards for Shipyard Employment, 29 CFR Part 1915 Subpart B, Confined and
++Enclosed Spaces and Other Dangerous Atmospheres in Shipyard Employment
++(h) NAVSEA OP 4, Ammunition and Explosives Safety Afloat
++Introduction
++In accordance with the hot work requirements of references (a) through (c), this chapter implements the necessary
++precautions, procedures, and safety requirements as related to hot work operations during an industrial availability. This
++chapter applies to all SRCAs (except new construction shipyards) and covers all Navy ships – submarines, surface ships, and
++aircraft carriers.
++The very existence of hot work operations in an industrial environment poses an increased risk to SF and SRCA workers,
++justifying the need for additional fire watches and fire extinguishers, in parallel with the combustible loading requirements
++contained in chapter 5 of this manual. Flexibilities are built into the fire watch requirements contained here-in to ensure
++proper visible coverage of hot work operations by minimal personnel. In implementation of these requirements, it is
++important to note that the prevention and early detection of a small fire is the most effective means of preventing a major
++shipboard fire.
++4.1 HOT WORK MEMORANDUM OF AGREEMENT.
++4.1.1 Classifications of Hot Work. Consistent with references (a) and (b), hot work includes the following operations:
++a. Flame heating, welding, torch cutting, brazing, and carbon arc gouging.
++b. Work which produces heat, by any means, of 400 °F (204 °C), or more.
++c. Grinding, drilling, abrasive blasting, or similar spark-producing operations EXCEPT when such operations are
++isolated physically from any atmosphere containing 10 percent or greater of the Lower Explosive Limit of a
++flammable or combustible substance.
++4.1.2 Hot Work MOA. Prior to performing hot work during an availability, the NSA shall ensure that a Memorandum of
++Agreement (MOA) is in place with the ship to cover the hot work notification process. The ship shall be notified in advance
++of hot work, and status of hot work jobs shall be kept up to date at least daily. The following shall be considered with regards
++to the MOA:
++a. The NSA shall ensure that all hot work performed by all maintenance and modernization activities during the
++availability is coordinated through the LMA.
++DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
++4-1
++DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
++S0570-AC-
++CCM-010/8010
++b. For hot work performed outside of an availability with an assigned NSA, the SRCA will establish a MOA(s)
++between the ship and all outside activities performing hot work.
++4.2 HOT WORK AUTHORIZATION.
++4.2.1 Written Notice. As required per reference (c), hot work shall only be conducted after a written notice for each job or
++separate area of hot work aboard ship is provided and a fire watch posted. The written notice shall include the following
++attributes:
++a. State a description of the work to be done.
++b. List the specific location of the hot work to include compartment number and the compartment numbers of adjacent
++decks, bulkheads and similar structures upon which hot work is to be accomplished.
++c. State the time hot work will commence.
++d. List the current gas-free status of the area.
++e. List the absence or existence of combustible material within 35 feet of the operation (or further if affected by the
++operation), and if combustible material exists, the action taken to protect the material from fire.
++f. State the provision and assignment of a fire watch.
++g. Affirm that conditions at work site (ventilation, temporary lighting, and accesses) permit the fire watch(es) to have a
++clear view of and immediate access to all areas included in the fire watch.
++h. Affirm that a suitable fully charged fire extinguisher is available at the job site.
++i. Provide for an inspection of the area 30 minutes after completion of the hot work or the cessation of hot work at the
++job site as the final action to complete the notice. If after 30 minutes the job site is not cool to the touch, do not
++leave the job site, and notify the nearest watch-stander/manager. When strip heaters are in use for post weld heat
++treatment, the fire watch shall remain in the hot work area for at least 30 minutes after completion of the welding,
++and shall survey the exposed area(s), and make a determination that there is no further fire hazard prior to
++completing the notice and leaving the area.
++4.2.2 Signing Authority. The notice shall be signed by a supervisor specifically designated as responsible for coordination of
++the hot work and the fire watch requirement.
++4.2.3 Posting of Notice. One copy of each notice shall be conspicuously posted at the location where the hot work is being
++accomplished, and the Commanding Officer’s designated representative shall be notified of all areas where hot work is being
++performed.
++4.2.4 Notice to the CO’s Representative. The notice to the Commanding Officer’s designated representative shall precede
++the initiation of the actual hot work in order to permit the Commanding Officer to designate a member of the crew to observe
++the operation, if desired.
++4.3 GAS-FREE PROCEDURES AND SPECIAL HAZARDS.
++4.3.1 Governance for Gas Free Procedures. The Navy Maritime Confined Space Program shall be the governing authority
++for gas-free procedures. All gas-free procedures shall be in accordance with references (d) through (f).
++4.3.1.1 For Naval activities, gas-free procedures shall also be in accordance with reference (b).
++4.3.1.2 For contractor activities, gas-free procedures shall also be in accordance with reference (g).
++4.3.2 Restricted Areas for Hot Work. Hot work shall not be conducted in closed or poorly ventilated spaces as defined in
++reference (b), subject to the risk of fire, explosion, exposure to toxic substances, or suffocation or asphyxiation, until
++appropriate test and procedures have been conducted in accordance with references (b) and (c).
++4.3.3 Coverings. Fire-resistant coverings meeting the requirements of chapter 5 of this manual shall be secured in place
++prior to commencing hot work to adequately protect piping and equipment.
++4.3.4 Lines/Piping Containing Flammable or Combustible Fluids. Lines/piping containing flammable and/or combustible
++fluids shall be depressurized and protected from damage/heat while conducting welding or hot work operations adjacent to
++these lines/pipes.
++DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
++4-2
++DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
++S0570-AC-
++CCM-010/8010
++4.3.5 Proximity of Flammables and Combustibles. Consistent with references (a) and (c), where practicable relocate all
++flammables and combustibles at least 35 feet from hot work operations to prevent the spread of fire unless the requirements
++of paragraph 4.1.1.(c) are met. Where relocation is impracticable, protect combustibles with metal or guards and curtains
++constructed of material meeting the requirements of sections 5.1.3.1 or 5.1.3.2.
++4.3.6 Ammunition or Explosives. Hot work operations in or adjacent to areas containing ammunition or explosive material
++or substance shall be conducted in accordance with reference (h).
++4.3.6.1 Hot work shall not be conducted during any logistics or maintenance movement of ammunition or explosives.
++4.3.6.2 Hot work shall not be conducted during any fueling operations without approval by the FSC and risk mitigation
++implemented.
++4.3.7 Battery Charging Operations. The following precautions shall be employed during battery charging operations:
++a. Care taken to prevent accidental sparking of electrical apparatus.
++b. Suspension of hot work except for submarines which have the Submarine Valve Regulated Lead Acid (SVRLA)
++battery that have ventilation and atmospheric control equipment lined up in accordance with the class Ship Systems
++Manual and the battery is being operated in accordance with the appropriate SVRLA battery technical manual.
++4.3.8 Additional Precautions. Necessary safety precautions shall be taken prior to conducting hot work on tanks, piping
++systems, or components which have previously contained flammable liquids. This includes hot work operations within 35
++feet of tanks or piping that contain or previously contained flammable liquids in accordance with reference (b).
++4.4 FIRE WATCH REQUIREMENTS AND TRAINING.
++4.4.1 Fire Watch Policy. Each SRCA shall create and maintain a written fire watch policy meeting the requirements of
++reference (c). Personnel, including SF, performing hot work and/or hot work watch standing shall undergo a training
++program that covers their specific responsibilities in accordance with reference (c).
++4.4.2 Additional Duties During Hot Work. The fire watch shall not accomplish other duties while hot work is in progress.
++4.4.3 Limitations to Single Fire Watch with Multiple Hot Workers. A single fire watch may provide protection where
++several hot workers are performing hot work in a single work area with the following limitations:
++a. The fire watch must have an unobstructed view, without turning, of all hot work operations and exposed areas from
++a single fixed location at which he is stationed and have no physical obstructions or barriers that would prevent
++immediate access by the fire watch to the hot work operation should a fire occur.
++b. No more than four hot workers shall be attended by a single fire watch.
++c. The fire watch cannot rove from one compartment/area to another in carrying out their duties as a fire watch in a
++way which would affect the requirement of maintaining a continuous line of sight view of all hot work.
++d. A means of communicating between the fire watch and all hot workers shall be provided such that in the event of a
++fire, the fire watch can immediately notify all hot workers to stop operations.
++4.4.4 Hot Work Involving Multiple Levels. In cases in which hot material from hot work may involve more than one level,
++as in trunks, machinery spaces, and on scaffolding, a fire watch shall be stationed at each level unless positive means are
++available to prevent the spread or fall of hot material.
++4.4.5 Bulkhead or Deck Hot Work. In cases where hot work is to be accomplished on a bulkhead or deck, combustible
++material shall be removed from the vicinity of the hot work on the opposite side of the bulkhead, overhead, or deck, and a fire
++watch shall be posted at each location.
++4.4.6 Blind Compartment Hot Work. If multiple blind compartments are involved in any hot work job, fire watches shall be
++posted simultaneously in each blind area.
++4.4.7 Communication Between Fire Watches. When more than one fire watch is required, a communication means between
++the fire watches shall be established.
++DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
++4-3
++DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
++S0570-AC-
++CCM-010/8010
++4.4.8 Fire Extinguishers. Fire extinguishers used for hot work shall be provided by the performing activity and shall not be a
++ship’s installed extinguisher.
++4.4.9 Fire Watch Training. All fire watches shall undergo a training program in accordance with references (a) and (c) that
++covers, at a minimum, their responsibilities, use of fire extinguishing and other required safety equipment, inspection of
++immediate and surrounding areas before, during, and after hot work, assigned station during actual hot work, method of
++communication between fire watch and hot work operator, the appropriate reporting procedure for a fire while assigned as a
++fire watch and the sounding of fire alarms.
++DISTRIBUTION STATEMENT A: DISTRIBUTION UNLIMITED
++4-4
+diff --git a/tests/test_retrieval_ingest.py b/tests/test_retrieval_ingest.py
+new file mode 100644
+index 0000000..f5f2343
+--- /dev/null
++++ b/tests/test_retrieval_ingest.py
+@@ -0,0 +1,84 @@
++"""
++Covers ingest.py's own logic (chapter source_id separation, case-file
++chunking) with an injected fake embedder -- never the real
++sentence-transformers model, same reasoning as test_retrieval_integration.py.
++"""
++
++from __future__ import annotations
++
++import json
++
++from retrieval import ingest
++from retrieval.embedder import Embedding
++from retrieval.vector_store import VectorStore
++
++
++def _fake_embed_chunks(chunks):
++    return [Embedding(vector=[float(len(c.text)), 0.0], model_name="fake") for c in chunks]
++
++
++def test_ingest_text_source_returns_zero_for_empty_text(monkeypatch):
++    monkeypatch.setattr(ingest, "embed_chunks", _fake_embed_chunks)
++    store = VectorStore(collection_name="test_ingest_empty")
++    assert ingest.ingest_text_source("", "navsea_8010_ch4", store) == 0
++
++
++def test_ingest_text_source_chunks_and_upserts(monkeypatch):
++    monkeypatch.setattr(ingest, "embed_chunks", _fake_embed_chunks)
++    store = VectorStore(collection_name="test_ingest_text")
++    count = ingest.ingest_text_source(
++        "4.4.3 Limitations. No more than four hot workers shall be attended by a single fire watch.",
++        "navsea_8010_ch4",
++        store,
++        chunk_size=1000,
++    )
++    assert count == 1
++    results = store.query(query_embedding=[float(count), 0.0], top_k=1)
++    assert results[0].source_id == "navsea_8010_ch4"
++    assert results[0].section == "4.4.3"
++
++
++def test_ingest_cases_produces_one_chunk_per_case(monkeypatch, tmp_path):
++    monkeypatch.setattr(ingest, "embed_chunks", _fake_embed_chunks)
++    cases_path = tmp_path / "cases.json"
++    cases_path.write_text(
++        json.dumps(
++            {
++                "cases": [
++                    {
++                        "case_id": "CS-TEST-1",
++                        "shipyard": "Test Yard",
++                        "date": "2024-01-01",
++                        "summary": "A test incident.",
++                        "root_cause": "A test cause.",
++                    },
++                    {
++                        "case_id": "CS-TEST-2",
++                        "shipyard": "Test Yard 2",
++                        "date": "2024-02-02",
++                        "summary": "Another test incident.",
++                        "root_cause": "Another test cause.",
++                    },
++                ]
++            }
++        )
++    )
++    store = VectorStore(collection_name="test_ingest_cases")
++
++    count = ingest.ingest_cases(cases_path, store)
++
++    assert count == 2
++    results = store.query(query_embedding=[1.0, 0.0], top_k=5)
++    ids = {r.chunk_id for r in results}
++    assert ids == {"cases_v1#000", "cases_v1#001"}
++    sections = {r.section for r in results}
++    assert sections == {"CS-TEST-1", "CS-TEST-2"}
++
++
++def test_ingest_cases_returns_zero_for_no_cases(monkeypatch, tmp_path):
++    monkeypatch.setattr(ingest, "embed_chunks", _fake_embed_chunks)
++    cases_path = tmp_path / "empty_cases.json"
++    cases_path.write_text(json.dumps({"cases": []}))
++    store = VectorStore(collection_name="test_ingest_no_cases")
++
++    assert ingest.ingest_cases(cases_path, store) == 0
+diff --git a/tests/test_retrieval_integration.py b/tests/test_retrieval_integration.py
+new file mode 100644
+index 0000000..cc4a345
+--- /dev/null
++++ b/tests/test_retrieval_integration.py
+@@ -0,0 +1,78 @@
++"""
++Phase 1 Definition of Done: "a real query against the ingested corpus
++returns the correct chunk and an accurate, human-readable citation --
++verified by a test, not just eyeballed once." (MIGRATION.md)
++
++This exercises the whole pipeline -- chunker -> embedder -> vector_store ->
++retriever -> citation_formatter -- against real NAVSEA 8010 source text
++(retrieval/sources/navsea_8010_ch4.txt), with a deterministic, network-free
++embedding function standing in for the real sentence-transformers model
++(see embedder.py's module docstring for why: this repo's tests never
++depend on live network). The fake embedder isn't a no-op stub -- it's a
++real (if crude) bag-of-hashed-words vectorizer, so a query actually has to
++share vocabulary with the right chunk to retrieve it, the same property a
++real embedding model provides.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import re
++from pathlib import Path
++
++from retrieval.chunker import chunk_text
++from retrieval.citation_formatter import format_citation
++from retrieval.embedder import Embedding
++from retrieval.retriever import Retriever
++from retrieval.vector_store import VectorStore
++
++SOURCES_DIR = Path(__file__).resolve().parent.parent / "retrieval" / "sources"
++_WORD = re.compile(r"[a-z]+")
++_DIMS = 64
++
++
++def _hashed_bow_embed(text: str) -> Embedding:
++    vector = [0.0] * _DIMS
++    for word in _WORD.findall(text.lower()):
++        bucket = int(hashlib.md5(word.encode()).hexdigest(), 16) % _DIMS
++        vector[bucket] += 1.0
++    norm = sum(v * v for v in vector) ** 0.5
++    if norm:
++        vector = [v / norm for v in vector]
++    return Embedding(vector=vector, model_name="test-hashed-bow")
++
++
++def test_real_navsea_8010_chapter4_query_returns_the_correct_section_and_citation():
++    text = (SOURCES_DIR / "navsea_8010_ch4.txt").read_text()
++    chunks = chunk_text(text, source_id="navsea_8010_ch4")
++    assert len(chunks) > 1  # sanity check the real chapter actually chunked
++
++    store = VectorStore(collection_name="test_integration_ch4")
++    store.upsert(chunks, [_hashed_bow_embed(c.text) for c in chunks])
++    retriever = Retriever(vector_store=store, embed_fn=_hashed_bow_embed)
++
++    results = retriever.retrieve("how many hot workers can a single fire watch attend", top_k=1)
++
++    assert len(results) == 1
++    top = results[0]
++    assert "four hot workers" in top.text.lower()
++    assert top.section == "4.4.3"
++
++    citation = format_citation(source_id=top.source_id, chunk_id=top.chunk_id, section=top.section)
++    assert citation == "NAVSEA 8010 Manual (S0570-AC-CCM-010/8010), Sec. 4.4.3"
++
++
++def test_real_navsea_8010_chapter11_query_returns_a_different_correct_section():
++    text = (SOURCES_DIR / "navsea_8010_ch11.txt").read_text()
++    chunks = chunk_text(text, source_id="navsea_8010_ch11")
++
++    store = VectorStore(collection_name="test_integration_ch11")
++    store.upsert(chunks, [_hashed_bow_embed(c.text) for c in chunks])
++    retriever = Retriever(vector_store=store, embed_fn=_hashed_bow_embed)
++
++    results = retriever.retrieve("fire and smoke boundary requirements", top_k=1)
++
++    assert len(results) == 1
++    assert results[0].source_id == "navsea_8010_ch11"
++    citation = format_citation(source_id=results[0].source_id, chunk_id=results[0].chunk_id, section=results[0].section)
++    assert citation.startswith("NAVSEA 8010 Manual (S0570-AC-CCM-010/8010)")
