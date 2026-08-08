@@ -144,7 +144,7 @@ SCRIPT = [
     ),
     (
         "hitl_decided",
-        # Matches the real hitl_gate_node payload shape (see agent_core/hitl.py):
+        # Matches the real hitl_gate_single_node payload shape (see agent_core/hitl.py):
         # the parsed, structural disposition -- never the reviewer's raw free-text
         # answer, which stays off the wire per events.py's own broadcast policy.
         {"work_package_id": "HW-2201", "disposition": "rejected", "cleared_for_execution": False},

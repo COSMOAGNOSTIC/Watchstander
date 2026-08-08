@@ -187,7 +187,7 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
 - [ ] Adjacency tolerance added to `_frame_ranges_overlap()` (or the "adjacent uncleared space" claim in `deconfliction.py`'s own comment softened to match what the code does)
 - [ ] `deck_level` actually used in conflict detection, or the "(x, y) grid coordinates" claim in `SpatialCoordinates`'s docstring softened
 - [x] `is_over_side`'s underlying semantic model — deliberately deprioritized (not fixed), 2026-07-27: it never causes an under-flag, only an occasionally domain-imprecise rationale on an already-correctly-flagged conflict; see ARCHITECTURE.md Known Debt / ADR-016
-- [ ] Non-idempotent multi-package HITL loop fully closed — `conflict_rationale`'s append is now guarded (Phase 5.85), but the `events.emit()` calls in the replayed interrupt path are not; needs the interrupt-once-per-invocation restructure
+- [x] Non-idempotent multi-package HITL loop fully closed (2026-07-28, commit `ff91b3b`, ADR-022) — restructured `hitl_gate_node`'s interrupt-per-package loop into `hitl_prepare_node` / `hitl_route` / `hitl_gate_single_node`, fanned out via LangGraph's `Send()`, one checkpointed `interrupt()` per package instead of a shared loop that replayed `events.emit()` calls on resume. Verified 67/67 three times (sandbox, Donnie's machine, post-rebase); see ARCHITECTURE.md §5
 
 **Definition of done:** Tests green, docs match reality, repo is honestly representative of what it does.
 

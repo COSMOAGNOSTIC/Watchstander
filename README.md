@@ -23,8 +23,10 @@ A second, site-scoped grounding source sits alongside the case data: a work pack
 flowchart LR
     Entry(["entry"]) --> Deconf["deconfliction_node<br/>(deconfliction.py)<br/>deterministic overlap check"]
     Deconf --> Reason["reasoning_node<br/>(reasoning.py)<br/>SafetyBrief synthesis, LLM + fallback"]
-    Reason --> Hitl["hitl_gate_node<br/>(hitl.py)<br/>interrupt() — genuine human pause"]
-    Hitl --> End(["END"])
+    Reason --> HitlPrep["hitl_prepare_node<br/>(hitl.py)<br/>splits reviewed vs. needs-review"]
+    HitlPrep -->|no review needed| End(["END"])
+    HitlPrep -->|Send() fan-out, one per package| Hitl["hitl_gate_single_node<br/>(hitl.py)<br/>interrupt() — genuine human pause, one package per invocation"]
+    Hitl --> End
 
     CaseData[("case_data/cases_v1.json<br/>sourced OSHA/DOL cases")] --> Retrieval["retrieval.py<br/>TF-IDF ranked case lookup"]
     Retrieval --> Reason

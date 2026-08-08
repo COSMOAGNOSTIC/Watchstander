@@ -42,7 +42,7 @@ This is the same principle as the section above, aimed at a different actor: **v
 
 ## Where the discipline is still open
 
-- The non-idempotent multi-package HITL loop (`hitl_gate_node`'s `interrupt()`-in-a-loop pattern) is a known, disclosed gap, not yet restructured — see ARCHITECTURE.md Known Debt.
+- Nothing currently tracked here. The multi-package HITL loop's non-idempotency (`hitl_gate_node`'s old `interrupt()`-in-a-loop pattern) was the item previously listed — fixed 2026-07-28 (commit `ff91b3b`, ADR-022), restructured into `hitl_prepare_node` / `hitl_route` / `hitl_gate_single_node` fanned out via `Send()`. See ARCHITECTURE.md Section 5 and Decision Log.
 
 ## Accepted, not open
 
