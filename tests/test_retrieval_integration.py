@@ -20,6 +20,7 @@ import hashlib
 import re
 from pathlib import Path
 
+from retrieval import ingest
 from retrieval.chunker import chunk_text
 from retrieval.citation_formatter import format_citation
 from retrieval.embedder import Embedding
@@ -76,3 +77,39 @@ def test_real_navsea_8010_chapter11_query_returns_a_different_correct_section():
     assert results[0].source_id == "navsea_8010_ch11"
     citation = format_citation(source_id=results[0].source_id, chunk_id=results[0].chunk_id, section=results[0].section)
     assert citation.startswith("NAVSEA 8010 Manual (S0570-AC-CCM-010/8010)")
+
+
+def test_real_osha_1915_subpart_b_query_returns_the_correct_section_and_citation(monkeypatch):
+    """
+    Proves the same Definition of Done for the second corpus source added
+    this project (ADR-007): a real query against the real, ingested OSHA
+    1915 Subpart B text returns the right chunk with an accurate citation.
+    Uses ingest.ingest_osha_subpart() directly (not chunk_text() alone, the
+    way the NAVSEA tests above do) because OSHA/CFR section tagging is
+    ingest.py's job, not chunker.py's -- see ingest_osha_subpart's
+    docstring for why. embed_chunks is monkeypatched module-wide (same
+    seam test_retrieval_ingest.py uses) rather than injected as a
+    parameter, to keep ingest.py's ingestion functions consistent with
+    each other.
+    """
+    monkeypatch.setattr(ingest, "embed_chunks", lambda chunks: [_hashed_bow_embed(c.text) for c in chunks])
+
+    text = (SOURCES_DIR / "osha_1915_subpart_b.txt").read_text()
+    sections = ingest.parse_osha_sections(text)
+    assert len(sections) == 6  # sanity check: 1915.11 through 1915.16
+
+    store = VectorStore(collection_name="test_integration_osha_b")
+    ingest.ingest_osha_subpart(text, "osha_1915_subpart_b", store, chunk_size=1000)
+    retriever = Retriever(vector_store=store, embed_fn=_hashed_bow_embed)
+
+    results = retriever.retrieve(
+        "an employee may not enter a space where the oxygen content by volume is below 19.5 percent", top_k=1
+    )
+
+    assert len(results) == 1
+    top = results[0]
+    assert "19.5 percent" in top.text
+    assert top.section == "1915.12"
+
+    citation = format_citation(source_id=top.source_id, chunk_id=top.chunk_id, section=top.section)
+    assert citation == "29 CFR 1915 Subpart B (Confined and Enclosed Spaces), Sec. 1915.12"

@@ -188,9 +188,49 @@ verified yet.
   wiring correctly; they weren't standing in for something that turned out
   to behave differently for real.
 
+**Round 3 (2026-08-08, adding OSHA 1915 Subpart B, ADR-007).** One real
+methodology catch during sourcing, one real test-design trap caught before
+it shipped:
+
+- **Assumed a fetch tool's output was verbatim; checked, found it wasn't.**
+  A summarizing fetch tool was tried first against both osha.gov and eCFR
+  pages. It returned confident-looking, well-formatted regulatory
+  language — but comparing it against the actual page content (via a live
+  browser session's raw-DOM text extraction, not a summarizing tool)
+  showed it had paraphrased and condensed multiple subsections ("Additional
+  definitions cover Marine Chemist, IDLH, oxygen-deficient/enriched
+  atmospheres..." rather than the actual definitions). For a citation-
+  grounded corpus this is exactly the failure mode that matters: text that
+  reads as authoritative but isn't the primary source verbatim. Caught
+  before any of it entered the corpus, not after — switched sourcing
+  method entirely rather than lightly editing the summarized output.
+- **Test-design trap, same shape as an earlier one this project already
+  documents (root AOSE.md's fire-watch capacity test, and this file's own
+  history):** the first draft of the OSHA integration test used a
+  semantically-natural query ("what oxygen percentage is required before
+  entering a confined space"). Against the real hashed-bag-of-words fake
+  embedder, that query retrieved a *different* chunk within the correct
+  section (1915.12) than the one the assertion expected — not a bug in
+  `ingest_osha_subpart` or `chunker.py`, just a query that didn't share
+  enough vocabulary with the target chunk for a crude word-overlap
+  embedder to prefer it over a neighboring chunk in the same section.
+  Caught by actually running the test rather than assuming a plausible-
+  sounding query would work, then fixed by using a query built from the
+  target chunk's own vocabulary (same technique the NAVSEA integration
+  tests already use).
+
+**Outcome:** no code defects found this round — `ingest_osha_subpart()`,
+`parse_osha_sections()`, and the `SOURCE_TITLES` addition were correct on
+first real-corpus test. Both catches were sourcing/test-design discipline,
+not implementation bugs, which is itself a difference worth naming: not
+every AOSE round finds a bug, and that's fine as long as the round was
+real (comparing against actual page content, actually running the test)
+rather than skipped because "this part is simple."
+
 ## Where the discipline is still open
 
-- OSHA CFR 1915 excerpts are still not sourced (see PASSDOWN.md Session 5,
-  ARCHITECTURE.md §5) — not an AOSE finding, just a scope gap worth
-  tracking here too since Phase 2's eval set will want a corpus that
-  actually includes it.
+- Other 1915 subparts `case_data/cases_v1.json` cites (D, E, F, G, H) are
+  not in the corpus — Subpart B was scoped in deliberately for the
+  confined_space coverage gap it closes (ADR-007), not because the rest
+  isn't relevant. Worth revisiting once Phase 2's eval set defines what
+  hazard-category coverage it actually needs.

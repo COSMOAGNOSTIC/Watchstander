@@ -8,7 +8,7 @@ suite -- embedding for real requires sentence-transformers to download its
 model on first use, which needs live network access this repo's automated
 tests deliberately don't depend on (see embedder.py's module docstring).
 
-Corpus, as of Phase 1 (see MIGRATION.md and ARCHITECTURE.md ADR-005):
+Corpus, as of Phase 1 (see MIGRATION.md and ARCHITECTURE.md ADR-005, ADR-007):
   - navsea_8010_ch4 / navsea_8010_ch11: original manual text, Chapters 4 and
     11 (retrieval/sources/navsea_8010_ch4.txt, navsea_8010_ch11.txt) --
     separate source_ids per chapter (see ingest_all below for why), one
@@ -17,9 +17,16 @@ Corpus, as of Phase 1 (see MIGRATION.md and ARCHITECTURE.md ADR-005):
     per case rather than sentence-chunked -- each case is already a short,
     self-contained unit and splitting one mid-case would separate the
     hazard from its root cause.
-
-OSHA CFR 1915 excerpts are still an open item (MIGRATION.md Phase 1) -- not
-sourced yet, deliberately not stubbed in here with placeholder text.
+  - osha_1915_subpart_b: 29 CFR 1915 Subpart B, "Confined and Enclosed
+    Spaces and Other Dangerous Atmospheres in Shipyard Employment"
+    (retrieval/sources/osha_1915_subpart_b.txt) -- verbatim text of
+    sections 1915.11 through 1915.16, sourced from OSHA.gov's own e-CFR
+    rendering (ADR-007). Fills a real gap: `agent_core/procedural_lookup.py`
+    has zero governing-procedure coverage for confined_space (NAVSEA 8010
+    is entirely hot-work/fire, see that module's own tests), so this is the
+    first corpus source that actually covers it. OSHA/CFR section numbers
+    (e.g. "1915.11") don't match chunker.py's NAVSEA-style header regex --
+    see `ingest_osha_subpart` for how sections get tagged instead.
 
 Run directly:
 
@@ -29,6 +36,7 @@ Run directly:
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from retrieval.chunker import Chunk, chunk_text
@@ -38,6 +46,7 @@ from retrieval.vector_store import VectorStore
 SOURCES_DIR = Path(__file__).resolve().parent / "sources"
 DEFAULT_PERSIST_DIR = str(Path(__file__).resolve().parent / ".chroma_store")
 CASES_PATH = Path(__file__).resolve().parent.parent / "case_data" / "cases_v1.json"
+OSHA_SECTION_MARKER = "=== SECTION "
 
 
 def ingest_text_source(
@@ -79,6 +88,50 @@ def ingest_cases(cases_path: Path, vector_store: VectorStore) -> int:
     return len(chunks)
 
 
+def parse_osha_sections(text: str) -> dict[str, str]:
+    """Split a source file formatted with `=== SECTION <number> ===` markers
+    (see retrieval/sources/osha_1915_subpart_b.txt) into {section_number:
+    section_text}. This marker convention, not chunker.py's NAVSEA-style
+    regex, is what determines OSHA section boundaries -- CFR numbering
+    ("1915.11") doesn't match that regex (it expects 1-2 digit groups;
+    "1915" is four), and extending that regex to also cover CFR numbering
+    risked false-positiving on the many other four-digit numbers that
+    appear incidentally in regulatory prose (dates, standard cross-
+    references). Explicit markers avoid that risk entirely."""
+    sections: dict[str, str] = {}
+    blocks = text.split(OSHA_SECTION_MARKER)
+    for block in blocks[1:]:  # blocks[0] is empty (text starts with a marker)
+        header, _, body = block.partition("===\n")
+        section_number = header.strip()
+        if section_number and body.strip():
+            sections[section_number] = body.strip()
+    return sections
+
+
+def ingest_osha_subpart(
+    text: str, source_id: str, vector_store: VectorStore, chunk_size: int = 800, overlap: int = 100
+) -> int:
+    """Chunk each OSHA section's text via chunk_text() for real
+    sentence-aware splitting, then stamp every resulting chunk with its
+    known section number directly (chunk_text()'s own regex-based section
+    detection doesn't apply to CFR numbering -- see parse_osha_sections) --
+    the same "explicit tagging, not regex detection" approach ingest_cases()
+    already uses for case_data's case_id."""
+    sections = parse_osha_sections(text)
+    all_chunks: list[Chunk] = []
+    for section_number, section_text in sections.items():
+        for i, chunk in enumerate(
+            chunk_text(section_text, source_id=source_id, chunk_size=chunk_size, overlap=overlap)
+        ):
+            all_chunks.append(
+                replace(chunk, chunk_id=f"{source_id}#{section_number}-{i:03d}", section=section_number)
+            )
+    if not all_chunks:
+        return 0
+    vector_store.upsert(all_chunks, embed_chunks(all_chunks))
+    return len(all_chunks)
+
+
 def ingest_all(persist_directory: str = DEFAULT_PERSIST_DIR) -> dict[str, int]:
     vector_store = VectorStore(persist_directory=persist_directory)
     counts = {
@@ -95,6 +148,9 @@ def ingest_all(persist_directory: str = DEFAULT_PERSIST_DIR) -> dict[str, int]:
             (SOURCES_DIR / "navsea_8010_ch11.txt").read_text(), "navsea_8010_ch11", vector_store
         ),
         "cases_v1": ingest_cases(CASES_PATH, vector_store),
+        "osha_1915_subpart_b": ingest_osha_subpart(
+            (SOURCES_DIR / "osha_1915_subpart_b.txt").read_text(), "osha_1915_subpart_b", vector_store
+        ),
     }
     return counts
 

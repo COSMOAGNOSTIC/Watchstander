@@ -42,10 +42,11 @@ imports cleanly, including under a CI-style install.
 - [x] Ingest the Watchstander corpus: NAVSEA 8010 Manual — original manual
       text, Chapters 4 ("Hot Work and Fire Watch") and 11 ("Fire and Smoke
       Boundaries"), pulled fresh from the source PDF (see ARCHITECTURE.md
-      ADR-005), plus `case_data/cases_v1.json` (one chunk per sourced case).
-      OSHA CFR 1915 excerpts NOT yet sourced — same PDF-extraction effort
-      as 8010 hasn't been run against it; open item, not stubbed with
-      placeholder text (ARCHITECTURE.md §5).
+      ADR-005); 29 CFR 1915 Subpart B — original CFR text, sections
+      1915.11–1915.16, pulled live via browser extraction from OSHA.gov
+      (ARCHITECTURE.md ADR-007); plus `case_data/cases_v1.json` (one chunk
+      per sourced case). Other 1915 subparts (D, E, F, G, H) not yet
+      sourced — open item, not blocking (ARCHITECTURE.md §5).
 - [x] `chunker.py`: real sentence-boundary chunking (never splits a
       sentence across chunks; never drops an oversized sentence), tags
       each chunk with the NAVSEA-style section number in force, carried
@@ -83,8 +84,10 @@ imports cleanly, including under a CI-style install.
       chunking/upsert logic) and `test_retrieval_integration.py` (the full
       pipeline against real Chapter 4/11 source text — this is what
       satisfies the Definition of Done below).
-- [x] `pytest -v` green — 101/101, including under a fresh-venv CI-equivalent
-      bare `pytest` invocation with `.[dev,retrieval]` installed.
+- [x] `pytest -v` green — 106/106 (101 after the initial Phase 1 build,
+      +5 for OSHA Subpart B's ingestion/parsing tests and integration
+      proof, ADR-007), including under a fresh-venv CI-equivalent bare
+      `pytest` invocation with `.[dev,retrieval]` installed.
 
 **Definition of done:** A real query against the ingested corpus returns the
 correct chunk and an accurate, human-readable citation — verified by a test,

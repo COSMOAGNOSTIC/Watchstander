@@ -82,3 +82,50 @@ def test_ingest_cases_returns_zero_for_no_cases(monkeypatch, tmp_path):
     store = VectorStore(collection_name="test_ingest_no_cases")
 
     assert ingest.ingest_cases(cases_path, store) == 0
+
+
+_OSHA_FIXTURE = """=== SECTION 1915.11 ===
+Scope, application and definitions applicable to this subpart.
+
+1915.11(a)
+
+Scope and application. This subpart applies to work in confined and enclosed spaces.
+
+=== SECTION 1915.14 ===
+Hot Work.
+
+1915.14(a)
+
+Hot work requiring testing by a Marine Chemist or Coast Guard authorized person. The employer shall ensure hot work is tested first.
+"""
+
+
+def test_parse_osha_sections_splits_on_markers():
+    sections = ingest.parse_osha_sections(_OSHA_FIXTURE)
+    assert set(sections) == {"1915.11", "1915.14"}
+    assert "Scope and application" in sections["1915.11"]
+    assert "Hot work requiring testing" in sections["1915.14"]
+
+
+def test_parse_osha_sections_returns_empty_dict_for_text_with_no_markers():
+    assert ingest.parse_osha_sections("just plain text, no section markers here") == {}
+
+
+def test_ingest_osha_subpart_tags_every_chunk_with_its_cfr_section(monkeypatch):
+    monkeypatch.setattr(ingest, "embed_chunks", _fake_embed_chunks)
+    store = VectorStore(collection_name="test_ingest_osha")
+
+    count = ingest.ingest_osha_subpart(_OSHA_FIXTURE, "osha_1915_subpart_b", store, chunk_size=1000)
+
+    assert count == 2  # one chunk per section at this chunk_size
+    results = store.query(query_embedding=[1.0, 0.0], top_k=5)
+    sections = {r.section for r in results}
+    assert sections == {"1915.11", "1915.14"}
+    for r in results:
+        assert r.source_id == "osha_1915_subpart_b"
+        assert r.chunk_id.startswith(f"osha_1915_subpart_b#{r.section}-")
+
+
+def test_ingest_osha_subpart_returns_zero_for_text_with_no_sections():
+    store = VectorStore(collection_name="test_ingest_osha_empty")
+    assert ingest.ingest_osha_subpart("no markers at all", "osha_1915_subpart_b", store) == 0

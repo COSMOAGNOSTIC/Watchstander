@@ -5,6 +5,53 @@ next, what was decided but not built" so this can be picked back up cold.
 
 ---
 
+## Session 7 — 2026-08-08 — Second corpus source: OSHA 1915 Subpart B
+
+**Status:** Closes the "OSHA CFR 1915 excerpts" open item carried since
+Session 5. 106/106 tests passing (101 → 106: +5 for OSHA ingestion,
+parsing, and a real integration proof).
+
+**What happened:** Scoped to 29 CFR 1915 Subpart B ("Confined and Enclosed
+Spaces and Other Dangerous Atmospheres in Shipyard Employment," sections
+1915.11–1915.16) rather than all of Part 1915 — chosen deliberately because
+it fills a real gap: `agent_core/procedural_lookup.py` has zero governing-
+procedure coverage for `confined_space` (NAVSEA 8010 is entirely
+hot-work/fire), so this is the first corpus source in the project that
+actually covers it. Logged as ADR-007 in `ARCHITECTURE.md`.
+
+Sourced differently than the NAVSEA manual was: tried a summarizing fetch
+tool against both osha.gov and eCFR first, and it produced paraphrased text
+in both cases — not usable for a citation-grounded corpus, which needs the
+actual regulatory language, not an AI's account of it. Switched to a live
+Chrome browser session (already connected this session) and pulled each
+section's raw DOM text directly from osha.gov's own per-section pages
+(`osha.gov/laws-regs/regulations/standardnumber/1915/1915.11`, etc.) — full
+verbatim text, GPO Source: e-CFR, public domain. Saved to
+`retrieval/sources/osha_1915_subpart_b.txt` with explicit `=== SECTION
+1915.NN ===` markers, since CFR section numbering doesn't fit `chunker.py`'s
+existing NAVSEA-style header regex (extending that regex risked false
+positives on incidental four-digit numbers elsewhere in the text — see
+ADR-007 for the full reasoning). New `ingest.parse_osha_sections()` and
+`ingest.ingest_osha_subpart()` handle the marker-based splitting and
+section tagging; `citation_formatter.SOURCE_TITLES` gained an entry for
+`osha_1915_subpart_b`. A new integration test
+(`test_real_osha_1915_subpart_b_query_returns_the_correct_section_and_citation`)
+proves the same Definition of Done this project already proved for NAVSEA
+8010: a real query against the real ingested text returns the right
+section (1915.12) and an accurate citation.
+
+**Not done, deliberately:** Other 1915 subparts `case_data/cases_v1.json`
+entries cite — D (welding/hot work), E (deck openings/edges), F, G
+(rigging), H (lifting) — aren't in the corpus. Not blocking; worth
+expanding if Phase 2's eval set wants broader hazard-category coverage.
+
+**Next up:** Phase 2 — hybrid retrieval (BM25 + reranking + context
+compression, small eval set). The corpus (NAVSEA 8010 Ch4/Ch11 + OSHA 1915
+Subpart B + cases_v1) is now broad enough across hazard categories to make
+a real eval set worth building.
+
+---
+
 ## Session 6 — 2026-08-08 — Real model path verified on live hardware
 
 **Status:** Phase 1's last open item closed. Everything in the "Definition

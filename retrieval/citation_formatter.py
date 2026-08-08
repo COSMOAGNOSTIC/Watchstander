@@ -32,6 +32,7 @@ SOURCE_TITLES: dict[str, str] = {
     "navsea_8010_ch4": "NAVSEA 8010 Manual (S0570-AC-CCM-010/8010)",
     "navsea_8010_ch11": "NAVSEA 8010 Manual (S0570-AC-CCM-010/8010)",
     "cases_v1": "Watchstander Sourced Case File",
+    "osha_1915_subpart_b": "29 CFR 1915 Subpart B (Confined and Enclosed Spaces)",
 }
 
 

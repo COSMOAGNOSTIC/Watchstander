@@ -7,12 +7,12 @@ this doc and the code ever disagree, the doc is the bug.
 
 A RAG (retrieval-augmented generation) skills-building project: a retrieval
 harness that applies semantic search + citation grounding to the
-Watchstander regulatory corpus (NAVSEA 8010 Manual — original manual text,
+Watchstander regulatory corpus — NAVSEA 8010 Manual (original manual text,
 Chapters 4 and 11, not the pre-extracted `case_data/navsea_8010_psns_v2014.json`
-summaries, see ADR-005 — plus OSHA CFR 1915 excerpts and `case_data/`). It
-exists to close specific platform gaps — RAG mechanics, vector databases,
-AWS SageMaker, Databricks — surfaced by a real job posting. See PASSDOWN.md
-for the full origin story.
+summaries, see ADR-005), 29 CFR 1915 Subpart B (original CFR text, sections
+1915.11–1915.16, see ADR-007), and `case_data/`. It exists to close specific
+platform gaps — RAG mechanics, vector databases, AWS SageMaker, Databricks —
+surfaced by a real job posting. See PASSDOWN.md for the full origin story.
 
 ## 2. Current structure (Phase 1)
 
@@ -35,6 +35,7 @@ retrieval/
   sources/
     navsea_8010_ch4.txt      original manual text, Chapter 4 (see ADR-005)
     navsea_8010_ch11.txt     original manual text, Chapter 11
+    osha_1915_subpart_b.txt  original CFR text, 1915.11-1915.16 (see ADR-007)
   README.md
   MIGRATION.md
   ARCHITECTURE.md          (this file)
@@ -52,9 +53,9 @@ tests/
 ```
 
 Corpus as of Phase 1: NAVSEA 8010 Manual Chapters 4 and 11 (original text,
-per ADR-005) and `case_data/cases_v1.json` (one chunk per sourced case, not
-sentence-chunked -- see `ingest.py`). OSHA CFR 1915 excerpts are still not
-sourced -- open item, not stubbed in with placeholder text (MIGRATION.md).
+per ADR-005), 29 CFR 1915 Subpart B sections 1915.11-1915.16 (original CFR
+text, per ADR-007), and `case_data/cases_v1.json` (one chunk per sourced
+case, not sentence-chunked -- see `ingest.py`).
 
 Data flow (live now, not just planned): raw corpus text -> `chunker.chunk_text()`
 -> `Chunk`s -> `embedder.embed_chunks()` -> `Embedding`s ->
@@ -200,6 +201,49 @@ Phase 1's own test suite, both fixed the same pass rather than left open:
    before pushing, not by trusting that "tests pass locally" meant
    anything about CI. Fixed by adding `retrieval` to the CI install step.
 
+Same day, separately: the real `sentence-transformers` model path (unverified
+inside the build sandbox, which has no route to Hugging Face) was run for
+real on Donnie's own machine via `python -m retrieval.ingest`, then queried
+live with a novel query never used in any test fixture — confirmed working,
+not just believed correct by code review. See AOSE.md's "Resolved since
+Round 2" section for the full account.
+
+**ADR-007 — OSHA 29 CFR 1915 Subpart B added as a second corpus source;
+sourced via live browser extraction, not PDF.** (2026-08-08) Closes the
+"OSHA CFR 1915 excerpts" open item from ADR-005/§5. Scoped to Subpart B
+("Confined and Enclosed Spaces and Other Dangerous Atmospheres in Shipyard
+Employment," sections 1915.11–1915.16) specifically, not the whole of Part
+1915 — chosen because it fills a real, concrete gap:
+`agent_core/procedural_lookup.py` has zero governing-procedure coverage for
+`confined_space` (NAVSEA 8010 is entirely hot-work/fire; see that module's
+own `test_psns_has_no_entries_for_hazards_the_manual_does_not_cover`), so
+Subpart B is the first corpus source in this project that actually covers
+it. Same chapter-scoping precedent as ADR-005 (Chapters 4/11, not the whole
+manual): pick the subset that's actually relevant to Watchstander's hazard
+categories, not the maximum available text.
+
+Sourcing method differs from ADR-005's PDF/`pdfplumber` approach: OSHA.gov
+serves each CFR section (`osha.gov/laws-regs/regulations/standardnumber/
+1915/1915.11`, etc.) as a server-rendered HTML page with the full verbatim
+regulatory text in the DOM — extracted directly via a live Chrome browser
+session's raw-text tool (not a summarizing fetch tool; a summarizing tool
+was tried first against both osha.gov and eCFR and produced paraphrased,
+not verbatim, text — unusable for a citation-grounded corpus, same
+"verbatim primary source, not an AI's account of it" bar ADR-005 applies to
+the NAVSEA manual). Public domain, GPO Source: e-CFR, no copyright concern.
+Saved to `retrieval/sources/osha_1915_subpart_b.txt` with explicit `===
+SECTION 1915.NN ===` markers, because CFR section numbering
+("1915.11") doesn't fit `chunker.py`'s NAVSEA-style header regex (which
+expects 1–2 digit groups; "1915" is four) — extending that regex to also
+match CFR numbering risked false-positiving on the many other four-digit
+numbers that appear incidentally in regulatory prose (dates, Federal
+Register citations, cross-references to other standard numbers). Explicit
+markers, parsed by `ingest.parse_osha_sections()`, avoid that risk
+entirely; each resulting chunk is still produced by `chunker.chunk_text()`
+for real sentence-aware splitting, just tagged with its section
+explicitly rather than by regex detection — the same approach
+`ingest_cases()` already uses for `case_data`'s `case_id`.
+
 ## 5. Known debt / open questions
 
 - No corpus size/scale assumptions have been tested yet; Phase 1's DoD is
@@ -216,8 +260,7 @@ Phase 1's own test suite, both fixed the same pass rather than left open:
   properly means letting overlap reach back into a *previous* chunk's
   sentences rather than just the current one, which needs a real design
   pass, not a quick patch.
-- OSHA CFR 1915 excerpts (the third planned Phase 1 corpus source) are not
-  sourced yet — same PDF-extraction effort ADR-005 describes for NAVSEA
-  8010 hasn't been run against 29 CFR 1915. Not blocking Phase 1's DoD
-  (already met against the 8010 + cases_v1 corpus), but the corpus is
-  smaller than originally planned until this lands.
+- 29 CFR 1915 is scoped to Subpart B only (ADR-007) — other subparts
+  `case_data/cases_v1.json` entries cite (D, E, F, G, H — welding, deck
+  openings, rigging, lifting) aren't in the corpus yet. Not blocking Phase
+  1's DoD; worth expanding if Phase 2's eval set wants broader coverage.
