@@ -212,6 +212,39 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
 
 ---
 
+## Phase 8 — Real print as the 2D visualizer background
+
+- [x] Sourced the real USCG ACUSHNET HAER deck-plan sheet (Library of Congress, public domain) via a live browser session, since this sandbox's own network blocks `tile.loc.gov` directly
+- [x] `visualizer/assets/bg_acushnet_deckplan.png` — cropped/resized capture of the real sheet, replacing the generated `bg_blueprint.png` as `Main.gd`'s background
+- [x] `Main.gd` recalibrated: `FRAME_MIN`/`FRAME_MAX` now match the vessel's real frame envelope (0-110, not the old generic 0-200), `X_MIN`/`X_MAX`/`BAND_*` constants measured off the real image's own printed scale and deck rows
+- [x] Bow/stern orientation disclosed and handled without mirroring the image's own text: the real print has the bow on the right (opposite the old schematic's left-to-right convention) — `X_MIN`/`X_MAX` swapped rather than the image mirrored
+- [x] Verified with a Python/PIL mockup reproducing `Main.gd`'s exact calibration against the real background and real ACUSHNET demo fixture data (fall-protection package lands near the bow, matching its real compartment) — not an actual Godot render, no Godot installed in this build sandbox; see ARCHITECTURE.md Known Debt
+- [ ] Real Godot in-engine screenshot to true up the mockup-based calibration
+- [ ] 3D companion view (`Main3D.tscn`) still uses its own simplified rectangular-hull geometry, not this real print — out of scope for this phase (Donnie asked for "whichever is faster right now, probably 2D")
+
+**Definition of done:** The live 2D visualizer shows the actual HAER drawing, not a generated abstraction of it, with work packages positioned correctly against the real deck rows and frame scale. **Met**, pending the real-Godot-screenshot follow-up above.
+
+---
+
+## Phase 9 — WebSocket connectivity fix + Inboard Profile as default view + switchable views
+
+- [x] Diagnosed and fixed a real "nothing happens" bug: `agent_core/events.py` and `Main.gd` both connected to the hostname `"localhost"`, which can resolve to a different address family on each side of a dual-stack machine (Windows in particular) — both sides pinned to the literal loopback address `127.0.0.1` instead. Regression test: `tests/test_events.py::test_default_host_is_the_literal_loopback_address_not_a_hostname`
+- [x] HUD status line now shows live connection state (orange "not connected -- retrying" / green "connected") instead of static unchanging text, so this class of bug is visible next time instead of looking identical to "nothing to show yet"
+- [x] Sourced HAER Sheet 3/10 ("Inboard Profile" — a real side cross-section), calibrated independently against its own pixel geometry, cross-checked against `docs/uscg-acushnet-ars9-source.md`'s known compartment identities (Lazarette aft-most, Forepeak Tank forward-most)
+- [x] Sheet 3 (Inboard Profile) is now `Main.gd`'s default background — every one of the scene's five deck bands corresponds to a real row on this sheet, unlike Phase 8's Deck Plan sheet
+- [x] Phase 8's Deck Plan sheet kept, not discarded — both sheets now switchable at runtime with the **V key** (`Main.gd`'s `VIEWS` array), each with independent calibration; toggling re-lays-out the last-received data against the new view rather than resetting the scene
+- [x] Verified with a Python/PIL mockup reproducing `Main.gd`'s exact per-view constants against the real ACUSHNET demo fixture data for both views — not an actual Godot render, no Godot installed in this build sandbox; see ARCHITECTURE.md Known Debt
+- [x] `demo_broadcaster.py` now waits for a real client connection (polling, 30s timeout) instead of a blind `time.sleep(3)`, and stays running after replaying instead of exiting immediately — a script that returns right after replay kills its own server (daemon thread), which was silently losing the connection on any real-world window-switching delay
+- [x] Confirmed live end-to-end on Donnie's own Windows machine after the connectivity fix: connected, markers appeared, HITL awaiting/decided events rendered correctly
+- [x] Marker rendering reworked after direct feedback on the first live look ("looks like a colored smudge... hard to see on a white background"): `HAZARD_COLOR`/`DEFAULT_MARKER_COLOR`/`CONFLICT_COLOR` switched to the Okabe-Ito colorblind-safe palette, `glow_sprite()`'s blurred dot replaced with a new crisp `marker_pin()` asset, marker labels switched to fixed dark text with a white outline (ADR-028)
+- [x] Real Godot in-engine confirmation, both views — Donnie ran the finished build live: connected, crisp colored markers landed correctly on both the Inboard Profile (default) and Deck Plan (V-key toggle) views, matching the PIL mockup's predicted positions. Closes the mockup-only Known Debt row this and Phase 8 both carried
+- [ ] 3D companion view (`Main3D.tscn`) still out of scope — unchanged from Phase 8's framing
+- [ ] **Logged, not fixed:** on the Deck Plan (top-down) view, the ALOFT/STAGING band sits in the fixed page-top margin the same way it does on the Inboard Profile (side cross-section) view — correct for a side view (aloft is physically "up"), but reads oddly on a top-down plan, where there's no "up" on the page for aloft work to correspond to. Reported directly by Donnie after confirming the toggle works ("side view still has aloft at the top of the page vice where it would be in a top down view"), explicitly deferred ("don't fix it, save for later") rather than requested as an immediate fix. Would need a Deck-Plan-specific placement convention for aloft/over-the-side work that doesn't just reuse the side-view's margin position, since "above the page" doesn't mean the same thing on both drawing types
+
+**Definition of done:** The visualizer actually connects and shows live data end-to-end on Donnie's own machine (not just in the sandbox), the default view is the correct drawing type for the scene's band scheme, and a flagged conflict can be cross-referenced against more than one real angle of the ship. **Met and confirmed live** — Donnie ran the finished build on his own machine: connection works, both views render correctly with crisp readable markers, and the V-key toggle works mid-scene.
+
+---
+
 ## Phase status
 
 | Phase | Status | Date done |
@@ -227,3 +260,5 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
 | 5.85 — Second-pass review response (fail-open gaps in 5.5's own fixes) | ✅ | 2026-07-25 |
 | 6 — Lock it in | ⬜ | |
 | 7 — Real HITL reviewer web app | ✅ (auth, intake form, live updates scoped out) | 2026-08-08 |
+| 8 — Real print as the 2D visualizer background | ✅ (Godot-render verification still pending) | 2026-08-08 |
+| 9 — Connectivity fix + Inboard Profile default view + switchable views | ✅ confirmed live on Donnie's machine | 2026-08-08 |

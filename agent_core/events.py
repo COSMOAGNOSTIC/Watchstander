@@ -60,7 +60,16 @@ class EventBroadcaster:
     first emit() so importing agent_core never opens a socket by itself.
     """
 
-    def __init__(self, host: str = "localhost", port: int = 8081):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8081):
+        # "localhost" is a DNS name, not an address -- on a dual-stack
+        # machine (very common on Windows) it can resolve to the IPv6
+        # loopback (::1) for the server side and the IPv4 loopback
+        # (127.0.0.1) for the client side (or vice versa), depending on
+        # resolver order, and the two sides then never actually reach
+        # each other: the server socket exists, the client socket exists,
+        # neither errors, and no data ever crosses. Binding to the literal
+        # loopback address removes that ambiguity. See visualizer/Main.gd
+        # and ARCHITECTURE.md ADR-026 for the client-side half of this fix.
         self.host = host
         self.port = port
         self._clients: set = set()

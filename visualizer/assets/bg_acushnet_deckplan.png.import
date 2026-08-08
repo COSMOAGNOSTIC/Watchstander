@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b10qgmi8imom5"
-path="res://.godot/imported/compartment_tile.png-bd7bcd7f2ba687ed5821149bd4691dcc.ctex"
+uid="uid://bw2c8qo7ab0g7"
+path="res://.godot/imported/bg_acushnet_deckplan.png-b0e31c161137a474898943ce5574848c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/compartment_tile.png"
-dest_files=["res://.godot/imported/compartment_tile.png-bd7bcd7f2ba687ed5821149bd4691dcc.ctex"]
+source_file="res://assets/bg_acushnet_deckplan.png"
+dest_files=["res://.godot/imported/bg_acushnet_deckplan.png-b0e31c161137a474898943ce5574848c.ctex"]
 
 [params]
 

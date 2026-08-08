@@ -75,7 +75,35 @@ def compartment_tile(size=64, color=(90, 140, 180)):
     return img
 
 
+def marker_pin(size=56, outline_width=4):
+    """
+    A crisp, opaque "map pin" dot -- white fill, dark outline, no blur.
+    Added 2026-08-08 (ARCHITECTURE.md ADR-028) to replace `glow_sprite()`
+    as `Main.gd`'s work-package/review-station marker on the real print
+    backgrounds (ADR-025/ADR-027): `glow_sprite()`'s soft Gaussian-blurred
+    circle was designed to read as a glow against the dark procedural
+    schematic (`bg_blueprint.png`) and reads as an unreadable smudge
+    against a real drawing's white/cream paper -- reported directly
+    ("it looks like a colored smudge... make the pinpoints not look like
+    an ink smudge"). `Main.gd` tints the white fill via `modulate` at
+    runtime (hazard-category color); the dark outline is drawn UNDER the
+    white fill here so it stays a constant, hazard-color-independent ring
+    that keeps every marker legible against white regardless of hue.
+    """
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    r = size / 2 - outline_width - 1
+    cx = cy = size / 2
+    d.ellipse(
+        [cx - r - outline_width, cy - r - outline_width, cx + r + outline_width, cy + r + outline_width],
+        fill=(20, 22, 28, 255),
+    )
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(255, 255, 255, 255))
+    return img
+
+
 bg_blueprint().save("bg_blueprint.png")
 glow_sprite().save("node_glow.png")
 compartment_tile().save("compartment_tile.png")
+marker_pin().save("marker_pin.png")
 print("assets written")

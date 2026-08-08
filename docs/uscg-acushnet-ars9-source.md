@@ -20,6 +20,15 @@ real frame station numbers printed directly on the sheet.
   format, e.g. `B-102-6E`, `A-101-A`), and a printed frame-number scale (AP at frame 110 down to
   FP at the bow) plus a 0-220 ft / 0-50 m distance bar. Sheet 9 of 10, "Shell Expansion," shows the
   actual hull curvature and frame lines if ever needed for a curve-accurate model later.
+- Sheet 3 of 10, "Inboard Profile" — added 2026-08-08 (ARCHITECTURE.md ADR-027) as the 2D
+  visualizer's default background. A genuine side cross-section (not a top-down plan like Sheet
+  5): compartments stacked by real deck height, with the same AP=110/FP=0 frame-scale convention
+  and the same right-side-is-bow orientation as Sheet 5. Used for `visualizer/Main.gd`'s
+  `VIEWS[0]` ("Inboard Profile") pixel calibration — see that file's top-of-file comment for the
+  exact constants. This sheet's native capture resolution makes the smallest printed frame-tick
+  numbers illegible to read directly, so the calibration was cross-checked against this doc's
+  already-known compartment identities instead (Lazarette landing aft-most, Forepeak Tank landing
+  forward-most, matching their real names) rather than relying on tick-mark reading alone.
 - **Unlike Turner Joy, real frame station numbers ARE printed on this sheet** — no synthetic
   placement values needed for the frame axis.
 

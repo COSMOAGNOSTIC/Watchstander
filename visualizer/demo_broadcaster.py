@@ -108,11 +108,47 @@ SCRIPT = [
 ]
 
 
+CONNECT_TIMEOUT_SECONDS = 30.0
+POLL_INTERVAL_SECONDS = 0.2
+
+
+def _wait_for_a_client(broadcaster: "events.EventBroadcaster", timeout: float) -> bool:
+    """
+    Block until at least one WebSocket client (the visualizer) is actually
+    connected, or the timeout elapses. Replaces a blind `time.sleep(3)` --
+    that fixed wait assumed the visualizer would always connect within 3
+    seconds of the server starting, which silently breaks the moment a
+    human is switching windows/apps in between (a real report: a
+    broadcaster run finished and its daemon-thread server died *before*
+    the Godot editor was even open) -- broadcasting into an empty
+    `_clients` set is a silent no-op (see EventBroadcaster.emit), so the
+    whole demo would replay into the void with no error and no visual
+    sign anything was wrong, indistinguishable from the ADR-026
+    connectivity bug this project already hit once.
+    """
+    waited = 0.0
+    while waited < timeout:
+        if broadcaster._clients:
+            return True
+        time.sleep(POLL_INTERVAL_SECONDS)
+        waited += POLL_INTERVAL_SECONDS
+    return False
+
+
 def main() -> None:
     broadcaster = events.get_broadcaster()
     broadcaster.start()
-    print("Waiting for the visualizer to connect on ws://localhost:8081 ...")
-    time.sleep(3)
+    print("Waiting for the visualizer to connect on ws://127.0.0.1:8081 ...")
+    print("(open visualizer/ in Godot and run Main.tscn now, if it isn't already running)")
+    if not _wait_for_a_client(broadcaster, CONNECT_TIMEOUT_SECONDS):
+        print(
+            "No visualizer connected within %.0f seconds -- broadcasting anyway, but "
+            "nothing will be visible until one connects (this is a silent no-op, not an "
+            "error, by design)." % CONNECT_TIMEOUT_SECONDS
+        )
+    else:
+        print("Visualizer connected.")
+
     print("Replaying demo sequence.")
     for event_type, payload in SCRIPT:
         broadcaster.emit(event_type, **payload)
@@ -120,7 +156,24 @@ def main() -> None:
         # so a human watching the demo - or the recorded GIF - can actually
         # read each one before it's replaced.
         time.sleep(3.2)
-    print("Done.")
+    print("Done replaying. Server stays up -- press Ctrl+C to exit, or Enter to replay again.")
+
+    # The server runs on a daemon thread (agent_core/events.py) -- once this
+    # process's main thread exits, that thread is killed immediately,
+    # closing the WebSocket server out from under a still-open visualizer.
+    # Staying alive here (instead of returning right after the last emit)
+    # means a slow window-switch, a paused demo, or just wanting to look at
+    # the final state longer never costs the connection.
+    try:
+        while True:
+            input()
+            print("Replaying demo sequence.")
+            for event_type, payload in SCRIPT:
+                broadcaster.emit(event_type, **payload)
+                time.sleep(3.2)
+            print("Done replaying. Press Enter to replay again, or Ctrl+C to exit.")
+    except (KeyboardInterrupt, EOFError):
+        print("\nExiting.")
 
 
 if __name__ == "__main__":
