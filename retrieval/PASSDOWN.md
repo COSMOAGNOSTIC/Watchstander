@@ -5,6 +5,86 @@ next, what was decided but not built" so this can be picked back up cold.
 
 ---
 
+## Session 8 — 2026-08-08 — Phase 2 build: hybrid retrieval, DoD met
+
+**Status:** Phase 2 complete. Definition of Done ("hybrid retrieval
+measurably beats vector-only on the eval set") met and verified by the
+eval harness, not eyeballed: 82% vs. 73% top-1 accuracy. 127/127 tests
+passing (106 → 127: +21 across `test_retrieval_bm25.py`,
+`test_retrieval_compression.py`, `test_retrieval_eval_harness.py`, and
+new hybrid-mode cases added to `test_retrieval_retriever.py`/
+`test_retrieval_vector_store.py`).
+
+**What happened:** Built all three Phase 2 pieces additively on top of
+Phase 1's `Retriever` — passing no `bm25_index` still reproduces Phase 1
+exactly, same tests, same assertions, still green:
+
+- `bm25_index.py` — `BM25Index`, pure-Python `rank_bm25` (`BM25Okapi`)
+  wrapper, built via `BM25Index.from_vector_store()` from a new
+  `VectorStore.get_all()` method (Chroma stays the one place chunk data
+  lives; BM25's index is a derived snapshot, not a second copy).
+- `compression.py` — `compress()`, sentence-level term-overlap
+  extraction (not LLM summarization — edge-first per ADR-003), reuses
+  `chunker.split_sentences()` (renamed from private `_split_sentences`
+  for this reuse).
+- `retriever.py`'s hybrid path — vector + BM25 candidate pools fused
+  via reciprocal rank fusion (RRF, `k=60`), each surviving result
+  compressed before being returned.
+- `retrieval/eval/` — new eval harness (`scenarios.py`: 11 hand-verified
+  query -> expected-chunk pairs across all three corpus sources;
+  `run_eval.py`: real ingestion + deterministic hashed-BOW embedder,
+  no live network; checked-in `baseline.json`).
+
+Two real bugs found via testing, both fixed the same session (full
+writeup in `ARCHITECTURE.md` ADR-008, `AOSE.md`):
+
+1. BM25's IDF degeneracy on tiny test fixtures (a term in 1 of 2 docs
+   scores `idf = log(1) = 0` exactly) — not a bug in the code, a real
+   property of the classic Okapi BM25 formula that only showed up
+   because unit-test fixtures were smaller than any real corpus. Fixed
+   by flooring every affected fixture at 3+ documents.
+2. The RRF candidate pool pulled from each ranker before fusion was
+   too narrow at small `top_k` (`pool_size = max(top_k*3, top_k)` → 3
+   at `top_k=1`), causing a genuine BM25 top-pick that vector search
+   didn't surface at all to lose a phantom RRF tie to a vector-only
+   result — the tie-break silently always favored vector results due
+   to dict/sort insertion order. Caught because the eval harness's
+   first real run showed hybrid tying vector-only (73%/73%) instead of
+   beating it, not because the bug looked wrong on inspection. Root-
+   caused with a direct raw-score debugging script isolating the exact
+   failing scenario (`case-firstmarine-explosion`), then fixed by
+   flooring `pool_size` at 20. Re-ran the eval after the fix: 82% vs.
+   73% — genuinely ahead.
+
+**Not done, deliberately:** Two of the 11 eval scenarios
+(`navsea-4.3.6-ammunition`, `navsea-11.2.2-smoke-boundary`) still fail
+in both arms, for an unrelated, pre-existing reason: `chunker.py`
+merges a short section into the same chunk as the following section,
+and ADR-006's "last header wins" carry-forward tags that merged chunk
+with the *later* section even when the query-relevant text is in the
+*earlier* section's portion. Logged as known debt in `ARCHITECTURE.md`
+§5 (not blocking this session's DoD — identical failure in both arms
+means hybrid still measurably wins the comparison the DoD actually
+asks for). Worth a `chunk_size` tuning pass or a smarter carry-forward
+rule if it starts affecting real retrievals rather than just these two
+eval scenarios.
+
+Also added `rank_bm25` to `pyproject.toml`'s `retrieval` optional-
+dependency group and re-verified the fresh-venv CI-equivalence check
+(bare `pytest` after `pip install -e ".[dev,retrieval]"` into a clean
+venv) — same gap ADR-006 already fixed once for `sentence-transformers`/
+`chromadb`, caught proactively this time instead of after the fact.
+
+**Next up:** Phase 2 is Watchstander's retrieval sub-project's last
+currently-scoped phase (Phase 3/4/Databricks/certs items in
+`MIGRATION.md` are separate, longer-horizon tracks). No immediate next
+build step for `retrieval/` unless Donnie wants to revisit the two
+known-debt chunking-granularity scenarios, expand corpus coverage
+(other 1915 subparts `cases_v1.json` cites), or start one of the
+longer-horizon Phase 3+ tracks.
+
+---
+
 ## Session 7 — 2026-08-08 — Second corpus source: OSHA 1915 Subpart B
 
 **Status:** Closes the "OSHA CFR 1915 excerpts" open item carried since

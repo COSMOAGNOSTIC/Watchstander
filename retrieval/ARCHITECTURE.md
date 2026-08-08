@@ -28,14 +28,24 @@ retrieval/
                             real Chroma wiring (in-memory ephemeral by default,
                             persistent when given a directory)
   retriever.py               RetrievalResult dataclass, Retriever class -- real
-                            retrieve(), embed_fn injectable for testing
+                            retrieve(), embed_fn injectable for testing,
+                            Phase 2 hybrid mode (bm25_index) with RRF fusion
   citation_formatter.py      format_citation() -- real, SOURCE_TITLES registry
   ingest.py                  corpus ingestion: chunk + embed + upsert real
                             source documents into a persistent collection
+  bm25_index.py              BM25Index, BM25Result -- Phase 2 keyword search
+                            (see ADR-008)
+  compression.py             compress() -- Phase 2 sentence-level context
+                            compression (see ADR-008)
   sources/
     navsea_8010_ch4.txt      original manual text, Chapter 4 (see ADR-005)
     navsea_8010_ch11.txt     original manual text, Chapter 11
     osha_1915_subpart_b.txt  original CFR text, 1915.11-1915.16 (see ADR-007)
+  eval/
+    __init__.py               package docstring, disambiguation from repo-root eval/
+    scenarios.py               fixed, hand-verified query -> expected (source_id, section) pairs
+    run_eval.py                harness runner: vector-only vs hybrid top-1 accuracy
+    baseline.json               checked-in result (see ADR-008)
   README.md
   MIGRATION.md
   ARCHITECTURE.md          (this file)
@@ -48,6 +58,9 @@ tests/
   test_retrieval_vector_store.py
   test_retrieval_retriever.py
   test_retrieval_citation_formatter.py
+  test_retrieval_bm25.py
+  test_retrieval_compression.py
+  test_retrieval_eval_harness.py
   test_retrieval_ingest.py
   test_retrieval_integration.py   full pipeline against real 8010 source text
 ```
@@ -244,8 +257,89 @@ for real sentence-aware splitting, just tagged with its section
 explicitly rather than by regex detection — the same approach
 `ingest_cases()` already uses for `case_data`'s `case_id`.
 
+**ADR-008 — Phase 2: hybrid retrieval (BM25 + vector, RRF fusion,
+context compression).** (2026-08-08) Closes Phase 2's DoD: "Hybrid
+retrieval measurably beats vector-only on the eval set." Three additive
+pieces, all opt-in — passing no `bm25_index` to `Retriever` reproduces
+Phase 1's behavior exactly (same tests, same assertions, still green):
+
+- `bm25_index.py` — `BM25Index`, a pure-Python `rank_bm25`
+  (`BM25Okapi`) wrapper. No model download, no network, at index-build
+  or query time, unlike `embedder.py`'s real path — so it's directly,
+  honestly testable with no injected/faked substitute needed.
+  `BM25Index.from_vector_store()` builds it from a snapshot of whatever
+  `VectorStore.get_all()` (new method, this ADR) returns, rather than
+  keeping a second copy of corpus data anywhere — Chroma stays the one
+  place source-of-truth chunk data lives.
+- `retriever.py`'s hybrid path — vector search and BM25 both run, and
+  their rankings are fused via reciprocal rank fusion (RRF, `k=60`,
+  the Cormack et al. standard): `score(doc) = sum over rankers of
+  1/(k + rank + 1)`. A real reranking step over the combined candidate
+  set, not "concatenate and dedupe."
+- `compression.py` — `compress()`, sentence-level extraction (not LLM
+  summarization — Watchstander's live graph is edge-first/zero-network
+  by design, ADR-003) selecting the `max_sentences` (default 2)
+  highest query-term-overlap sentences from a chunk, original order
+  preserved.
+
+Two bugs found and fixed via testing, not by inspection:
+
+1. BM25's IDF term is mathematically degenerate on tiny corpora — for
+   a term in exactly 1 of 2 documents, `idf = log((N-df+0.5)/(df+0.5))
+   = log(1) = 0` exactly, and goes negative at N=1. Real property of
+   the classic Okapi BM25 formula, not a `bm25_index.py` bug; only
+   surfaced because unit-test fixtures were far smaller than any real
+   corpus. Fixed by flooring every affected test fixture at 3+
+   documents, the same size floor a real (if small) corpus clears
+   trivially.
+2. The candidate pool pulled from each ranker before RRF fusion was
+   too narrow at small `top_k` (`pool_size = max(top_k * 3, top_k)` →
+   pool of 3 when `top_k=1`). A document one ranker ranks #1 but the
+   other doesn't surface at all within that narrow pool gets an RRF
+   score identical to a candidate that's genuinely tied — `1/(60+0+1)`
+   either way — and the tie was silently broken by dict/sort insertion
+   order, which always favored `vector_results` since it's fused first.
+   Caught via the eval harness (`retrieval/eval/`) showing hybrid tying
+   vector-only (73%/73%) instead of beating it, then root-caused with a
+   direct raw-score debugging script showing BM25's genuine #1 pick
+   (`cases_v1/HW-FIRSTMARINE`, score 17.189) losing a phantom tie to a
+   vector-only result never even challenged on merit. Fixed by
+   flooring `pool_size` at 20 regardless of `top_k`, so both rankers'
+   real top candidates get a chance to compete in fusion. Eval result
+   after the fix: **hybrid 82% vs. vector-only 73%** top-1 accuracy —
+   genuinely, measurably ahead, not a tie. See `retrieval/eval/` for
+   the harness and `retrieval/eval/baseline.json` for the checked-in
+   result; `tests/test_retrieval_eval_harness.py` regression-guards
+   both the baseline and the literal "hybrid beats vector-only"
+   assertion.
+
+Eval harness itself (`retrieval/eval/`) mirrors the repo root's
+`eval/`: fixed, hand-verified `scenarios.py` (11 real queries spanning
+all three corpus sources, each `(source_id, section)` expectation
+checked against actual source text, not invented), `run_eval.py`
+(reuses `ingest.py`'s real ingestion functions with `embed_chunks`
+patched to a deterministic hashed-bag-of-words embedder — the same
+network-free-but-not-fake pattern `test_retrieval_integration.py`
+already established — rather than duplicating ingestion logic or
+requiring the live network path).
+
 ## 5. Known debt / open questions
 
+- Two of the 11 eval scenarios (`navsea-4.3.6-ammunition`,
+  `navsea-11.2.2-smoke-boundary`) fail under both vector-only and
+  hybrid retrieval, for the same underlying reason: a short section
+  (4.3.6, 11.2.2) gets merged by `chunker.py` into the same ~800-char
+  chunk as the following section (4.3.7, 11.2.3), and per ADR-006's
+  "last header wins" carry-forward rule, that merged chunk's `section`
+  tag reflects the *later* header even though the query-relevant text
+  sits in the *earlier* section's portion of the same chunk. Not a
+  Phase 2 regression — same failures under vector-only before Phase 2
+  existed. Not blocking Phase 2's DoD (hybrid still measurably beats
+  vector-only, 82% vs. 73%, with these two scenarios failing
+  identically in both arms), but a real chunking-granularity limit
+  worth a `chunk_size` tuning pass or a smarter carry-forward rule
+  (e.g. "first header, not last, when a chunk spans two sections") if
+  it starts affecting real retrievals.
 - No corpus size/scale assumptions have been tested yet; Phase 1's DoD is
   "returns the correct chunk," not "performs well at scale" — that's
   implicitly Phase 2's hybrid-retrieval eval-set territory.

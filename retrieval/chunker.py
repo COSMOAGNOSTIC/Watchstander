@@ -50,9 +50,12 @@ class Chunk:
     section: str | None = None
 
 
-def _split_sentences(text: str) -> list[tuple[str, int, int]]:
+def split_sentences(text: str) -> list[tuple[str, int, int]]:
     """Return (sentence_text, start_char, end_char) for every non-blank
-    sentence in `text`, offsets relative to `text` itself."""
+    sentence in `text`, offsets relative to `text` itself. Public -- Phase 2's
+    context compression (retrieval/compression.py) reuses this same
+    sentence-boundary logic rather than re-implementing it, so a chunk's
+    "sentences" mean the same thing everywhere in this package."""
     spans: list[tuple[int, int]] = []
     start = 0
     for m in _SENTENCE_BOUNDARY.finditer(text):
@@ -85,7 +88,7 @@ def chunk_text(text: str, source_id: str, chunk_size: int = 800, overlap: int = 
     if not text or not text.strip():
         return []
 
-    sentences = _split_sentences(text)
+    sentences = split_sentences(text)
     n = len(sentences)
     chunks: list[Chunk] = []
     i = 0

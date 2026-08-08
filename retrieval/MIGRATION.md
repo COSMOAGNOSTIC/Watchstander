@@ -102,14 +102,30 @@ four hot workers shall be attended by a single fire watch," tagged
 
 ## Phase 2 — Hybrid retrieval
 
-- [ ] BM25 keyword search alongside the existing vector search.
-- [ ] Reranking step over the combined candidate set.
-- [ ] Context compression before results are returned.
-- [ ] Small eval set (a handful of known query -> expected-chunk pairs, in
+- [x] BM25 keyword search alongside the existing vector search.
+      `retrieval/bm25_index.py` — `BM25Index`, pure-Python `rank_bm25`
+      (`BM25Okapi`), built via `BM25Index.from_vector_store()` from
+      `VectorStore.get_all()` (new method). See ARCHITECTURE.md ADR-008.
+- [x] Reranking step over the combined candidate set. Reciprocal rank
+      fusion (RRF, `k=60`) in `retriever.py`'s hybrid path — genuine
+      fusion of two independently-scaled rankings, not concatenate-and-dedupe.
+- [x] Context compression before results are returned. `retrieval/compression.py`
+      — sentence-level term-overlap extraction (`compress()`), not LLM
+      summarization (edge-first per ADR-003).
+- [x] Small eval set (a handful of known query -> expected-chunk pairs, in
       the same checked-in-baseline spirit as `eval/` at the repo root).
+      `retrieval/eval/` — 11 hand-verified scenarios across all three
+      corpus sources, `run_eval.py`, checked-in `baseline.json`,
+      `tests/test_retrieval_eval_harness.py` regression guard.
 
 **Definition of done:** Hybrid retrieval measurably beats vector-only on the
-eval set.
+eval set. **Met** — 82% vs. 73% top-1 accuracy (9/11 vs. 8/11 of 11
+scenarios). Required fixing a real RRF pool-size bug first (initial result
+was a 73%/73% tie, not a win — see ARCHITECTURE.md ADR-008 for the full
+root-cause). Two scenarios still fail in both arms for an unrelated,
+pre-existing chunking-granularity reason (documented as known debt in
+ARCHITECTURE.md §5, not blocking this DoD since it affects both arms
+identically).
 
 ---
 

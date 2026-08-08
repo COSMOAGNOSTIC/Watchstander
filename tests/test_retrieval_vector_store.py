@@ -66,3 +66,30 @@ def test_upsert_is_idempotent_on_repeated_calls_with_same_ids():
 
     assert len(results) == 1
     assert results[0].text == "updated text"
+
+
+def test_get_all_on_empty_store_returns_empty_list():
+    store = VectorStore(collection_name="test_get_all_empty")
+    assert store.get_all() == []
+
+
+def test_get_all_returns_every_stored_chunk_as_plain_dicts():
+    store = VectorStore(collection_name="test_get_all")
+    chunks = [
+        _chunk("s#000", "fire watch capacity rule", section="4.4.3"),
+        _chunk("s#001", "completely unrelated bulkhead paint spec"),
+    ]
+    embeddings = [
+        Embedding(vector=[1.0, 0.0], model_name="fake"),
+        Embedding(vector=[0.0, 1.0], model_name="fake"),
+    ]
+    store.upsert(chunks, embeddings)
+
+    all_chunks = store.get_all()
+
+    assert len(all_chunks) == 2
+    by_id = {c["chunk_id"]: c for c in all_chunks}
+    assert by_id["s#000"]["text"] == "fire watch capacity rule"
+    assert by_id["s#000"]["source_id"] == "s"
+    assert by_id["s#000"]["section"] == "4.4.3"
+    assert by_id["s#001"]["section"] is None

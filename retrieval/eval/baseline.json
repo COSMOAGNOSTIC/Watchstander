@@ -1,0 +1,208 @@
+{
+  "scenario_count": 11,
+  "vector_only_top1_accuracy": 0.7272727272727273,
+  "hybrid_top1_accuracy": 0.8181818181818182,
+  "hybrid_beats_vector_only": true,
+  "vector_only_results": [
+    {
+      "id": "navsea-4.4.3-fire-watch-capacity",
+      "query": "how many hot workers can a single fire watch supervise",
+      "expected_source_id": "navsea_8010_ch4",
+      "expected_section": "4.4.3",
+      "actual_source_id": "navsea_8010_ch4",
+      "actual_section": "4.4.3",
+      "matched": true
+    },
+    {
+      "id": "navsea-4.2.1-written-notice",
+      "query": "written notice required before hot work begins",
+      "expected_source_id": "navsea_8010_ch4",
+      "expected_section": "4.2.1",
+      "actual_source_id": "navsea_8010_ch4",
+      "actual_section": "4.2.1",
+      "matched": true
+    },
+    {
+      "id": "navsea-4.3.6-ammunition",
+      "query": "hot work operations near ammunition or explosives",
+      "expected_source_id": "navsea_8010_ch4",
+      "expected_section": "4.3.6",
+      "actual_source_id": "osha_1915_subpart_b",
+      "actual_section": "1915.11",
+      "matched": false
+    },
+    {
+      "id": "navsea-11.1.6-boundary-record",
+      "query": "record of boundary openings and access cuts",
+      "expected_source_id": "navsea_8010_ch11",
+      "expected_section": "11.1.6",
+      "actual_source_id": "navsea_8010_ch11",
+      "actual_section": "11.1.6",
+      "matched": true
+    },
+    {
+      "id": "navsea-11.1.7-carrier-hangar",
+      "query": "hangar division door travel paths on carrier type ships",
+      "expected_source_id": "navsea_8010_ch11",
+      "expected_section": "11.1.7",
+      "actual_source_id": "navsea_8010_ch11",
+      "actual_section": "11.1.7",
+      "matched": true
+    },
+    {
+      "id": "navsea-11.2.2-smoke-boundary",
+      "query": "what is a smoke boundary set during a fire",
+      "expected_source_id": "navsea_8010_ch11",
+      "expected_section": "11.2.2",
+      "actual_source_id": "navsea_8010_ch11",
+      "actual_section": "11.2.3",
+      "matched": false
+    },
+    {
+      "id": "osha-1915.12-oxygen-threshold",
+      "query": "an employee may not enter a space where oxygen content by volume is below 19.5 percent",
+      "expected_source_id": "osha_1915_subpart_b",
+      "expected_section": "1915.12",
+      "actual_source_id": "osha_1915_subpart_b",
+      "actual_section": "1915.12",
+      "matched": true
+    },
+    {
+      "id": "osha-1915.14-marine-chemist",
+      "query": "hot work certified safe by a marine chemist or coast guard authorized person",
+      "expected_source_id": "osha_1915_subpart_b",
+      "expected_section": "1915.14",
+      "actual_source_id": "osha_1915_subpart_b",
+      "actual_section": "1915.14",
+      "matched": true
+    },
+    {
+      "id": "osha-1915.16-warning-labels",
+      "query": "warning signs and labels must be understood by all employees",
+      "expected_source_id": "osha_1915_subpart_b",
+      "expected_section": "1915.16",
+      "actual_source_id": "osha_1915_subpart_b",
+      "actual_section": "1915.16",
+      "matched": true
+    },
+    {
+      "id": "case-stjohns-confined-space",
+      "query": "welder entered a space without atmospheric testing for oxygen deficiency",
+      "expected_source_id": "cases_v1",
+      "expected_section": "CS-2023-STJOHNS",
+      "actual_source_id": "cases_v1",
+      "actual_section": "CS-2023-STJOHNS",
+      "matched": true
+    },
+    {
+      "id": "case-firstmarine-explosion",
+      "query": "explosion from flammable gases during welding cutting operations",
+      "expected_source_id": "cases_v1",
+      "expected_section": "HW-FIRSTMARINE",
+      "actual_source_id": "osha_1915_subpart_b",
+      "actual_section": "1915.14",
+      "matched": false
+    }
+  ],
+  "hybrid_results": [
+    {
+      "id": "navsea-4.4.3-fire-watch-capacity",
+      "query": "how many hot workers can a single fire watch supervise",
+      "expected_source_id": "navsea_8010_ch4",
+      "expected_section": "4.4.3",
+      "actual_source_id": "navsea_8010_ch4",
+      "actual_section": "4.4.3",
+      "matched": true
+    },
+    {
+      "id": "navsea-4.2.1-written-notice",
+      "query": "written notice required before hot work begins",
+      "expected_source_id": "navsea_8010_ch4",
+      "expected_section": "4.2.1",
+      "actual_source_id": "navsea_8010_ch4",
+      "actual_section": "4.2.1",
+      "matched": true
+    },
+    {
+      "id": "navsea-4.3.6-ammunition",
+      "query": "hot work operations near ammunition or explosives",
+      "expected_source_id": "navsea_8010_ch4",
+      "expected_section": "4.3.6",
+      "actual_source_id": "navsea_8010_ch4",
+      "actual_section": "4.3.7",
+      "matched": false
+    },
+    {
+      "id": "navsea-11.1.6-boundary-record",
+      "query": "record of boundary openings and access cuts",
+      "expected_source_id": "navsea_8010_ch11",
+      "expected_section": "11.1.6",
+      "actual_source_id": "navsea_8010_ch11",
+      "actual_section": "11.1.6",
+      "matched": true
+    },
+    {
+      "id": "navsea-11.1.7-carrier-hangar",
+      "query": "hangar division door travel paths on carrier type ships",
+      "expected_source_id": "navsea_8010_ch11",
+      "expected_section": "11.1.7",
+      "actual_source_id": "navsea_8010_ch11",
+      "actual_section": "11.1.7",
+      "matched": true
+    },
+    {
+      "id": "navsea-11.2.2-smoke-boundary",
+      "query": "what is a smoke boundary set during a fire",
+      "expected_source_id": "navsea_8010_ch11",
+      "expected_section": "11.2.2",
+      "actual_source_id": "navsea_8010_ch11",
+      "actual_section": "11.2.3",
+      "matched": false
+    },
+    {
+      "id": "osha-1915.12-oxygen-threshold",
+      "query": "an employee may not enter a space where oxygen content by volume is below 19.5 percent",
+      "expected_source_id": "osha_1915_subpart_b",
+      "expected_section": "1915.12",
+      "actual_source_id": "osha_1915_subpart_b",
+      "actual_section": "1915.12",
+      "matched": true
+    },
+    {
+      "id": "osha-1915.14-marine-chemist",
+      "query": "hot work certified safe by a marine chemist or coast guard authorized person",
+      "expected_source_id": "osha_1915_subpart_b",
+      "expected_section": "1915.14",
+      "actual_source_id": "osha_1915_subpart_b",
+      "actual_section": "1915.14",
+      "matched": true
+    },
+    {
+      "id": "osha-1915.16-warning-labels",
+      "query": "warning signs and labels must be understood by all employees",
+      "expected_source_id": "osha_1915_subpart_b",
+      "expected_section": "1915.16",
+      "actual_source_id": "osha_1915_subpart_b",
+      "actual_section": "1915.16",
+      "matched": true
+    },
+    {
+      "id": "case-stjohns-confined-space",
+      "query": "welder entered a space without atmospheric testing for oxygen deficiency",
+      "expected_source_id": "cases_v1",
+      "expected_section": "CS-2023-STJOHNS",
+      "actual_source_id": "cases_v1",
+      "actual_section": "CS-2023-STJOHNS",
+      "matched": true
+    },
+    {
+      "id": "case-firstmarine-explosion",
+      "query": "explosion from flammable gases during welding cutting operations",
+      "expected_source_id": "cases_v1",
+      "expected_section": "HW-FIRSTMARINE",
+      "actual_source_id": "cases_v1",
+      "actual_section": "HW-FIRSTMARINE",
+      "matched": true
+    }
+  ]
+}

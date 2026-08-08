@@ -88,3 +88,22 @@ class VectorStore:
                 )
             )
         return out
+
+    def get_all(self) -> list[dict]:
+        """Return every stored chunk as {"chunk_id", "text", "source_id",
+        "section"}. Added for Phase 2's BM25Index.from_vector_store() --
+        Chroma is the one place chunk data actually lives, so the keyword
+        index is built from a snapshot of it rather than a second copy of
+        the corpus living in retrieval/ingest.py or anywhere else."""
+        if self._collection.count() == 0:
+            return []
+        result = self._collection.get()
+        return [
+            {
+                "chunk_id": chunk_id,
+                "text": text,
+                "source_id": metadata.get("source_id", ""),
+                "section": metadata.get("section") or None,
+            }
+            for chunk_id, text, metadata in zip(result["ids"], result["documents"], result["metadatas"])
+        ]

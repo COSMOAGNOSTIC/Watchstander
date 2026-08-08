@@ -227,6 +227,59 @@ every AOSE round finds a bug, and that's fine as long as the round was
 real (comparing against actual page content, actually running the test)
 rather than skipped because "this part is simple."
 
+**Round 4 (2026-08-08, Phase 2 hybrid retrieval, ADR-008).** Two real
+findings, both caught by actually running things rather than trusting
+code review — the eval harness itself is what this round's own
+mechanism relied on, which is worth naming as a methodology point: the
+harness wasn't just Phase 2's deliverable, it was also the thing that
+caught Phase 2's own bug.
+
+- **Assumed BM25 test fixtures needed the same rigor as any other
+  fixture; found a real mathematical property that broke naive small
+  fixtures.** `test_retrieval_bm25.py`'s first draft used 2-document
+  toy corpora, matching the existing style of other small unit-test
+  fixtures in this repo. Four tests failed with 0 or negative scores.
+  Diagnosed directly (not guessed) with a Python one-liner comparing a
+  2-doc vs. 3-doc `BM25Okapi` corpus on the identical query — the 2-doc
+  case returned `[0., 0.]`, the 3-doc case returned real differentiating
+  scores. Root cause: Okapi BM25's IDF term is `log((N-df+0.5)/(df+0.5))`;
+  for a term in exactly 1 of 2 documents that's `log(1) = 0` exactly,
+  and negative at N=1. Not a `bm25_index.py` bug — a real, well-known
+  property of the formula that this repo's existing small-fixture
+  convention happened to walk straight into. Fixed by flooring every
+  affected fixture (`test_retrieval_bm25.py`, `test_retrieval_retriever.py`'s
+  hybrid-mode tests) at 3+ documents via a shared `_FILLER_DOCS`/
+  `_filler_chunks()` helper, with the reasoning documented inline so a
+  future small-fixture addition doesn't walk into the same trap blind.
+- **Assumed the eval harness's first real run would just confirm the
+  design; it caught a genuine bug instead.** `python -m retrieval.eval.run_eval`
+  against the real 11-scenario set returned hybrid tying vector-only
+  (73%/73%, 8/11 each) — failing Phase 2's literal Definition of Done
+  ("hybrid retrieval *measurably beats* vector-only"), not a subtle
+  near-miss. Root-caused with a targeted debugging script isolating the
+  one flipped scenario (`case-firstmarine-explosion`): BM25's raw
+  ranking put the correct chunk (`cases_v1/HW-FIRSTMARINE`) clearly
+  first (score 17.189, next-best 9.483), but at the eval harness's real
+  `top_k=1` call, `retriever.py`'s candidate pool per ranker
+  (`pool_size = max(top_k*3, top_k)`) was only 3 — narrow enough that
+  the correct chunk, which vector search didn't surface at all within
+  that narrow pool, and a vector-only chunk that also didn't appear in
+  BM25's pool, computed *identical* RRF scores (`1/(60+0+1)` each,
+  since both were rank-0 in exactly one ranking). The tie was then
+  broken silently by dict/sort insertion order — `vector_results` is
+  fused before `bm25_results` in the function call, so ties always
+  favored vector regardless of which candidate was actually more
+  relevant. Fixed by flooring `pool_size` at 20 regardless of `top_k`.
+  Re-ran the eval after the fix: 82%/73%, genuinely ahead, confirmed by
+  the harness itself rather than assumed from the code change alone.
+
+**Outcome:** two real findings, both fixed same-session, both caught
+by executing (a debugging script against real `BM25Okapi` output, the
+eval harness's own real run) rather than by inspection. `compression.py`
+and `VectorStore.get_all()` had no defects found this round — their
+test suites (5 and 2 new tests respectively) passed clean on first real
+run.
+
 ## Where the discipline is still open
 
 - Other 1915 subparts `case_data/cases_v1.json` cites (D, E, F, G, H) are
@@ -234,3 +287,12 @@ rather than skipped because "this part is simple."
   confined_space coverage gap it closes (ADR-007), not because the rest
   isn't relevant. Worth revisiting once Phase 2's eval set defines what
   hazard-category coverage it actually needs.
+- Two eval scenarios (`navsea-4.3.6-ammunition`, `navsea-11.2.2-smoke-
+  boundary`) fail identically under both vector-only and hybrid
+  retrieval, due to a `chunker.py`/ADR-006 chunking-granularity
+  limitation unrelated to Phase 2 (a short section's content lands in a
+  chunk tagged with the *following* section's header). Doesn't block
+  Phase 2's DoD (both arms fail identically, so the comparison the DoD
+  asks for still holds), but is a real limitation worth a future round
+  if it starts affecting real retrievals rather than just these two
+  scenarios — see ARCHITECTURE.md §5.
