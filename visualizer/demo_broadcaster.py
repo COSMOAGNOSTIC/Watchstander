@@ -39,69 +39,25 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agent_core import events  # noqa: E402
+from agent_core.demo_fixtures import acushnet_demo_work_packages  # noqa: E402
 
+# Flattened from the same real WorkPackageState objects reviewer/ runs
+# through the actual graph (agent_core/demo_fixtures.py) into the raw
+# event-payload dict shape this scripted sequence broadcasts -- one
+# source of truth for the ACUSHNET compartment/frame data, so this demo
+# path and the real-graph reviewer demo path can't quietly drift apart.
 WORK_PACKAGES = [
     {
-        # Sheet 5, Second Deck: "Electric & Machine Shop (B-2)" -- hot
-        # work (e.g. welding repair on shop equipment) in the shop itself.
-        # Frame range read from the printed scale -- see
-        # docs/uscg-acushnet-ars9-source.md for the +/-2-3 frame caveat.
-        "work_package_id": "HW-2201",
-        "hazard_categories": ["hot_work"],
-        "compartment_id": "Electric & Machine Shop (B-2)",
-        "deck_level": "Second Deck",
-        "frame_start": 70,
-        "frame_end": 84,
-        "is_aloft": False,
-        "is_over_side": False,
-    },
-    {
-        # Same real compartment, same sheet: a confined-space entry (e.g.
-        # bilge/void inspection reachable from the shop) during the same
-        # work period -- the shared compartment_id is what a real
-        # find_all_conflicts() run would use to flag this pair, exactly the
-        # First Marine LLC pattern already in case_data/cases_v1.json
-        # (hot work + confined space entry, same space, not tested first).
-        # Frame range genuinely overlaps HW-2201's this time, not just the
-        # compartment_id match.
-        "work_package_id": "CS-2202",
-        "hazard_categories": ["confined_space"],
-        "compartment_id": "Electric & Machine Shop (B-2)",
-        "deck_level": "Second Deck",
-        "frame_start": 74,
-        "frame_end": 80,
-        "is_aloft": False,
-        "is_over_side": False,
-    },
-    {
-        # No single labeled compartment on Sheet 5 corresponds to "aloft"
-        # work by definition -- aloft work happens above/outside interior
-        # spaces. Placed at Main Deck amidships, frame 60-70, approximate
-        # and not tied to a printed label -- see source doc. Illustrative
-        # only, not part of the flagged pair.
-        "work_package_id": "ALOFT-2203",
-        "hazard_categories": ["working_aloft"],
-        "compartment_id": "Main Deck, amidships (way of mast)",
-        "deck_level": "Main Deck",
-        "frame_start": 60,
-        "frame_end": 70,
-        "is_aloft": True,
-        "is_over_side": False,
-    },
-    {
-        # Sheet 5, Main Deck: "Anchor Windlass Room (A-102-E)" and the
-        # open forward weather deck around it -- a real space near the
-        # bow where fall-protection-relevant work (anchor detail, forward
-        # deck work) would plausibly occur.
-        "work_package_id": "FALL-2204",
-        "hazard_categories": ["fall_protection"],
-        "compartment_id": "Anchor Windlass Room (A-102-E)",
-        "deck_level": "Main Deck",
-        "frame_start": 2,
-        "frame_end": 12,
-        "is_aloft": False,
-        "is_over_side": False,
-    },
+        "work_package_id": wp.work_package_id,
+        "hazard_categories": [h.value if hasattr(h, "value") else h for h in wp.hazard_categories],
+        "compartment_id": wp.spatial.compartment_id,
+        "deck_level": wp.spatial.deck_level,
+        "frame_start": wp.spatial.frame_start,
+        "frame_end": wp.spatial.frame_end,
+        "is_aloft": wp.spatial.is_aloft,
+        "is_over_side": wp.spatial.is_over_side,
+    }
+    for wp in acushnet_demo_work_packages()
 ]
 
 SCRIPT = [

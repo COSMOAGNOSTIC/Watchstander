@@ -1,0 +1,1062 @@
+diff --git a/.github/workflows/tests.yml b/.github/workflows/tests.yml
+index 248efc6..298c2bd 100644
+--- a/.github/workflows/tests.yml
++++ b/.github/workflows/tests.yml
+@@ -23,5 +23,11 @@ jobs:
+       # ".[dev]" would repeat the exact CI-vs-local install-path gap
+       # documented in AOSE.md's "verification blind spot" section (the
+       # eval/ package import failure) -- caught here proactively instead.
+-      - run: pip install -e ".[dev,retrieval]"
++      #
++      # "reviewer" added alongside Phase 7 (reviewer/) -- tests/test_reviewer.py
++      # imports fastapi.testclient for real, same reasoning as "retrieval"
++      # above: caught before this ever went red, by checking this exact
++      # file against the new optional-dependency group rather than assuming
++      # a local "python -m pytest" pass meant CI would pass too.
++      - run: pip install -e ".[dev,retrieval,reviewer]"
+       - run: pytest -v
+diff --git a/.gitignore b/.gitignore
+index 0b51da3..f0aa43f 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -4,6 +4,8 @@ __pycache__/
+ .pytest_cache/
+ .coverage
+ *.db
++*.db-shm
++*.db-wal
+ .venv/
+ venv/
+ visualizer/.godot/
+diff --git a/AOSE.md b/AOSE.md
+index 52ca004..4bf45f5 100644
+--- a/AOSE.md
++++ b/AOSE.md
+@@ -40,9 +40,16 @@ The evaluation harness added in Round 2 broke CI on every single push from the m
+ 
+ This is the same principle as the section above, aimed at a different actor: **verifying a fix by re-running it the same way you always have isn't verification, it's repetition.** The fix here (`eval*` added to `packages.find`, same as `agent_core` already was) was confirmed by installing into a genuinely fresh virtualenv and invoking `pytest` exactly as CI does — the same discipline this document already argues for when judging AI critique, applied to a human-run (i.e. Claude-run) test command that had quietly been checking the wrong thing all along.
+ 
++**Round 4 (2026-08-08, real HITL reviewer web app, ADR-024):** the finding this round started from didn't come from an AI review pass — it came from Donnie actually watching the visualizer run live for the first time and asking two direct questions: where's the data explaining why a package was flagged, and where's the actual human decision interface. Both answers traced to the same real, previously-undocumented-as-a-gap fact: `events.py`'s broadcast policy correctly keeps review content off the public WebSocket (Section 8/ADR-013), but nothing in the repo had ever built the other half of a HITL system — a real interface where a human reads that content and answers the real `interrupt()`. Every existing consumer of `interrupt()` either hardcoded the answer (`tests/test_graph.py`/`test_hitl.py`) or never touched the real graph at all (`demo_broadcaster.py`'s fully scripted event replay). This is the same class of gap Round 3's "fixing a finding can hide a related failure mode" lesson describes, but caught by a human directly exercising the system end-to-end rather than by a model tracing code.
++
++A second, real bug surfaced while building the fix, caught by testing the actual approve flow rather than by inspection: `state.tasks[i].interrupts` (LangGraph's own state snapshot) keeps listing a `Send()`-fanned-out task's original `Interrupt` object even after that task has been resumed and completed — only `task.result` being non-`None` actually distinguishes "done" from "still genuinely paused." The first version of `reviewer/graph_driver.py`'s `list_pending_reviews()` read `task.interrupts` without checking `task.result`, so an approved package never left the dashboard's pending list even though the underlying graph state (`reviewed_packages`, `hitl_disposition`, `cleared_for_execution`) was already correct. Reproduced directly with a debugging script before the fix, then caught again by `tests/test_reviewer.py::test_approving_one_package_leaves_the_others_pending` actually driving the flow through FastAPI's `TestClient` rather than asserting against `graph.invoke()` in isolation. Fixed by skipping any task where `task.result is not None`.
++
++**Outcome:** one real design gap (no human-facing decision interface existed) closed by building `reviewer/`; one real state-handling bug (stale interrupt objects on resolved tasks) found and fixed by testing the actual end-to-end flow, not the individual functions in isolation. Also verified against a genuinely live running server (`uvicorn` + `curl`), not just the in-process test client, catching nothing further but confirming the in-process tests weren't hiding a request/response-layer issue.
++
+ ## Where the discipline is still open
+ 
+ - `_fire_watch_capacity_conflicts()`'s size gate checks raw per-fire-watch package count, not per-time-window concurrency — found 2026-08-08 while updating its tests for ADR-023's limit change (1 → 4). A group spread across genuinely non-overlapping schedule windows can still exceed the raw-count gate and get flagged, even though no more than the limit was ever concurrently active. Over-flagging direction, not under-flagging — lower severity than most rows in ARCHITECTURE.md Known Debt, where this is tracked in full. Not fixed this pass.
++- `reviewer/` has no auth, no real work-package intake form, and no live-updating dashboard — see ARCHITECTURE.md §8.5 Known Debt. Acceptable for one local reviewer on their own machine; would need addressing before any wider exposure.
+ 
+ ## Accepted, not open
+ 
+diff --git a/ARCHITECTURE.md b/ARCHITECTURE.md
+index 61c933d..88bb39e 100644
+--- a/ARCHITECTURE.md
++++ b/ARCHITECTURE.md
+@@ -34,6 +34,8 @@ Out of scope for v1: Navy mishap data (classification/aggregation risk — delib
+ | `case_data/cases_v1.json` | Sourced OSHA/DOL case histories, tagged by hazard category |
+ | `case_data/navsea_8010_psns_v2014.json` | Site-scoped (PSNS) governing-procedure citations sourced from the public-domain NAVSEA 8010 Manual, hot_work only — see Section 6 |
+ | `visualizer/` | Godot 4 2D spatial scene rendering work packages, conflicts, and HITL state on a schematic shipyard deck layout (Section 8) |
++| `reviewer/` | Local FastAPI app reading real graph checkpoint state — the actual human-facing Approve/Reject interface, real `interrupt()`/`Command(resume=...)`, not simulated (Section 8.5) |
++| `agent_core/demo_fixtures.py` | Real ACUSHNET-sourced `WorkPackageState` demo data, shared by `visualizer/demo_broadcaster.py` (flattened to raw event dicts) and `reviewer/` (run through the real graph) so both demo paths use identical data |
+ | `eval/` | Fixed-scenario evaluation harness measuring `deconfliction.py`/`retrieval.py`/`reasoning.py`'s deterministic-fallback path against a checked-in baseline (Section 7) |
+ 
+ ```mermaid
+@@ -132,6 +134,78 @@ Unlike cosmoai-adept's visualizer — an agent walking between abstract tool sta
+ 
+ **3D blockout companion view (2026-07-28, ADR-019).** A second, static, non-networked scene (`visualizer/Main3D.tscn`) renders the demo vessel — USCG Cutter ACUSHNET / ex-USS SHACKLE (ARS-9), sourced in `docs/uscg-acushnet-ars9-source.md` — as a simplified 3D hull with compartments extruded at their real frame positions. This does not supersede the 2D live view above; `Main.tscn` is still the only scene wired to `agent_core.events`. The 3D scene exists because a real drawing with printed frame numbers made a "greybox"-style blockout (straight hull, real compartment positions, no traced curvature) tractable in the same spirit as this section's own ADR-006 — get the real spatial data right, simplify the geometry deliberately and say so, rather than either importing licensed CAD or claiming false precision. Verified by an actual headless render (Godot 4.3 + Xvfb + software GL) during development, not just written and assumed to work.
+ 
++## 8.5 Real HITL Reviewer Web App (`reviewer/`)
++
++**Status: built, tested against the real graph, not yet given auth or a real intake form — see MIGRATION.md Phase 7.**
++
++The visualizer (Section 8) is a status view: it shows *that* a package is
++flagged and waiting, deliberately never *why* (events.py's broadcast policy).
++Until this landed, nothing in the repo let an actual human read a flagged
++package's full brief and make a real decision — the only things that ever
++answered a real `interrupt()` were the test suite (hardcoding `"approve"`)
++and `demo_broadcaster.py` (which fakes the whole event sequence and never
++touches the real graph at all). `reviewer/` closes that gap: a small local
++FastAPI app that runs the real `build_graph()`, persists real `interrupt()`
++state across HTTP requests via a real `SqliteSaver` (not `MemorySaver`,
++which every existing test uses and which would lose all pending reviews on
++process restart), and gives a human a page showing the full description,
++conflict rationale, synthesized safety brief, and its provenance tag (LLM
++vs. deterministic fallback) — with a real Approve/Reject form whose submit
++calls `graph.invoke(Command(resume={interrupt_id: decision_text}), ...)`,
++genuinely resuming the paused graph.
++
++**Why a separate channel instead of loosening `events.py`'s broadcast
++policy.** The policy (Section 8, ADR-013) exists because the visualizer's
++WebSocket is a public, unauthenticated broadcast — anything emitted there
++is available to any listener on the port, by design (it's meant to drive a
++demo screen, not gate access to sensitive content). The reviewer app's data
++(descriptions, conflict rationale, full safety briefs) is exactly the
++content that policy exists to keep off that channel. Rather than add a flag
++to selectively broadcast more, `reviewer/` reads this data directly from the
++graph's own checkpointed state (`graph.get_state()`), which was already
++there — no new broadcast, no policy exception, no risk of a future listener
++on 8081 accidentally getting content it was never supposed to see.
++
++**A real bug found by testing the actual approve flow, not by inspection.**
++`state.tasks[i].interrupts` keeps listing a Send()-fanned-out task's
++original `Interrupt` object even after that task has been resumed and
++completed — only `task.result` being non-`None` actually distinguishes
++"done" from "still genuinely paused." The first version of
++`list_pending_reviews()` didn't check this, so an approved package never
++left the pending queue in the dashboard, only in the underlying graph state.
++Caught by `tests/test_reviewer.py::test_approving_one_package_leaves_the_others_pending`
++actually running the approve flow end-to-end through the FastAPI
++`TestClient`, not by reading the code. Fixed by skipping any task where
++`task.result is not None` before reading its `.interrupts`.
++
++**Partial resume, verified directly.** `hitl.py`'s one-`interrupt()`-per-
++package design (ADR-022) is what makes this app's per-package review UX
++possible at all: `Command(resume={one_interrupt_id: decision})` resolves
++only that package, leaving every other pending interrupt on the same or a
++different thread untouched — confirmed with a direct debugging script
++before building the UI around the assumption, then re-confirmed by
++`test_approving_one_package_leaves_the_others_pending`.
++
++**Data source: shared, not duplicated.** `agent_core/demo_fixtures.py`
++(new) holds the real ACUSHNET compartment/frame data as actual
++`WorkPackageState` objects, meant to be run through the real graph.
++`visualizer/demo_broadcaster.py`'s scripted event-payload dicts are now
++derived from this same source at import time rather than hand-duplicated —
++the two demo paths (scripted visualizer event replay vs. real reviewer
++graph run) can no longer quietly drift onto different compartment/frame
++values.
++
++**Known debt, disclosed not hidden:** no auth (fine for one local reviewer
++on their own machine, the same trust boundary the visualizer's undefended
++WebSocket already assumes — not safe to expose beyond localhost); no real
++work-package intake form yet, only "seed the ACUSHNET demo"; no live-
++updating dashboard (refresh to see new state, unlike the visualizer's
++WebSocket push); `langgraph`'s own msgpack serializer emits a deprecation
++warning about unregistered types (`WorkPackageState`, `RiskLevel`,
++`HitlDisposition`, `HazardCategory`) on every checkpoint read/write — not
++yet registered via `allowed_msgpack_modules`, which a future `langgraph`
++version will require rather than warn about.
++
+ ## 9. Known Debt
+ 
+ | Item | Notes |
+@@ -145,6 +219,8 @@ Unlike cosmoai-adept's visualizer — an agent walking between abstract tool sta
+ | No dependency version pinning | `pyproject.toml` has no version bounds beyond `>=` floors and there's no lockfile |
+ | Governing-procedure ruleset is single-site (PSNS) by design, not yet multi-site | `procedural_lookup._RULESET_FILES` has one entry. Adding a second installation (NASNI, NAVSTA Everett, SURFPAC vs AIRPAC vs AIRLANT, etc.) is architecturally supported (add a sourced JSON file + a dict entry) but not yet done — no second site's rules exist in this repo yet, and none should be assumed |
+ | `_fire_watch_capacity_conflicts()`'s size gate uses raw per-fire-watch package count, not per-time-window concurrency | Discovered 2026-08-08 while updating the fire-watch capacity tests for ADR-023's limit change. The function groups all packages sharing a `fire_watch_id` and short-circuits (`continue`, no violation) only if that *total* count is `<= MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH` — but if the total exceeds the limit only because packages are spread across genuinely non-overlapping time windows (e.g. 3 packages on one fire watch in week 1, 2 more on the same fire watch in week 3 — 5 total, but never more than 3 concurrently active), the pairwise loop still runs and flags every temporally-overlapping pair within the inflated group, even though no more than 3 were ever simultaneously covered by that fire watch at any instant. Not a safety gap in the over-flagging direction the rest of this module favors — it's an *over*-flagging bug, not an under-flagging one, so it's lower priority than most rows in this table, but it is a real false-positive path. Would need the size check to run per maximal temporally-overlapping cluster within a `fire_watch_id` group, not on the group's raw total. Not fixed this pass — flagged, not silently worked around; the regression test covering the correct "spread across non-overlapping windows" case was deliberately designed to avoid triggering this gap rather than paper over it (see `test_fire_watch_capacity_not_flagged_when_schedules_dont_overlap`'s docstring) |
++| `reviewer/` has no auth, no real intake form, and no live-updating dashboard | See Section 8.5. Acceptable for one local reviewer on their own machine; not safe to expose beyond localhost as-is |
++| `langgraph`'s msgpack serializer warns on every reviewer checkpoint read/write | `WorkPackageState`, `RiskLevel`, `HitlDisposition`, `HazardCategory` are "unregistered types" per `langgraph.checkpoint.serde.jsonplus` — currently a deprecation warning, will become a hard block (`LANGGRAPH_STRICT_MSGPACK=true`) in a future `langgraph` version. Fix is to register them via `allowed_msgpack_modules`; not done yet since it's still just a warning |
+ 
+ ### Extraction Candidates
+ 
+@@ -182,6 +258,7 @@ Not everything below gets extracted — this is a candidates list, not a commitm
+ | ADR-021 | 2026-07-31 | First application of the Design Principle 7 research sweep, run against both Extraction Candidates | Temporal chit-expiration engine: swept OR-Tools/CP-SAT-family scheduling libraries (PyJobShop, CPMpy, python-constraint) and task schedulers (APScheduler) — none solve the actual problem shape (independent-clock permit expiration + spatial deconfliction, flagged before shift start, not mid-shift). Confirmed genuine gap; OR-Tools CP-SAT flagged as a candidate modeling substrate, not a ready answer, before any hand-rolled solver design starts. `eval/` harness pattern: this is golden-file testing, an established, already-implemented pattern (not novel) — downgraded off the standalone-extraction path per the policy's own "not everything gets extracted" clause; only the known-gap-scenario-ID-drift assertion is original enough to maybe be worth a short writeup |
+ | ADR-022 | 2026-07-28 | `hitl_gate_node`'s interrupt-per-package loop restructured into `hitl_prepare_node` / `hitl_route` / `hitl_gate_single_node`, fanned out via LangGraph's `Send()` | Resuming a later `interrupt()` in the old loop replayed every earlier package's path in the same node invocation, including its `events.emit()` calls — the `conflict_rationale` duplication guard (ADR-012) papered over the symptom but not the replay itself. One invocation per package, each independently checkpointed, removes the shared loop that made replay possible in the first place, rather than adding another guard on top of it. Verified 67/67 three times (sandbox, Donnie's machine, post-rebase) |
+ | ADR-023 | 2026-08-08 | Pulled the primary-source NAVSEA 8010 PDF directly, verified all seven `navsea_8010_psns_v2014.json` entries against it, and corrected `MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH` from a conservative placeholder of `1` to the manual's actual stated limit of `4` | Decided while scoping the retrieval harness's Phase 1 chunking source (see `retrieval/ARCHITECTURE.md` ADR-005) to pull the original manual text rather than chunk the pre-extracted JSON — reading the actual Chapter 4/11 text for that purpose surfaced that the fire-watch capacity entry's numeric limit, flagged as unverified since 2026-07-27 (ADR-018) and repeatedly cited in Known Debt, was directly readable in the primary source ("No more than four hot workers shall be attended by a single fire watch," Chapter 4.4.3) and had simply never been checked. Fixed rather than left conservative now that verification was possible; closes two long-standing Known Debt rows. Surfaced a separate, real gap in `_fire_watch_capacity_conflicts()`'s size-gate logic while updating its tests for the new limit (see Known Debt) — not fixed this pass, disclosed instead |
++| ADR-024 | 2026-08-08 | Built a real local HITL reviewer web app (`reviewer/`) reading directly from graph checkpoint state, rather than loosening `events.py`'s public broadcast policy to carry review content | After watching the visualizer run live for the first time, Donnie identified that it's a status view only — no interface existed anywhere in the repo for a human to actually see why a package was flagged (full description, conflict rationale, safety brief, LLM-vs-deterministic provenance) or record a real decision; the only things that had ever answered a real `interrupt()` were the test suite and a fully-scripted, non-graph demo. Reading from `graph.get_state()` instead of broadcasting more over the WebSocket keeps ADR-013's "operational metadata only, publicly" policy intact for the visualizer while still giving a real reviewer the full picture through a separate, local-only channel |
+ 
+ ## 11. Maintenance Rules
+ 
+diff --git a/MIGRATION.md b/MIGRATION.md
+index 5a90bc0..10ed55a 100644
+--- a/MIGRATION.md
++++ b/MIGRATION.md
+@@ -194,6 +194,24 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
+ 
+ ---
+ 
++## Phase 7 — Real HITL reviewer web app
++
++- [x] `reviewer/graph_driver.py` — `ReviewerService`, wraps `build_graph()` with a persistent `SqliteSaver` so pending reviews survive across separate HTTP requests, not just within one process's memory
++- [x] `reviewer/app.py` — FastAPI app: dashboard listing pending reviews + recently decided packages, a detail page showing full description/conflict rationale/safety brief/provenance, a real Approve/Reject form
++- [x] Real, not simulated: submitting a decision calls `graph.invoke(Command(resume={interrupt_id: decision_text}), config=...)` against the actual graph, the same mechanism `tests/test_graph.py` exercises directly
++- [x] Partial resume verified: approving one flagged package leaves every other pending package (same or different thread) untouched and independently reviewable
++- [x] `agent_core/demo_fixtures.py` — real ACUSHNET `WorkPackageState` demo data, shared with `visualizer/demo_broadcaster.py` so the two demo paths can't drift onto different compartment/frame data
++- [x] `tests/test_reviewer.py` — 6 tests against the real graph through FastAPI's `TestClient`, including the fix for a real bug (a resumed task's stale `Interrupt` object was still being read as pending — see ARCHITECTURE.md §8.5)
++- [x] `pyproject.toml` `reviewer` optional-dependency group (`fastapi`, `uvicorn`, `python-multipart`) + `reviewer*` added to `packages.find`
++- [x] Live smoke test against the real running server (`uvicorn` + `curl`), not just the in-process test client
++- [ ] Auth (currently none — local-only trust model, disclosed in ARCHITECTURE.md §8.5 Known Debt)
++- [ ] Real work-package intake form (currently: seed the ACUSHNET demo only)
++- [ ] Live-updating dashboard (currently: refresh to see new state)
++
++**Definition of done:** A human can open a page, read the full reason a real work package was flagged (including whether the brief came from a live LLM or the deterministic fallback), and make a real decision that genuinely resumes the graph — not simulated, not a status light. **Met** — the auth/intake-form/live-update items above are scoped-out follow-ups, not blockers to this phase's own bar.
++
++---
++
+ ## Phase status
+ 
+ | Phase | Status | Date done |
+@@ -207,4 +225,5 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
+ | 5.5 — External review response (graph import + HITL disposition) | ✅ | 2026-07-25 |
+ | 5.75 — Evaluation harness | ✅ | 2026-07-25 |
+ | 5.85 — Second-pass review response (fail-open gaps in 5.5's own fixes) | ✅ | 2026-07-25 |
+-| 6 — Lock it in | ⬜ | |
+\ No newline at end of file
++| 6 — Lock it in | ⬜ | |
++| 7 — Real HITL reviewer web app | ✅ (auth, intake form, live updates scoped out) | 2026-08-08 |
+\ No newline at end of file
+diff --git a/PASSDOWN.md b/PASSDOWN.md
+index 82c9910..2ceec3b 100644
+--- a/PASSDOWN.md
++++ b/PASSDOWN.md
+@@ -1,8 +1,8 @@
+ # PROJECT PASSDOWN: Watchstander
+ ## Civilian Shipyard OSHA Spatial & Temporal Deconfliction Agent Graph
+ 
+-**Last updated:** 2026-07-25 (later same day)
+-**Status:** Live on GitHub, CI now genuinely green — the graph import was broken and untested until this session's external-review response (see Section 9). ARCHITECTURE.md added; live spatial visualizer (Phase 5) built and demo-recorded. Phase 4 case-data expansion still open.
++**Last updated:** 2026-08-08
++**Status:** Live on GitHub, CI genuinely green. Live spatial visualizer (Phase 5) built and demo-recorded; a real HITL reviewer web app (Phase 7, `reviewer/`) now exists too — see Section 14, the visualizer's status-only view had no human-facing decision interface until this session. Phase 4 case-data expansion and Phase 6 ("Lock it in") still open.
+ 
+ ---
+ 
+@@ -217,4 +217,22 @@ Initial research pass complete via OSHA.gov and DOL.gov public releases. Real, c
+ 
+ **Follow-up, same session:** checked cosmoai-adept for the same class of bug before closing this out. It uses `setup.py`'s `find_packages()` with no include filter (unlike Watchstander's `pyproject.toml`, which explicitly lists `agent_core*`), so any future top-level package there gets auto-registered — no equivalent gap exists. Confirmed by a fresh-venv install and a plain `pytest -v` run (CI's exact invocation): 59/59 passing. No changes needed on that repo.
+ 
++---
++
++## 14. Session Notes — 2026-08-08: Real HITL reviewer web app (Phase 7)
++
++**Status:** Phase 7 done. 133/133 tests passing (127 → 133, all new: `tests/test_reviewer.py`).
++
++**Where this came from:** Donnie ran the visualizer live for the first time this session (previously he'd only seen the 3D blockout once, weeks ago, and had never watched the live 2D view or the graph do anything in real time). After watching it — packages placed, a conflict flagged red, the Safety Review station pulsing — he asked two direct questions: where's the data explaining *why* a package was flagged, and where's the actual human decision interface. Both answers were the same honest gap: `events.py`'s broadcast policy deliberately keeps that content off the visualizer's WebSocket (correct, by design — Section 8/ADR-013), but nothing in the repo had ever built the *other* half — a real place for a human to read the full brief and answer the real `interrupt()`. The only things that had ever resolved a real `interrupt()` before this session were `tests/test_graph.py`/`test_hitl.py` (hardcoding `"approve"`) and `demo_broadcaster.py` (which doesn't touch the real graph at all, just replays a scripted event sequence). His framing, verbatim in spirit: a status light with no lever to pull is pointless — a real reviewer needs to see the flagged problem, see the deterministic-vs-LLM reasoning, and have an actual interface to record their decision.
++
++**What got built:** `reviewer/` — a local FastAPI app, real `build_graph()` behind it, a persistent `SqliteSaver` (not `MemorySaver`, which every existing test uses and which would lose all pending state on process restart) so a review queued in one HTTP request survives to be decided in a separate later one. Dashboard lists pending reviews and recently-decided packages; a detail page shows the full description, conflict rationale, synthesized safety brief, and its provenance tag (`[SOURCE: LLM SYNTHESIS]` vs. `[SOURCE: DETERMINISTIC FALLBACK - LLM OFFLINE]` — literally the "LLM online/offline" signal Donnie asked about); a real Approve/Reject form whose submit calls `graph.invoke(Command(resume={interrupt_id: decision_text}), config=...)`, genuinely resuming the paused graph, not simulating a decision. `agent_core/demo_fixtures.py` (new) holds the real ACUSHNET compartment/frame demo data as actual `WorkPackageState` objects; `visualizer/demo_broadcaster.py` now derives its scripted event-payload dicts from this same source instead of duplicating the data by hand, so the two demo paths can't drift.
++
++One real bug found by testing the actual approve flow, not by code review: `state.tasks[i].interrupts` keeps listing a `Send()`-fanned-out task's original `Interrupt` object even after that task has been resumed and completed — `task.result` being non-`None` is what actually distinguishes "done" from "still genuinely paused." The first version of `list_pending_reviews()` didn't check this, so an approved package never left the dashboard's pending list even though the underlying graph state was correct. Caught by `test_approving_one_package_leaves_the_others_pending` actually running the flow end-to-end through FastAPI's `TestClient`. Fixed by skipping any task where `task.result is not None`. Full writeup: ARCHITECTURE.md §8.5, AOSE.md.
++
++Also verified against a genuinely live running server (`uvicorn` + `curl`), not just the in-process `TestClient` — seeded a real demo run, confirmed all three expected packages (`HW-2201`, `CS-2202`, `ALOFT-2203` — a real, previously-undocumented third conflict from `_vertically_stacked()`'s frame-range overlap with `HW-2201`, not staged) showed up, and pulled a detail page's rendered HTML directly to confirm the brief and provenance tag actually appear.
++
++**Not done, deliberately:** no auth (fine for one local reviewer on their own machine, the same trust boundary the visualizer's undefended WebSocket already assumes — disclosed as Known Debt, not hidden); no real work-package intake form yet (the only way to create a pending review is "seed the ACUSHNET demo" — a real intake form or API endpoint is a natural next step); no live-updating dashboard (refresh to see new state, unlike the visualizer's WebSocket push).
++
++**Next up:** either build real intake for `reviewer/` (a form, or an API a scheduling system could POST to) so it's not demo-data-only, or return to Phase 6 ("Lock it in")'s remaining open items (README staleness, adjacency tolerance, `deck_level` actually used in conflict detection) — not decided this session.
++
+ **Open questions for next session:** worth considering whether Watchstander's explicit `include=[...]` list in `pyproject.toml` should switch to `find_packages()`-style auto-discovery (matching cosmoai-adept) specifically so this class of bug can't recur the next time a new top-level package is added and someone forgets to list it.
+diff --git a/README.md b/README.md
+index 7a9fd85..95429bb 100644
+--- a/README.md
++++ b/README.md
+@@ -54,12 +54,15 @@ flowchart LR
+ - **`case_data/`** — sourced OSHA/DOL case histories (`cases_v1.json`) and site-scoped governing-procedure rulesets (`navsea_8010_psns_v2014.json`), tagged by hazard category, used to ground rationale generation.
+ - **`agent_core/events.py`** — lazy WebSocket broadcaster, no-op with no listener, feeding the visualizer.
+ - **`visualizer/`** — Godot 4 project rendering the graph's activity as a live schematic deck plan.
++- **`reviewer/`** — local FastAPI app, the real human-facing Approve/Reject interface: full brief, LLM-vs-deterministic provenance, genuine `interrupt()`/`Command(resume=...)` (see ARCHITECTURE.md Section 8.5).
+ - **`eval/`** — fixed-scenario evaluation harness scoring the deterministic-fallback path against a checked-in baseline (see ARCHITECTURE.md Section 7).
+ 
+ ## Watch It Live
+ 
+ `agent_core` broadcasts a WebSocket event at each stage of the graph — no configuration needed, it's a no-op until something connects. Open [`visualizer/`](visualizer/README.md) in Godot 4, run the main scene, then run [`visualizer/demo_broadcaster.py`](visualizer/demo_broadcaster.py) (no API key required) and watch work packages resolve through deconfliction, reasoning, and the Safety Review gate in real time — staged with real compartment names, deck levels, and frame positions from USCG Cutter ACUSHNET / ex-USS SHACKLE (ARS-9)'s public-domain HAER drawings, see [`docs/uscg-acushnet-ars9-source.md`](docs/uscg-acushnet-ars9-source.md). A separate static 3D blockout companion view (`visualizer/Main3D.tscn`) renders the same vessel's real compartment layout as a simplified hull — see [`visualizer/README.md`](visualizer/README.md#3d-blockout-companion-view-main3dtscn).
+ 
++The visualizer only shows *that* a package is flagged, deliberately never *why* (see `events.py`'s broadcast policy, ARCHITECTURE.md Section 8). For the actual human decision — reading the full brief and clicking a real Approve/Reject — see [`reviewer/`](reviewer/README.md): `pip install -e ".[dev,reviewer]"`, `uvicorn reviewer.app:app --reload`, seed a real ACUSHNET run, and work the review queue for real.
++
+ ## Project Docs
+ 
+ - [ARCHITECTURE.md](ARCHITECTURE.md) — component map, design principles, decision log
+diff --git a/agent_core/demo_fixtures.py b/agent_core/demo_fixtures.py
+new file mode 100644
+index 0000000..23cdf2b
+--- /dev/null
++++ b/agent_core/demo_fixtures.py
+@@ -0,0 +1,95 @@
++"""
++Shared demo work-package data, real ship-sourced (not synthetic), used by
++more than one consumer: `visualizer/demo_broadcaster.py` (fakes the event
++sequence for the 2D/3D visualizers, no real graph run) and `reviewer/`
++(runs this data through the REAL graph -- real deconfliction, real
++reasoning, a real interrupt() a human actually resolves). Living in one
++place means both stay honest about using the identical real compartment
++data rather than two copies drifting apart.
++
++Compartment names, deck levels, and frame ranges are read directly off
++USCG Cutter ACUSHNET / ex-USS SHACKLE (ARS-9)'s HAER (Historic American
++Engineering Record) drawing, Sheet 5 of 10 ("Deck Plans") -- Library of
++Congress HABS/AK-49, public domain (HABS/HAER/HALS documentation is
++"available to the public without restriction" per NPS). Not from
++case_data/ -- this is illustrative demo staging, not a sourced incident
++or a real work order. Full sourcing detail, including the frame-range
++estimation caveat (+/-2-3 frames, read from tick-mark proximity, not
++digitized coordinates) and the standard-frame-spacing assumption used to
++interpret them, is in docs/uscg-acushnet-ars9-source.md.
++
++Spatial linkage for the flagged pair below comes from the shared
++compartment_id ("Electric & Machine Shop (B-2)"), which
++deconfliction._same_compartment() supports independently of frame
++ranges -- the frame numbers additionally place both packages in a
++genuinely overlapping span this time, not just the same named space.
++ACUSHNET is an active Coast Guard cutter, not a Navy shipyard work site
++-- governing_installation is deliberately left unset here, since tagging
++her "PSNS" would misrepresent where she actually is.
++"""
++
++from agent_core.state import HazardCategory, RiskLevel, SpatialCoordinates, WorkPackageState
++
++
++def acushnet_demo_work_packages() -> list[WorkPackageState]:
++    """Real `WorkPackageState` objects for the graph -- not the raw dicts
++    `visualizer/demo_broadcaster.py`'s scripted event sequence uses, since
++    this data is meant to actually be run through `build_graph()`, not
++    just broadcast as pre-baked event payloads."""
++    return [
++        WorkPackageState(
++            work_package_id="HW-2201",
++            description=(
++                "Welding repair on shop equipment inside the Electric & Machine Shop (B-2), "
++                "Second Deck, frames 70-84."
++            ),
++            hazard_categories=[HazardCategory.HOT_WORK],
++            spatial=SpatialCoordinates(
++                compartment_id="Electric & Machine Shop (B-2)",
++                deck_level="Second Deck",
++                frame_start=70,
++                frame_end=84,
++            ),
++        ),
++        WorkPackageState(
++            work_package_id="CS-2202",
++            description=(
++                "Confined-space entry (bilge/void inspection reachable from the shop) inside "
++                "the Electric & Machine Shop (B-2), Second Deck, frames 74-80, during the same "
++                "work period as HW-2201."
++            ),
++            hazard_categories=[HazardCategory.CONFINED_SPACE],
++            spatial=SpatialCoordinates(
++                compartment_id="Electric & Machine Shop (B-2)",
++                deck_level="Second Deck",
++                frame_start=74,
++                frame_end=80,
++            ),
++        ),
++        WorkPackageState(
++            work_package_id="ALOFT-2203",
++            description="Working aloft, amidships, way of the mast, Main Deck, frames 60-70.",
++            hazard_categories=[HazardCategory.WORKING_ALOFT],
++            spatial=SpatialCoordinates(
++                compartment_id="Main Deck, amidships (way of mast)",
++                deck_level="Main Deck",
++                frame_start=60,
++                frame_end=70,
++                is_aloft=True,
++            ),
++        ),
++        WorkPackageState(
++            work_package_id="FALL-2204",
++            description=(
++                "Anchor detail / forward deck work near the Anchor Windlass Room (A-102-E), "
++                "Main Deck, frames 2-12."
++            ),
++            hazard_categories=[HazardCategory.FALL_PROTECTION],
++            spatial=SpatialCoordinates(
++                compartment_id="Anchor Windlass Room (A-102-E)",
++                deck_level="Main Deck",
++                frame_start=2,
++                frame_end=12,
++            ),
++        ),
++    ]
+diff --git a/pyproject.toml b/pyproject.toml
+index 2ebdca3..bfd142b 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -34,6 +34,18 @@ retrieval = [
+     "chromadb>=0.5",
+     "rank_bm25>=0.2",
+ ]
++# reviewer/ is a local web app, not imported by agent_core or the test
++# suite's core path -- only needed to actually run `uvicorn reviewer.app:app`.
++# python-multipart is FastAPI's real (undeclared, easy-to-miss) runtime
++# dependency for parsing the Approve/Reject form's application/x-www-form-
++# urlencoded body -- listed explicitly here rather than left implicit, the
++# same "don't repeat the eval/ CI-install-gap mistake" discipline this repo
++# already applies elsewhere (see ARCHITECTURE.md ADR-006).
++reviewer = [
++    "fastapi>=0.115",
++    "uvicorn>=0.30",
++    "python-multipart>=0.0.9",
++]
+ 
+ [tool.setuptools.packages.find]
+ # "eval*" is needed so tests/test_eval_harness.py's `from eval.run_eval import
+@@ -48,4 +60,4 @@ retrieval = [
+ # "retrieval*" (added retrieval/MIGRATION.md Phase 0) is included up front for
+ # the same reason, proactively -- this is the exact failure mode described
+ # above, so there's no reason to wait for CI to go red on it first.
+-include = ["agent_core*", "eval*", "retrieval*"]
++include = ["agent_core*", "eval*", "retrieval*", "reviewer*"]
+diff --git a/reviewer/README.md b/reviewer/README.md
+new file mode 100644
+index 0000000..6a82b6a
+--- /dev/null
++++ b/reviewer/README.md
+@@ -0,0 +1,67 @@
++# HITL Reviewer — real approve/reject interface
++
++A small local FastAPI app that is the human-facing counterpart the visualizer
++was always missing: it shows the *full* flagged-package brief — description,
++conflict rationale, synthesized safety brief, and whether that brief came
++from a live LLM call or the deterministic fallback — and takes a real
++Approve/Reject decision that resumes the actual LangGraph `interrupt()`. Not
++a demo, not simulated: the same `build_graph()` the test suite exercises,
++running for real.
++
++## Why this exists
++
++`visualizer/` (the Godot 2D/3D views) shows *that* a package is flagged and
++waiting — a status light. It deliberately never shows *why*:
++`agent_core/events.py` has an explicit policy to never broadcast full
++descriptions, conflict rationale, or safety-brief content over its WebSocket.
++That's correct for a public event stream, but it also means nothing in this
++repo, before this app existed, let a human actually read a flagged package's
++brief and make a real decision — the only things that ever answered a real
++`interrupt()` were the test suite (hardcoding `"approve"`) and
++`demo_broadcaster.py` (which doesn't even go through the real graph). See
++ARCHITECTURE.md ADR-024 for the full design writeup.
++
++## Running it
++
++```
++pip install -e ".[dev,reviewer]"
++uvicorn reviewer.app:app --reload
++```
++
++Open `http://127.0.0.1:8000/`. Click **"Seed a real ACUSHNET demo run"** —
++this runs the same real, sourced ACUSHNET compartment data
++(`agent_core/demo_fixtures.py`) through the real graph: real deconfliction,
++real reasoning (deterministic fallback unless `ANTHROPIC_API_KEY` is set),
++and a real `interrupt()` for every flagged package. Three packages will show
++up as pending review (two from a shared-compartment hot-work/confined-space
++conflict, one from an overlapping-frame-range vertical-stacking conflict).
++
++Click into a review, read the full brief and provenance tag, and hit Approve
++or Reject with an optional note. That decision genuinely resumes the graph
++— `reviewer/graph_driver.py`'s `submit_decision()` calls
++`graph.invoke(Command(resume={interrupt_id: decision_text}), config=...)`,
++the same mechanism `tests/test_graph.py` exercises directly. State persists
++in `reviewer/reviewer_state.db` (gitignored, local only) via a real
++`SqliteSaver`, so a review queued in one request survives to be decided in a
++completely separate later request — this is what makes it usable as an
++actual app instead of a single-process demo script.
++
++## What it deliberately doesn't do (yet)
++
++- **No auth.** Anyone who can reach the port can approve or reject anything.
++  Fine for one local reviewer working their own queue on their own machine
++  (same trust boundary the visualizer's undefended `ws://localhost:8081`
++  already assumes) — not safe to expose beyond localhost as-is.
++- **No real work-package intake form.** The only way to create a pending
++  review right now is "seed the ACUSHNET demo." A real intake form (or an
++  API endpoint a scheduling system could POST to) is a natural next step,
++  not built this session.
++- **No live-updating dashboard.** Refresh the page to see new state; no
++  WebSocket push like the visualizer has.
++
++## Relationship to the visualizer
++
++Independent, not a replacement. The visualizer is a live *status* view (what's
++happening, right now, across a whole roster). This is a *work* interface (what
++needs a decision, and the full context to make it). A production system would
++likely want both, wired to the same underlying graph runs.
+diff --git a/reviewer/__init__.py b/reviewer/__init__.py
+new file mode 100644
+index 0000000..a4fc91a
+--- /dev/null
++++ b/reviewer/__init__.py
+@@ -0,0 +1,11 @@
++"""
++Real HITL reviewer web app -- the human-facing counterpart to the
++Godot visualizer, which deliberately never shows why a package was
++flagged (see agent_core/events.py's broadcast policy). This package
++runs the real graph, persists real interrupt() state across HTTP
++requests via a local SqliteSaver, and lets a human actually approve or
++reject a flagged work package -- not simulate it.
++
++See reviewer/README.md for how to run it and ARCHITECTURE.md ADR-024
++for the design decision.
++"""
+diff --git a/reviewer/app.py b/reviewer/app.py
+new file mode 100644
+index 0000000..b9be0bf
+--- /dev/null
++++ b/reviewer/app.py
+@@ -0,0 +1,167 @@
++"""
++Real HITL reviewer web app.
++
++The visualizer (visualizer/) shows *that* something is flagged and
++waiting -- deliberately, per agent_core/events.py's broadcast policy, it
++never shows *why* (full description, conflict rationale, synthesized
++safety brief). This app is the other half: a local-only page where a
++human sees the full brief -- including whether it came from a live LLM
++call or the deterministic fallback (`safety_brief_provenance`) -- and a
++real Approve / Reject form that resumes the actual LangGraph
++`interrupt()`, not a simulated decision. See ARCHITECTURE.md ADR-024 for
++why this is a separate, local-only channel rather than loosening
++events.py's public broadcast policy.
++
++Run: `uvicorn reviewer.app:app --reload` from the repo root (see
++reviewer/README.md). No auth, no HTTPS, no multi-user support -- built
++for one local reviewer working the queue on their own machine, the same
++trust boundary the visualizer's undefended ws://localhost:8081 already
++assumes. Not safe to expose beyond localhost as-is -- see Known Debt in
++ARCHITECTURE.md.
++"""
++
++from __future__ import annotations
++
++import html
++import uuid
++
++from fastapi import FastAPI, Form
++from fastapi.responses import HTMLResponse, RedirectResponse
++
++from reviewer.graph_driver import ReviewerService
++
++app = FastAPI(title="Watchstander HITL Reviewer")
++service = ReviewerService()
++
++_PAGE_STYLE = """
++<style>
++  body { background:#0a1420; color:#cfe6ff; font-family: -apple-system, Segoe UI, sans-serif;
++         max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
++  h1, h2 { color: #7ec8ff; }
++  a { color: #7ec8ff; }
++  .card { background:#101f30; border:1px solid #244160; border-radius:8px;
++          padding:1rem 1.25rem; margin-bottom:1rem; }
++  .risk-critical, .risk-high { color:#ff8a8a; }
++  .risk-moderate { color:#ffd27e; }
++  .risk-low { color:#9adba8; }
++  .provenance { display:inline-block; font-size:0.8rem; padding:0.15rem 0.5rem;
++                border-radius:4px; background:#1c3350; color:#a9c8e6; margin-top:0.4rem; }
++  .provenance.llm { background:#1c4a2f; color:#9adba8; }
++  button { font-size:1rem; padding:0.5rem 1.25rem; border-radius:6px; border:none;
++           cursor:pointer; margin-right:0.5rem; }
++  .approve { background:#1c6b3a; color:white; }
++  .reject { background:#7a1f1f; color:white; }
++  textarea { width:100%; background:#0a1420; color:#cfe6ff; border:1px solid #244160;
++             border-radius:6px; padding:0.5rem; margin:0.5rem 0; }
++  .empty { color:#6e91b3; font-style:italic; }
++  .decided { color:#6e91b3; font-size:0.9rem; }
++</style>
++"""
++
++
++def _risk_class(risk_level: str) -> str:
++    return f"risk-{risk_level.lower()}" if risk_level else ""
++
++
++def _provenance_class(provenance: str | None) -> str:
++    return "provenance llm" if provenance and "LLM SYNTHESIS" in provenance else "provenance"
++
++
++@app.get("/", response_class=HTMLResponse)
++def dashboard() -> str:
++    pending = service.list_pending_reviews()
++    decided = service.list_decided()
++
++    if pending:
++        cards = "\n".join(
++            f"""<div class="card">
++                <h2>{html.escape(r.work_package_id)}
++                    <span class="{_risk_class(r.risk_level)}">[{html.escape(r.risk_level)}]</span></h2>
++                <p>{html.escape(', '.join(r.hazard_categories))}</p>
++                <span class="{_provenance_class(r.safety_brief_provenance)}">
++                    {html.escape(r.safety_brief_provenance or 'no brief yet')}</span>
++                <p><a href="/review/{html.escape(r.thread_id)}/{html.escape(r.interrupt_id)}">
++                    Open full review &rarr;</a></p>
++            </div>"""
++            for r in pending
++        )
++    else:
++        cards = '<p class="empty">Nothing awaiting review right now.</p>'
++
++    if decided:
++        decided_rows = "\n".join(
++            f'<div class="decided">{html.escape(d["work_package_id"])} '
++            f'&mdash; {html.escape(str(d["disposition"]))} '
++            f'(cleared_for_execution={d["cleared_for_execution"]})</div>'
++            for d in decided
++        )
++    else:
++        decided_rows = '<p class="empty">Nothing decided yet.</p>'
++
++    return f"""<!doctype html><html><head><title>Watchstander HITL Reviewer</title>{_PAGE_STYLE}</head>
++    <body>
++        <h1>Watchstander &mdash; Safety Review Queue</h1>
++        <form method="post" action="/seed-demo">
++            <button type="submit">Seed a real ACUSHNET demo run</button>
++        </form>
++        <h2>Awaiting review</h2>
++        {cards}
++        <h2>Recently decided</h2>
++        {decided_rows}
++    </body></html>"""
++
++
++@app.post("/seed-demo")
++def seed_demo() -> RedirectResponse:
++    thread_id = f"reviewer-{uuid.uuid4().hex[:12]}"
++    service.seed_demo(thread_id)
++    return RedirectResponse(url="/", status_code=303)
++
++
++@app.get("/review/{thread_id}/{interrupt_id}", response_class=HTMLResponse)
++def review_detail(thread_id: str, interrupt_id: str) -> HTMLResponse:
++    review = service.get_pending_review(thread_id, interrupt_id)
++    if review is None:
++        return HTMLResponse(
++            f"""<!doctype html><html><head>{_PAGE_STYLE}</head><body>
++            <p>No pending review found for this package &mdash; it may already have been decided.</p>
++            <p><a href="/">&larr; back to queue</a></p></body></html>""",
++            status_code=404,
++        )
++
++    brief_html = "<p class=\"empty\">No safety brief was synthesized for this package.</p>"
++    if review.safety_brief:
++        b = review.safety_brief
++        brief_html = f"""
++            <p><strong>Executive summary:</strong> {html.escape(b.get('executive_summary', ''))}</p>
++            <p><strong>Precedent context:</strong> {html.escape(b.get('precedent_context', ''))}</p>
++            <p><strong>Recommended action:</strong> {html.escape(b.get('recommended_action', ''))}</p>
++        """
++
++    return f"""<!doctype html><html><head><title>Review {html.escape(review.work_package_id)}</title>
++    {_PAGE_STYLE}</head><body>
++        <p><a href="/">&larr; back to queue</a></p>
++        <h1>{html.escape(review.work_package_id)}
++            <span class="{_risk_class(review.risk_level)}">[{html.escape(review.risk_level)}]</span></h1>
++        <div class="card">
++            <p><strong>Description:</strong> {html.escape(review.description)}</p>
++            <p><strong>Hazard categories:</strong> {html.escape(', '.join(review.hazard_categories))}</p>
++            <p><strong>Why it was flagged:</strong> {html.escape(review.conflict_rationale or '(no rationale recorded)')}</p>
++            <span class="{_provenance_class(review.safety_brief_provenance)}">
++                {html.escape(review.safety_brief_provenance or 'no brief yet')}</span>
++            {brief_html}
++        </div>
++        <form method="post" action="/review/{html.escape(thread_id)}/{html.escape(interrupt_id)}">
++            <label>Note (optional, appended to the decision record):</label>
++            <textarea name="note" rows="2"></textarea>
++            <button class="approve" type="submit" name="decision" value="approve">Approve</button>
++            <button class="reject" type="submit" name="decision" value="reject">Reject</button>
++        </form>
++    </body></html>"""
++
++
++@app.post("/review/{thread_id}/{interrupt_id}")
++def submit_review(thread_id: str, interrupt_id: str, decision: str = Form(...), note: str = Form("")) -> RedirectResponse:
++    decision_text = decision if not note.strip() else f"{decision} - {note.strip()}"
++    service.submit_decision(thread_id, interrupt_id, decision_text)
++    return RedirectResponse(url="/", status_code=303)
+diff --git a/reviewer/graph_driver.py b/reviewer/graph_driver.py
+new file mode 100644
+index 0000000..edeec54
+--- /dev/null
++++ b/reviewer/graph_driver.py
+@@ -0,0 +1,150 @@
++"""
++Wraps `agent_core.graph.build_graph()` with a persistent SqliteSaver so
++the reviewer web app can genuinely pause and resume the real graph
++across separate HTTP requests -- "seed a run" is one request, "approve
++this package" is a later, unrelated request, and the graph's
++`interrupt()` state has to survive the gap between them on disk, not
++just in a single process's memory (a `MemorySaver`, which is what every
++test in tests/test_graph.py and tests/test_hitl.py uses, would lose all
++pending reviews the moment the process restarts).
++
++This is the first consumer of the real graph outside of the test suite
++and the (fully scripted, no real graph run) visualizer demo -- see
++reviewer/README.md for why that gap mattered.
++"""
++
++from __future__ import annotations
++
++import sqlite3
++from dataclasses import dataclass
++from pathlib import Path
++
++from langgraph.checkpoint.sqlite import SqliteSaver
++from langgraph.types import Command
++
++from agent_core.demo_fixtures import acushnet_demo_work_packages
++from agent_core.graph import build_graph
++from reviewer import registry
++
++DEFAULT_DB_PATH = str(Path(__file__).parent / "reviewer_state.db")
++
++
++@dataclass(frozen=True)
++class PendingReview:
++    """One flagged work package still awaiting a human decision. `interrupt_id`
++    is what `Command(resume={interrupt_id: decision})` targets -- see
++    hitl.py's docstring on why each package gets its own checkpointed
++    interrupt() rather than one shared one."""
++
++    thread_id: str
++    interrupt_id: str
++    work_package_id: str
++    description: str
++    hazard_categories: list[str]
++    risk_level: str
++    conflict_rationale: str | None
++    safety_brief: dict | None
++    safety_brief_provenance: str | None
++    prompt: str
++
++
++class ReviewerService:
++    """One shared SqliteSaver connection for the app's lifetime --
++    `check_same_thread=False` (langgraph's own choice, see
++    SqliteSaver.from_conn_string) makes this safe across FastAPI's
++    request threadpool for this app's traffic level (a single local
++    reviewer, not concurrent production load)."""
++
++    def __init__(self, db_path: str = DEFAULT_DB_PATH) -> None:
++        self.db_path = db_path
++        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
++        self._conn = sqlite3.connect(db_path, check_same_thread=False)
++        self._checkpointer = SqliteSaver(self._conn)
++        self._graph = build_graph(checkpointer=self._checkpointer)
++
++    def close(self) -> None:
++        self._conn.close()
++
++    def seed_demo(self, thread_id: str) -> None:
++        """Runs the real ACUSHNET demo work packages through the REAL
++        graph -- real deconfliction, real reasoning (deterministic
++        fallback unless ANTHROPIC_API_KEY is set), a real interrupt()
++        for every flagged package. Not the scripted event replay
++        visualizer/demo_broadcaster.py uses."""
++        config = {"configurable": {"thread_id": thread_id}}
++        self._graph.invoke(
++            {"work_packages": acushnet_demo_work_packages(), "reviewed_packages": []},
++            config=config,
++        )
++        registry.register_thread(self.db_path, thread_id, label="ACUSHNET demo run")
++
++    def list_pending_reviews(self) -> list[PendingReview]:
++        pending: list[PendingReview] = []
++        for thread_id in registry.list_thread_ids(self.db_path):
++            config = {"configurable": {"thread_id": thread_id}}
++            state = self._graph.get_state(config)
++            for task in state.tasks:
++                if task.result is not None:
++                    # A Send()-fanned-out task that has already been resumed
++                    # keeps its original interrupt() value in this snapshot
++                    # even after completing -- `task.result` being populated
++                    # is what actually distinguishes "done" from "still
++                    # paused," not the presence of `task.interrupts` alone.
++                    # Found by testing the real approve flow: without this
++                    # check, an already-approved package never left the
++                    # pending queue.
++                    continue
++                for interrupt in task.interrupts:
++                    value = interrupt.value
++                    pending.append(
++                        PendingReview(
++                            thread_id=thread_id,
++                            interrupt_id=interrupt.id,
++                            work_package_id=value.get("work_package_id", ""),
++                            description=value.get("description", ""),
++                            hazard_categories=list(value.get("hazard_categories", [])),
++                            risk_level=str(value.get("risk_level", "")),
++                            conflict_rationale=value.get("conflict_rationale"),
++                            safety_brief=value.get("safety_brief"),
++                            safety_brief_provenance=value.get("safety_brief_provenance"),
++                            prompt=value.get("prompt", ""),
++                        )
++                    )
++        return pending
++
++    def get_pending_review(self, thread_id: str, interrupt_id: str) -> PendingReview | None:
++        for review in self.list_pending_reviews():
++            if review.thread_id == thread_id and review.interrupt_id == interrupt_id:
++                return review
++        return None
++
++    def list_decided(self) -> list[dict]:
++        """Packages with a recorded HITL disposition, across every known
++        thread -- the dashboard's "recently decided" section, proof the
++        decision actually reached the graph's real state, not just a UI
++        acknowledgment."""
++        decided: list[dict] = []
++        for thread_id in registry.list_thread_ids(self.db_path):
++            config = {"configurable": {"thread_id": thread_id}}
++            state = self._graph.get_state(config)
++            for wp in state.values.get("reviewed_packages", []):
++                if wp.hitl_disposition is not None:
++                    decided.append(
++                        {
++                            "thread_id": thread_id,
++                            "work_package_id": wp.work_package_id,
++                            "disposition": wp.hitl_disposition,
++                            "cleared_for_execution": wp.cleared_for_execution,
++                        }
++                    )
++        return decided
++
++    def submit_decision(self, thread_id: str, interrupt_id: str, decision_text: str) -> None:
++        """Resumes only this one interrupt -- every other package still
++        pending on this or any other thread is left untouched and stays
++        reviewable independently (verified directly: see
++        reviewer/tests -- partial resume leaves the other interrupt
++        pending, it does not require answering every open review in one
++        call)."""
++        config = {"configurable": {"thread_id": thread_id}}
++        self._graph.invoke(Command(resume={interrupt_id: decision_text}), config=config)
+diff --git a/reviewer/registry.py b/reviewer/registry.py
+new file mode 100644
+index 0000000..74b0e08
+--- /dev/null
++++ b/reviewer/registry.py
+@@ -0,0 +1,53 @@
++"""
++Tiny local registry of thread_ids the reviewer app has created.
++
++LangGraph's SqliteSaver checkpoints per-thread state, but doesn't offer a
++cheap "list every thread_id that currently has a pending interrupt"
++query -- enumerating it from raw checkpoint rows would mean depending on
++its internal schema. Simpler and more robust: the reviewer app already
++knows every thread_id it creates (`seed_demo` mints one), so it just
++records them here and checks each one's current state on the dashboard.
++This is a registry of "threads the app has ever started," not a
++duplicate of graph state -- `graph_driver.list_pending_reviews()` is
++still the only source of truth for what's actually pending.
++"""
++
++from __future__ import annotations
++
++import sqlite3
++from pathlib import Path
++
++
++def _connect(db_path: str) -> sqlite3.Connection:
++    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
++    conn = sqlite3.connect(db_path)
++    conn.execute(
++        "CREATE TABLE IF NOT EXISTS threads ("
++        "thread_id TEXT PRIMARY KEY, "
++        "label TEXT, "
++        "created_at TEXT DEFAULT CURRENT_TIMESTAMP"
++        ")"
++    )
++    conn.commit()
++    return conn
++
++
++def register_thread(db_path: str, thread_id: str, label: str) -> None:
++    conn = _connect(db_path)
++    try:
++        conn.execute(
++            "INSERT OR IGNORE INTO threads (thread_id, label) VALUES (?, ?)",
++            (thread_id, label),
++        )
++        conn.commit()
++    finally:
++        conn.close()
++
++
++def list_thread_ids(db_path: str) -> list[str]:
++    conn = _connect(db_path)
++    try:
++        rows = conn.execute("SELECT thread_id FROM threads ORDER BY created_at DESC").fetchall()
++        return [r[0] for r in rows]
++    finally:
++        conn.close()
+diff --git a/tests/test_reviewer.py b/tests/test_reviewer.py
+new file mode 100644
+index 0000000..e655d4c
+--- /dev/null
++++ b/tests/test_reviewer.py
+@@ -0,0 +1,102 @@
++"""
++Exercises the reviewer web app against the REAL graph (not a mock) --
++same principle as tests/test_graph.py and tests/test_hitl.py: this
++proves the actual interrupt()/Command(resume=...) flow works end-to-end
++through HTTP requests, not just through direct graph.invoke() calls in
++a single test function.
++
++Each test gets its own tmp_path-scoped sqlite file so tests never share
++or pollute reviewer/reviewer_state.db (the real default, gitignored,
++used only for actually running the app).
++"""
++
++from fastapi.testclient import TestClient
++
++from reviewer import app as app_module
++from reviewer.graph_driver import ReviewerService
++
++
++def _client(tmp_path) -> TestClient:
++    app_module.service = ReviewerService(str(tmp_path / "test_reviewer.db"))
++    return TestClient(app_module.app)
++
++
++def test_dashboard_with_nothing_seeded_shows_empty_state(tmp_path):
++    client = _client(tmp_path)
++    resp = client.get("/")
++    assert resp.status_code == 200
++    assert "Nothing awaiting review" in resp.text
++
++
++def test_seed_demo_creates_real_pending_reviews_from_the_real_graph(tmp_path):
++    client = _client(tmp_path)
++    resp = client.post("/seed-demo", follow_redirects=False)
++    assert resp.status_code == 303
++
++    dashboard = client.get("/")
++    # HW-2201 and CS-2202 conflict on shared compartment_id + hazard pair;
++    # ALOFT-2203 also gets flagged via _vertically_stacked against HW-2201's
++    # overlapping frame range -- three real flagged packages, not staged.
++    assert "HW-2201" in dashboard.text
++    assert "CS-2202" in dashboard.text
++    assert "ALOFT-2203" in dashboard.text
++    # FALL-2204 never overlaps anything in frame range -- must not appear.
++    assert "FALL-2204" not in dashboard.text
++
++
++def test_review_detail_page_shows_the_real_rationale_and_provenance(tmp_path):
++    client = _client(tmp_path)
++    client.post("/seed-demo", follow_redirects=False)
++    pending = app_module.service.list_pending_reviews()
++    hw = next(r for r in pending if r.work_package_id == "HW-2201")
++
++    detail = client.get(f"/review/{hw.thread_id}/{hw.interrupt_id}")
++
++    assert detail.status_code == 200
++    assert "Electric &amp; Machine Shop" in detail.text or "Electric" in detail.text
++    assert "DETERMINISTIC FALLBACK" in detail.text  # no live API key in CI -- real, not faked
++
++
++def test_approving_one_package_leaves_the_others_pending(tmp_path):
++    client = _client(tmp_path)
++    client.post("/seed-demo", follow_redirects=False)
++    pending = app_module.service.list_pending_reviews()
++    hw = next(r for r in pending if r.work_package_id == "HW-2201")
++
++    resp = client.post(
++        f"/review/{hw.thread_id}/{hw.interrupt_id}",
++        data={"decision": "approve", "note": "checked schedule, clear to proceed"},
++        follow_redirects=False,
++    )
++    assert resp.status_code == 303
++
++    still_pending = {r.work_package_id for r in app_module.service.list_pending_reviews()}
++    assert "HW-2201" not in still_pending
++    assert "CS-2202" in still_pending  # untouched -- real partial resume, not an all-or-nothing gate
++
++    decided = app_module.service.list_decided()
++    hw_decided = next(d for d in decided if d["work_package_id"] == "HW-2201")
++    assert hw_decided["cleared_for_execution"] is True
++
++
++def test_rejecting_a_package_records_not_cleared_for_execution(tmp_path):
++    client = _client(tmp_path)
++    client.post("/seed-demo", follow_redirects=False)
++    pending = app_module.service.list_pending_reviews()
++    hw = next(r for r in pending if r.work_package_id == "HW-2201")
++
++    client.post(
++        f"/review/{hw.thread_id}/{hw.interrupt_id}",
++        data={"decision": "reject", "note": "reschedule after CS-2202 clears"},
++        follow_redirects=False,
++    )
++
++    decided = app_module.service.list_decided()
++    hw_decided = next(d for d in decided if d["work_package_id"] == "HW-2201")
++    assert hw_decided["cleared_for_execution"] is False
++
++
++def test_review_detail_for_an_unknown_or_already_decided_package_404s(tmp_path):
++    client = _client(tmp_path)
++    resp = client.get("/review/no-such-thread/no-such-interrupt")
++    assert resp.status_code == 404
+diff --git a/visualizer/demo_broadcaster.py b/visualizer/demo_broadcaster.py
+index 34c0986..2cb3b39 100644
+--- a/visualizer/demo_broadcaster.py
++++ b/visualizer/demo_broadcaster.py
+@@ -39,69 +39,25 @@ from pathlib import Path
+ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+ 
+ from agent_core import events  # noqa: E402
++from agent_core.demo_fixtures import acushnet_demo_work_packages  # noqa: E402
+ 
++# Flattened from the same real WorkPackageState objects reviewer/ runs
++# through the actual graph (agent_core/demo_fixtures.py) into the raw
++# event-payload dict shape this scripted sequence broadcasts -- one
++# source of truth for the ACUSHNET compartment/frame data, so this demo
++# path and the real-graph reviewer demo path can't quietly drift apart.
+ WORK_PACKAGES = [
+     {
+-        # Sheet 5, Second Deck: "Electric & Machine Shop (B-2)" -- hot
+-        # work (e.g. welding repair on shop equipment) in the shop itself.
+-        # Frame range read from the printed scale -- see
+-        # docs/uscg-acushnet-ars9-source.md for the +/-2-3 frame caveat.
+-        "work_package_id": "HW-2201",
+-        "hazard_categories": ["hot_work"],
+-        "compartment_id": "Electric & Machine Shop (B-2)",
+-        "deck_level": "Second Deck",
+-        "frame_start": 70,
+-        "frame_end": 84,
+-        "is_aloft": False,
+-        "is_over_side": False,
+-    },
+-    {
+-        # Same real compartment, same sheet: a confined-space entry (e.g.
+-        # bilge/void inspection reachable from the shop) during the same
+-        # work period -- the shared compartment_id is what a real
+-        # find_all_conflicts() run would use to flag this pair, exactly the
+-        # First Marine LLC pattern already in case_data/cases_v1.json
+-        # (hot work + confined space entry, same space, not tested first).
+-        # Frame range genuinely overlaps HW-2201's this time, not just the
+-        # compartment_id match.
+-        "work_package_id": "CS-2202",
+-        "hazard_categories": ["confined_space"],
+-        "compartment_id": "Electric & Machine Shop (B-2)",
+-        "deck_level": "Second Deck",
+-        "frame_start": 74,
+-        "frame_end": 80,
+-        "is_aloft": False,
+-        "is_over_side": False,
+-    },
+-    {
+-        # No single labeled compartment on Sheet 5 corresponds to "aloft"
+-        # work by definition -- aloft work happens above/outside interior
+-        # spaces. Placed at Main Deck amidships, frame 60-70, approximate
+-        # and not tied to a printed label -- see source doc. Illustrative
+-        # only, not part of the flagged pair.
+-        "work_package_id": "ALOFT-2203",
+-        "hazard_categories": ["working_aloft"],
+-        "compartment_id": "Main Deck, amidships (way of mast)",
+-        "deck_level": "Main Deck",
+-        "frame_start": 60,
+-        "frame_end": 70,
+-        "is_aloft": True,
+-        "is_over_side": False,
+-    },
+-    {
+-        # Sheet 5, Main Deck: "Anchor Windlass Room (A-102-E)" and the
+-        # open forward weather deck around it -- a real space near the
+-        # bow where fall-protection-relevant work (anchor detail, forward
+-        # deck work) would plausibly occur.
+-        "work_package_id": "FALL-2204",
+-        "hazard_categories": ["fall_protection"],
+-        "compartment_id": "Anchor Windlass Room (A-102-E)",
+-        "deck_level": "Main Deck",
+-        "frame_start": 2,
+-        "frame_end": 12,
+-        "is_aloft": False,
+-        "is_over_side": False,
+-    },
++        "work_package_id": wp.work_package_id,
++        "hazard_categories": [h.value if hasattr(h, "value") else h for h in wp.hazard_categories],
++        "compartment_id": wp.spatial.compartment_id,
++        "deck_level": wp.spatial.deck_level,
++        "frame_start": wp.spatial.frame_start,
++        "frame_end": wp.spatial.frame_end,
++        "is_aloft": wp.spatial.is_aloft,
++        "is_over_side": wp.spatial.is_over_side,
++    }
++    for wp in acushnet_demo_work_packages()
+ ]
+ 
+ SCRIPT = [

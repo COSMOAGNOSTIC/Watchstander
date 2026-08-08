@@ -1,8 +1,8 @@
 # PROJECT PASSDOWN: Watchstander
 ## Civilian Shipyard OSHA Spatial & Temporal Deconfliction Agent Graph
 
-**Last updated:** 2026-07-25 (later same day)
-**Status:** Live on GitHub, CI now genuinely green — the graph import was broken and untested until this session's external-review response (see Section 9). ARCHITECTURE.md added; live spatial visualizer (Phase 5) built and demo-recorded. Phase 4 case-data expansion still open.
+**Last updated:** 2026-08-08
+**Status:** Live on GitHub, CI genuinely green. Live spatial visualizer (Phase 5) built and demo-recorded; a real HITL reviewer web app (Phase 7, `reviewer/`) now exists too — see Section 14, the visualizer's status-only view had no human-facing decision interface until this session. Phase 4 case-data expansion and Phase 6 ("Lock it in") still open.
 
 ---
 
@@ -216,5 +216,23 @@ Initial research pass complete via OSHA.gov and DOL.gov public releases. Real, c
 **Decided but not built:** did not add a CI-mirroring pytest invocation to the local dev workflow (e.g. a Makefile target or pre-commit hook that runs plain `pytest`, not `python -m pytest`) — worth considering for a future session so this class of gap can't recur silently.
 
 **Follow-up, same session:** checked cosmoai-adept for the same class of bug before closing this out. It uses `setup.py`'s `find_packages()` with no include filter (unlike Watchstander's `pyproject.toml`, which explicitly lists `agent_core*`), so any future top-level package there gets auto-registered — no equivalent gap exists. Confirmed by a fresh-venv install and a plain `pytest -v` run (CI's exact invocation): 59/59 passing. No changes needed on that repo.
+
+---
+
+## 14. Session Notes — 2026-08-08: Real HITL reviewer web app (Phase 7)
+
+**Status:** Phase 7 done. 133/133 tests passing (127 → 133, all new: `tests/test_reviewer.py`).
+
+**Where this came from:** Donnie ran the visualizer live for the first time this session (previously he'd only seen the 3D blockout once, weeks ago, and had never watched the live 2D view or the graph do anything in real time). After watching it — packages placed, a conflict flagged red, the Safety Review station pulsing — he asked two direct questions: where's the data explaining *why* a package was flagged, and where's the actual human decision interface. Both answers were the same honest gap: `events.py`'s broadcast policy deliberately keeps that content off the visualizer's WebSocket (correct, by design — Section 8/ADR-013), but nothing in the repo had ever built the *other* half — a real place for a human to read the full brief and answer the real `interrupt()`. The only things that had ever resolved a real `interrupt()` before this session were `tests/test_graph.py`/`test_hitl.py` (hardcoding `"approve"`) and `demo_broadcaster.py` (which doesn't touch the real graph at all, just replays a scripted event sequence). His framing, verbatim in spirit: a status light with no lever to pull is pointless — a real reviewer needs to see the flagged problem, see the deterministic-vs-LLM reasoning, and have an actual interface to record their decision.
+
+**What got built:** `reviewer/` — a local FastAPI app, real `build_graph()` behind it, a persistent `SqliteSaver` (not `MemorySaver`, which every existing test uses and which would lose all pending state on process restart) so a review queued in one HTTP request survives to be decided in a separate later one. Dashboard lists pending reviews and recently-decided packages; a detail page shows the full description, conflict rationale, synthesized safety brief, and its provenance tag (`[SOURCE: LLM SYNTHESIS]` vs. `[SOURCE: DETERMINISTIC FALLBACK - LLM OFFLINE]` — literally the "LLM online/offline" signal Donnie asked about); a real Approve/Reject form whose submit calls `graph.invoke(Command(resume={interrupt_id: decision_text}), config=...)`, genuinely resuming the paused graph, not simulating a decision. `agent_core/demo_fixtures.py` (new) holds the real ACUSHNET compartment/frame demo data as actual `WorkPackageState` objects; `visualizer/demo_broadcaster.py` now derives its scripted event-payload dicts from this same source instead of duplicating the data by hand, so the two demo paths can't drift.
+
+One real bug found by testing the actual approve flow, not by code review: `state.tasks[i].interrupts` keeps listing a `Send()`-fanned-out task's original `Interrupt` object even after that task has been resumed and completed — `task.result` being non-`None` is what actually distinguishes "done" from "still genuinely paused." The first version of `list_pending_reviews()` didn't check this, so an approved package never left the dashboard's pending list even though the underlying graph state was correct. Caught by `test_approving_one_package_leaves_the_others_pending` actually running the flow end-to-end through FastAPI's `TestClient`. Fixed by skipping any task where `task.result is not None`. Full writeup: ARCHITECTURE.md §8.5, AOSE.md.
+
+Also verified against a genuinely live running server (`uvicorn` + `curl`), not just the in-process `TestClient` — seeded a real demo run, confirmed all three expected packages (`HW-2201`, `CS-2202`, `ALOFT-2203` — a real, previously-undocumented third conflict from `_vertically_stacked()`'s frame-range overlap with `HW-2201`, not staged) showed up, and pulled a detail page's rendered HTML directly to confirm the brief and provenance tag actually appear.
+
+**Not done, deliberately:** no auth (fine for one local reviewer on their own machine, the same trust boundary the visualizer's undefended WebSocket already assumes — disclosed as Known Debt, not hidden); no real work-package intake form yet (the only way to create a pending review is "seed the ACUSHNET demo" — a real intake form or API endpoint is a natural next step); no live-updating dashboard (refresh to see new state, unlike the visualizer's WebSocket push).
+
+**Next up:** either build real intake for `reviewer/` (a form, or an API a scheduling system could POST to) so it's not demo-data-only, or return to Phase 6 ("Lock it in")'s remaining open items (README staleness, adjacency tolerance, `deck_level` actually used in conflict detection) — not decided this session.
 
 **Open questions for next session:** worth considering whether Watchstander's explicit `include=[...]` list in `pyproject.toml` should switch to `find_packages()`-style auto-discovery (matching cosmoai-adept) specifically so this class of bug can't recur the next time a new top-level package is added and someone forgets to list it.

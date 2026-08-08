@@ -194,6 +194,24 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
 
 ---
 
+## Phase 7 — Real HITL reviewer web app
+
+- [x] `reviewer/graph_driver.py` — `ReviewerService`, wraps `build_graph()` with a persistent `SqliteSaver` so pending reviews survive across separate HTTP requests, not just within one process's memory
+- [x] `reviewer/app.py` — FastAPI app: dashboard listing pending reviews + recently decided packages, a detail page showing full description/conflict rationale/safety brief/provenance, a real Approve/Reject form
+- [x] Real, not simulated: submitting a decision calls `graph.invoke(Command(resume={interrupt_id: decision_text}), config=...)` against the actual graph, the same mechanism `tests/test_graph.py` exercises directly
+- [x] Partial resume verified: approving one flagged package leaves every other pending package (same or different thread) untouched and independently reviewable
+- [x] `agent_core/demo_fixtures.py` — real ACUSHNET `WorkPackageState` demo data, shared with `visualizer/demo_broadcaster.py` so the two demo paths can't drift onto different compartment/frame data
+- [x] `tests/test_reviewer.py` — 6 tests against the real graph through FastAPI's `TestClient`, including the fix for a real bug (a resumed task's stale `Interrupt` object was still being read as pending — see ARCHITECTURE.md §8.5)
+- [x] `pyproject.toml` `reviewer` optional-dependency group (`fastapi`, `uvicorn`, `python-multipart`) + `reviewer*` added to `packages.find`
+- [x] Live smoke test against the real running server (`uvicorn` + `curl`), not just the in-process test client
+- [ ] Auth (currently none — local-only trust model, disclosed in ARCHITECTURE.md §8.5 Known Debt)
+- [ ] Real work-package intake form (currently: seed the ACUSHNET demo only)
+- [ ] Live-updating dashboard (currently: refresh to see new state)
+
+**Definition of done:** A human can open a page, read the full reason a real work package was flagged (including whether the brief came from a live LLM or the deterministic fallback), and make a real decision that genuinely resumes the graph — not simulated, not a status light. **Met** — the auth/intake-form/live-update items above are scoped-out follow-ups, not blockers to this phase's own bar.
+
+---
+
 ## Phase status
 
 | Phase | Status | Date done |
@@ -208,3 +226,4 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
 | 5.75 — Evaluation harness | ✅ | 2026-07-25 |
 | 5.85 — Second-pass review response (fail-open gaps in 5.5's own fixes) | ✅ | 2026-07-25 |
 | 6 — Lock it in | ⬜ | |
+| 7 — Real HITL reviewer web app | ✅ (auth, intake form, live updates scoped out) | 2026-08-08 |

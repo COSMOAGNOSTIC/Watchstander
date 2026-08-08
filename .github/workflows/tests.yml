@@ -23,5 +23,11 @@ jobs:
       # ".[dev]" would repeat the exact CI-vs-local install-path gap
       # documented in AOSE.md's "verification blind spot" section (the
       # eval/ package import failure) -- caught here proactively instead.
-      - run: pip install -e ".[dev,retrieval]"
+      #
+      # "reviewer" added alongside Phase 7 (reviewer/) -- tests/test_reviewer.py
+      # imports fastapi.testclient for real, same reasoning as "retrieval"
+      # above: caught before this ever went red, by checking this exact
+      # file against the new optional-dependency group rather than assuming
+      # a local "python -m pytest" pass meant CI would pass too.
+      - run: pip install -e ".[dev,retrieval,reviewer]"
       - run: pytest -v

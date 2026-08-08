@@ -34,6 +34,8 @@ Out of scope for v1: Navy mishap data (classification/aggregation risk — delib
 | `case_data/cases_v1.json` | Sourced OSHA/DOL case histories, tagged by hazard category |
 | `case_data/navsea_8010_psns_v2014.json` | Site-scoped (PSNS) governing-procedure citations sourced from the public-domain NAVSEA 8010 Manual, hot_work only — see Section 6 |
 | `visualizer/` | Godot 4 2D spatial scene rendering work packages, conflicts, and HITL state on a schematic shipyard deck layout (Section 8) |
+| `reviewer/` | Local FastAPI app reading real graph checkpoint state — the actual human-facing Approve/Reject interface, real `interrupt()`/`Command(resume=...)`, not simulated (Section 8.5) |
+| `agent_core/demo_fixtures.py` | Real ACUSHNET-sourced `WorkPackageState` demo data, shared by `visualizer/demo_broadcaster.py` (flattened to raw event dicts) and `reviewer/` (run through the real graph) so both demo paths use identical data |
 | `eval/` | Fixed-scenario evaluation harness measuring `deconfliction.py`/`retrieval.py`/`reasoning.py`'s deterministic-fallback path against a checked-in baseline (Section 7) |
 
 ```mermaid
@@ -132,6 +134,78 @@ Unlike cosmoai-adept's visualizer — an agent walking between abstract tool sta
 
 **3D blockout companion view (2026-07-28, ADR-019).** A second, static, non-networked scene (`visualizer/Main3D.tscn`) renders the demo vessel — USCG Cutter ACUSHNET / ex-USS SHACKLE (ARS-9), sourced in `docs/uscg-acushnet-ars9-source.md` — as a simplified 3D hull with compartments extruded at their real frame positions. This does not supersede the 2D live view above; `Main.tscn` is still the only scene wired to `agent_core.events`. The 3D scene exists because a real drawing with printed frame numbers made a "greybox"-style blockout (straight hull, real compartment positions, no traced curvature) tractable in the same spirit as this section's own ADR-006 — get the real spatial data right, simplify the geometry deliberately and say so, rather than either importing licensed CAD or claiming false precision. Verified by an actual headless render (Godot 4.3 + Xvfb + software GL) during development, not just written and assumed to work.
 
+## 8.5 Real HITL Reviewer Web App (`reviewer/`)
+
+**Status: built, tested against the real graph, not yet given auth or a real intake form — see MIGRATION.md Phase 7.**
+
+The visualizer (Section 8) is a status view: it shows *that* a package is
+flagged and waiting, deliberately never *why* (events.py's broadcast policy).
+Until this landed, nothing in the repo let an actual human read a flagged
+package's full brief and make a real decision — the only things that ever
+answered a real `interrupt()` were the test suite (hardcoding `"approve"`)
+and `demo_broadcaster.py` (which fakes the whole event sequence and never
+touches the real graph at all). `reviewer/` closes that gap: a small local
+FastAPI app that runs the real `build_graph()`, persists real `interrupt()`
+state across HTTP requests via a real `SqliteSaver` (not `MemorySaver`,
+which every existing test uses and which would lose all pending reviews on
+process restart), and gives a human a page showing the full description,
+conflict rationale, synthesized safety brief, and its provenance tag (LLM
+vs. deterministic fallback) — with a real Approve/Reject form whose submit
+calls `graph.invoke(Command(resume={interrupt_id: decision_text}), ...)`,
+genuinely resuming the paused graph.
+
+**Why a separate channel instead of loosening `events.py`'s broadcast
+policy.** The policy (Section 8, ADR-013) exists because the visualizer's
+WebSocket is a public, unauthenticated broadcast — anything emitted there
+is available to any listener on the port, by design (it's meant to drive a
+demo screen, not gate access to sensitive content). The reviewer app's data
+(descriptions, conflict rationale, full safety briefs) is exactly the
+content that policy exists to keep off that channel. Rather than add a flag
+to selectively broadcast more, `reviewer/` reads this data directly from the
+graph's own checkpointed state (`graph.get_state()`), which was already
+there — no new broadcast, no policy exception, no risk of a future listener
+on 8081 accidentally getting content it was never supposed to see.
+
+**A real bug found by testing the actual approve flow, not by inspection.**
+`state.tasks[i].interrupts` keeps listing a Send()-fanned-out task's
+original `Interrupt` object even after that task has been resumed and
+completed — only `task.result` being non-`None` actually distinguishes
+"done" from "still genuinely paused." The first version of
+`list_pending_reviews()` didn't check this, so an approved package never
+left the pending queue in the dashboard, only in the underlying graph state.
+Caught by `tests/test_reviewer.py::test_approving_one_package_leaves_the_others_pending`
+actually running the approve flow end-to-end through the FastAPI
+`TestClient`, not by reading the code. Fixed by skipping any task where
+`task.result is not None` before reading its `.interrupts`.
+
+**Partial resume, verified directly.** `hitl.py`'s one-`interrupt()`-per-
+package design (ADR-022) is what makes this app's per-package review UX
+possible at all: `Command(resume={one_interrupt_id: decision})` resolves
+only that package, leaving every other pending interrupt on the same or a
+different thread untouched — confirmed with a direct debugging script
+before building the UI around the assumption, then re-confirmed by
+`test_approving_one_package_leaves_the_others_pending`.
+
+**Data source: shared, not duplicated.** `agent_core/demo_fixtures.py`
+(new) holds the real ACUSHNET compartment/frame data as actual
+`WorkPackageState` objects, meant to be run through the real graph.
+`visualizer/demo_broadcaster.py`'s scripted event-payload dicts are now
+derived from this same source at import time rather than hand-duplicated —
+the two demo paths (scripted visualizer event replay vs. real reviewer
+graph run) can no longer quietly drift onto different compartment/frame
+values.
+
+**Known debt, disclosed not hidden:** no auth (fine for one local reviewer
+on their own machine, the same trust boundary the visualizer's undefended
+WebSocket already assumes — not safe to expose beyond localhost); no real
+work-package intake form yet, only "seed the ACUSHNET demo"; no live-
+updating dashboard (refresh to see new state, unlike the visualizer's
+WebSocket push); `langgraph`'s own msgpack serializer emits a deprecation
+warning about unregistered types (`WorkPackageState`, `RiskLevel`,
+`HitlDisposition`, `HazardCategory`) on every checkpoint read/write — not
+yet registered via `allowed_msgpack_modules`, which a future `langgraph`
+version will require rather than warn about.
+
 ## 9. Known Debt
 
 | Item | Notes |
@@ -145,6 +219,8 @@ Unlike cosmoai-adept's visualizer — an agent walking between abstract tool sta
 | No dependency version pinning | `pyproject.toml` has no version bounds beyond `>=` floors and there's no lockfile |
 | Governing-procedure ruleset is single-site (PSNS) by design, not yet multi-site | `procedural_lookup._RULESET_FILES` has one entry. Adding a second installation (NASNI, NAVSTA Everett, SURFPAC vs AIRPAC vs AIRLANT, etc.) is architecturally supported (add a sourced JSON file + a dict entry) but not yet done — no second site's rules exist in this repo yet, and none should be assumed |
 | `_fire_watch_capacity_conflicts()`'s size gate uses raw per-fire-watch package count, not per-time-window concurrency | Discovered 2026-08-08 while updating the fire-watch capacity tests for ADR-023's limit change. The function groups all packages sharing a `fire_watch_id` and short-circuits (`continue`, no violation) only if that *total* count is `<= MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH` — but if the total exceeds the limit only because packages are spread across genuinely non-overlapping time windows (e.g. 3 packages on one fire watch in week 1, 2 more on the same fire watch in week 3 — 5 total, but never more than 3 concurrently active), the pairwise loop still runs and flags every temporally-overlapping pair within the inflated group, even though no more than 3 were ever simultaneously covered by that fire watch at any instant. Not a safety gap in the over-flagging direction the rest of this module favors — it's an *over*-flagging bug, not an under-flagging one, so it's lower priority than most rows in this table, but it is a real false-positive path. Would need the size check to run per maximal temporally-overlapping cluster within a `fire_watch_id` group, not on the group's raw total. Not fixed this pass — flagged, not silently worked around; the regression test covering the correct "spread across non-overlapping windows" case was deliberately designed to avoid triggering this gap rather than paper over it (see `test_fire_watch_capacity_not_flagged_when_schedules_dont_overlap`'s docstring) |
+| `reviewer/` has no auth, no real intake form, and no live-updating dashboard | See Section 8.5. Acceptable for one local reviewer on their own machine; not safe to expose beyond localhost as-is |
+| `langgraph`'s msgpack serializer warns on every reviewer checkpoint read/write | `WorkPackageState`, `RiskLevel`, `HitlDisposition`, `HazardCategory` are "unregistered types" per `langgraph.checkpoint.serde.jsonplus` — currently a deprecation warning, will become a hard block (`LANGGRAPH_STRICT_MSGPACK=true`) in a future `langgraph` version. Fix is to register them via `allowed_msgpack_modules`; not done yet since it's still just a warning |
 
 ### Extraction Candidates
 
@@ -182,6 +258,7 @@ Not everything below gets extracted — this is a candidates list, not a commitm
 | ADR-021 | 2026-07-31 | First application of the Design Principle 7 research sweep, run against both Extraction Candidates | Temporal chit-expiration engine: swept OR-Tools/CP-SAT-family scheduling libraries (PyJobShop, CPMpy, python-constraint) and task schedulers (APScheduler) — none solve the actual problem shape (independent-clock permit expiration + spatial deconfliction, flagged before shift start, not mid-shift). Confirmed genuine gap; OR-Tools CP-SAT flagged as a candidate modeling substrate, not a ready answer, before any hand-rolled solver design starts. `eval/` harness pattern: this is golden-file testing, an established, already-implemented pattern (not novel) — downgraded off the standalone-extraction path per the policy's own "not everything gets extracted" clause; only the known-gap-scenario-ID-drift assertion is original enough to maybe be worth a short writeup |
 | ADR-022 | 2026-07-28 | `hitl_gate_node`'s interrupt-per-package loop restructured into `hitl_prepare_node` / `hitl_route` / `hitl_gate_single_node`, fanned out via LangGraph's `Send()` | Resuming a later `interrupt()` in the old loop replayed every earlier package's path in the same node invocation, including its `events.emit()` calls — the `conflict_rationale` duplication guard (ADR-012) papered over the symptom but not the replay itself. One invocation per package, each independently checkpointed, removes the shared loop that made replay possible in the first place, rather than adding another guard on top of it. Verified 67/67 three times (sandbox, Donnie's machine, post-rebase) |
 | ADR-023 | 2026-08-08 | Pulled the primary-source NAVSEA 8010 PDF directly, verified all seven `navsea_8010_psns_v2014.json` entries against it, and corrected `MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH` from a conservative placeholder of `1` to the manual's actual stated limit of `4` | Decided while scoping the retrieval harness's Phase 1 chunking source (see `retrieval/ARCHITECTURE.md` ADR-005) to pull the original manual text rather than chunk the pre-extracted JSON — reading the actual Chapter 4/11 text for that purpose surfaced that the fire-watch capacity entry's numeric limit, flagged as unverified since 2026-07-27 (ADR-018) and repeatedly cited in Known Debt, was directly readable in the primary source ("No more than four hot workers shall be attended by a single fire watch," Chapter 4.4.3) and had simply never been checked. Fixed rather than left conservative now that verification was possible; closes two long-standing Known Debt rows. Surfaced a separate, real gap in `_fire_watch_capacity_conflicts()`'s size-gate logic while updating its tests for the new limit (see Known Debt) — not fixed this pass, disclosed instead |
+| ADR-024 | 2026-08-08 | Built a real local HITL reviewer web app (`reviewer/`) reading directly from graph checkpoint state, rather than loosening `events.py`'s public broadcast policy to carry review content | After watching the visualizer run live for the first time, Donnie identified that it's a status view only — no interface existed anywhere in the repo for a human to actually see why a package was flagged (full description, conflict rationale, safety brief, LLM-vs-deterministic provenance) or record a real decision; the only things that had ever answered a real `interrupt()` were the test suite and a fully-scripted, non-graph demo. Reading from `graph.get_state()` instead of broadcasting more over the WebSocket keeps ADR-013's "operational metadata only, publicly" policy intact for the visualizer while still giving a real reviewer the full picture through a separate, local-only channel |
 
 ## 11. Maintenance Rules
 

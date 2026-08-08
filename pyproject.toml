@@ -34,6 +34,18 @@ retrieval = [
     "chromadb>=0.5",
     "rank_bm25>=0.2",
 ]
+# reviewer/ is a local web app, not imported by agent_core or the test
+# suite's core path -- only needed to actually run `uvicorn reviewer.app:app`.
+# python-multipart is FastAPI's real (undeclared, easy-to-miss) runtime
+# dependency for parsing the Approve/Reject form's application/x-www-form-
+# urlencoded body -- listed explicitly here rather than left implicit, the
+# same "don't repeat the eval/ CI-install-gap mistake" discipline this repo
+# already applies elsewhere (see ARCHITECTURE.md ADR-006).
+reviewer = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
+]
 
 [tool.setuptools.packages.find]
 # "eval*" is needed so tests/test_eval_harness.py's `from eval.run_eval import
@@ -48,4 +60,4 @@ retrieval = [
 # "retrieval*" (added retrieval/MIGRATION.md Phase 0) is included up front for
 # the same reason, proactively -- this is the exact failure mode described
 # above, so there's no reason to wait for CI to go red on it first.
-include = ["agent_core*", "eval*", "retrieval*"]
+include = ["agent_core*", "eval*", "retrieval*", "reviewer*"]
