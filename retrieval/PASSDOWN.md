@@ -63,5 +63,57 @@ SageMaker exposure, Databricks exposure, certs.
   (`sentence-transformers`, `chromadb`) still needs adding — deliberately
   not added this session since nothing uses them yet.
 
-**Next up:** Phase 1 — local RAG proof. Do the Phase 0 AOSE round first (see
-AOSE.md) before calling Phase 0 fully closed, then start Phase 1.
+---
+
+## Session 2 — 2026-08-04 — Phase 0 AOSE round
+
+**Status:** Phase 0 AOSE Round 1 complete (see `AOSE.md`). Phase 0 fully
+closed as of this session — this entry was never added at the time, which
+left this file's "Next up" line stale (still describing the AOSE round as a
+future step) even though `AOSE.md` itself was current. Backfilled 2026-08-08
+alongside Session 3 below, once the staleness was caught.
+
+**What happened:** Ran Round 1 of the adversarial-review loop against the
+Phase 0 skeleton — packaging (verified the `packages.find` fix under a
+fresh install + CI-equivalent bare `pytest` invocation, not just locally),
+the `retrieval`/`agent_core.retrieval` naming collision (grepped for and
+ruled out any existing bare `import retrieval`), and a general pass over
+every stubbed function/dataclass for anything that could be wrong at a
+skeleton stage. One real fix made (`Retriever.__init__` gained a type hint
+on `vector_store`); one risk logged as accepted, not fixed (a *future* bare
+`import retrieval` inside `agent_core` would silently resolve to the wrong
+package — low severity, fails loud). Full writeup in `AOSE.md`.
+
+**Next up:** Phase 1 — local RAG proof.
+
+---
+
+## Session 3 — 2026-08-08 — Independent re-verification of the Phase 0 AOSE round, doc staleness fixed
+
+**Status:** Phase 0 confirmed still closed. No new code changes — this
+session was a documentation-integrity check, not a build session.
+
+**What happened:** Before starting Phase 1, re-ran Round 1's three testable
+claims independently rather than trusting the write-up at face value (same
+principle root `AOSE.md` already states: re-reading a prior finding isn't
+verification, re-running it is). All three held with no drift: 78/78 tests
+pass from a genuinely fresh venv + editable install + bare `pytest`
+console-script invocation; no bare `import retrieval` exists anywhere in the
+repo and `retrieval`/`agent_core.retrieval` still resolve to two distinct
+files; `Retriever.__init__`'s type hint from Round 1's fix is still present.
+Logged as its own dated entry in `AOSE.md` rather than silently folded into
+Round 1.
+
+While doing this, caught and fixed the actual bug this check surfaced: this
+file's "Next up" line (previously at the end of Session 1) still described
+the Phase 0 AOSE round as a future step, even though `AOSE.md` showed it
+completed four days earlier. Backfilled the missing Session 2 entry above
+so the record matches what actually happened, and moved "Next up" here,
+where it's current.
+
+**Next up:** Phase 1 — local RAG proof (see MIGRATION.md for scope: corpus
+ingestion, real chunking, sentence-transformers embedding, Chroma storage,
+real retrieval, real citation formatting). Open questions from Session 1
+(NAVSEA 8010 source text choice; `retrieval` optional-dependency group)
+still need a decision before or during Phase 1 — neither resolved by this
+session.

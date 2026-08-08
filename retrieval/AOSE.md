@@ -70,6 +70,32 @@ this round beyond what Phase 0 already required, since nothing found was a
 behavioral bug — Phase 1 is where behavior (and therefore behavioral
 regression tests) starts existing.
 
+**Independent re-verification (2026-08-08, Phase 0 boundary, before starting
+Phase 1).** PASSDOWN.md's "Next up" line still read as if the Phase 0 AOSE
+round hadn't happened yet, even though Round 1 above is dated four days
+earlier — a doc-freshness gap, not a code gap, but per this project's own
+rule ("verifying a fix by re-running it the same way you always have isn't
+verification, it's repetition" — root AOSE.md), Round 1's three testable
+claims were re-run independently rather than taken on faith from the prior
+entry:
+
+- Re-ran the exact CI-equivalent check from a genuinely fresh virtualenv
+  (`python -m venv`, `pip install -e .`, bare `pytest` console script, not
+  `python -m pytest`): 78/78 passed. Matches Round 1's result exactly, no
+  drift.
+- Re-grepped the whole repo for any bare `import retrieval` and re-confirmed
+  at runtime, from a fresh venv, that `retrieval` and `agent_core.retrieval`
+  resolve to two distinct files (`retrieval/__init__.py` vs.
+  `agent_core/retrieval.py`). Still none found; still distinct.
+- Confirmed `Retriever.__init__`'s `vector_store` parameter still carries
+  the `VectorStore | None` type hint from Round 1's fix — not reverted by
+  any commit since.
+
+No new findings. Phase 0 is genuinely closed, not just documented as closed.
+Fixed the actual bug this check surfaced: PASSDOWN.md's stale "Next up" line
+(see that file's latest entry) — it described the AOSE round as a future
+step rather than a past one.
+
 ## Accepted, not open
 
 - Bare `import retrieval` inside `agent_core` resolving to the wrong package
