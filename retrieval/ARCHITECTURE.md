@@ -7,10 +7,12 @@ this doc and the code ever disagree, the doc is the bug.
 
 A RAG (retrieval-augmented generation) skills-building project: a retrieval
 harness that applies semantic search + citation grounding to the
-Watchstander regulatory corpus (NAVSEA 8010 Manual, OSHA CFR 1915 excerpts,
-`case_data/`). It exists to close specific platform gaps — RAG mechanics,
-vector databases, AWS SageMaker, Databricks — surfaced by a real job
-posting. See PASSDOWN.md for the full origin story.
+Watchstander regulatory corpus (NAVSEA 8010 Manual — original manual text,
+Chapters 4 and 11, not the pre-extracted `case_data/navsea_8010_psns_v2014.json`
+summaries, see ADR-005 — plus OSHA CFR 1915 excerpts and `case_data/`). It
+exists to close specific platform gaps — RAG mechanics, vector databases,
+AWS SageMaker, Databricks — surfaced by a real job posting. See PASSDOWN.md
+for the full origin story.
 
 ## 2. Current structure (Phase 0)
 
@@ -114,12 +116,41 @@ use `python -m pytest` (which prepends cwd to `sys.path`), while CI's
 identically. Fixed proactively in the same commit as the Phase 0 skeleton
 rather than waiting for CI to prove it.
 
+**ADR-005 — NAVSEA 8010 chunking source: pull the original manual text
+fresh, not the already-extracted `case_data/navsea_8010_psns_v2014.json`.**
+(2026-08-08, decided by Donnie) The alternative — chunking the existing
+ruleset JSON — was faster (no new sourcing/extraction pass needed) but a
+poor fit for what this project actually exists to prove: that JSON is a
+handful of short structured summaries per section, already flagged
+`verified: false` because it was never confirmed against the primary PDF
+text, and chunking short summaries doesn't meaningfully exercise
+sentence-aware chunking, embedding, or retrieval the way real document prose
+does. Phase 1's own Definition of Done — "a real query against the ingested
+corpus returns the correct chunk and an accurate, human-readable citation"
+— is better served by ingesting actual regulatory prose. Chosen deliberately
+over the faster path: this project's stated purpose is closing real RAG
+skill gaps, and doing the extraction-and-wiring work now, on a small
+corpus, while the stakes are low, is itself the point — not overhead to be
+minimized. Source confirmed public domain (NAVSEA S0570-AC-CCM-010/8010,
+Distribution Statement A, hosted at NAVSEA's own FOIA reading room — same
+source `case_data/navsea_8010_psns_v2014.json` was originally extracted
+from), so there's no access blocker either way; this was purely a
+which-text-to-chunk decision. Scoped to Chapters 4 ("Hot Work and Fire
+Watch") and 11 ("Fire and Smoke Boundaries") — the sections already
+identified as relevant in `claude/watchstander-adept-reconciliation-plan.md`
+— not the full manual. Does not affect `agent_core/procedural_lookup.py`,
+which keeps using the compact JSON summaries as-is; that module is a
+separate, deliberately conservative consumer of the same source document,
+not something this decision touches. This resolves the open question below
+for 8010 specifically; OSHA CFR 1915 excerpts and `case_data/cases_v1.json`
+(Phase 1's other two planned corpus inputs) don't have the same
+already-extracted-JSON-vs-original-text fork, since no pre-extracted
+structured summary exists for OSHA CFR 1915 the way it does for 8010, and
+`cases_v1.json`'s case summaries are closer to prose than 8010's ruleset
+entries are — so no general policy call was needed here, just this one.
+
 ## 5. Known debt / open questions
 
-- Whether the NAVSEA 8010 source text for chunking should be re-derived from
-  `case_data/navsea_8010_psns_v2014.json` (already-extracted ruleset JSON,
-  possibly too structured/lossy for chunking) or pulled fresh from the
-  original manual — undecided, punted to Phase 1.
 - No corpus size/scale assumptions have been tested yet; Phase 1's DoD is
   "returns the correct chunk," not "performs well at scale" — that's
   implicitly Phase 2's hybrid-retrieval eval-set territory.

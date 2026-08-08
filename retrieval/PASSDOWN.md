@@ -117,3 +117,32 @@ real retrieval, real citation formatting). Open questions from Session 1
 (NAVSEA 8010 source text choice; `retrieval` optional-dependency group)
 still need a decision before or during Phase 1 — neither resolved by this
 session.
+
+---
+
+## Session 4 — 2026-08-08 — NAVSEA 8010 source decision
+
+**Status:** One of Session 1's two open questions resolved. The
+`retrieval` optional-dependency group (`sentence-transformers`, `chromadb`)
+remains open — deliberately, still not needed until Phase 1 actually starts
+wiring code against them.
+
+**What happened:** Donnie decided the NAVSEA 8010 chunking source: pull the
+original manual text (Chapters 4 and 11) fresh, rather than chunk the
+already-extracted `case_data/navsea_8010_psns_v2014.json` summaries. Framed
+explicitly as choosing the harder path on purpose — the extraction-and-
+wiring work is itself the point of this sub-project, and doing it now, on a
+small corpus, while the stakes are low, beats deferring it. Logged as
+ADR-005 in `ARCHITECTURE.md` §4, with the reasoning and scope (Chapters 4
+and 11 specifically, not the full manual) captured there rather than just in
+chat. `MIGRATION.md`'s Phase 1 checklist and `ARCHITECTURE.md` §1's corpus
+description updated to match. No code written this session — Chapters 4/11
+still need to actually be sourced/extracted from the PDF before Phase 1's
+ingestion step can start.
+
+**Next up:** Phase 1 — local RAG proof. Immediate next action, before any
+chunking/embedding code: source and extract the actual text of NAVSEA 8010
+Chapters 4 and 11 from the primary PDF (confirmed public domain, NAVSEA's
+own FOIA reading room — see ADR-005 for the citation). The `retrieval`
+optional-dependency group still needs adding to `pyproject.toml` once
+`sentence-transformers`/`chromadb` are actually used.

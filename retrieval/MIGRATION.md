@@ -39,10 +39,12 @@ imports cleanly, including under a CI-style install.
 
 ## Phase 1 — Local RAG proof
 
-- [ ] Ingest the Watchstander corpus: NAVSEA 8010 Manual
-      (`case_data/navsea_8010_psns_v2014.json` — check whether this covers
-      it or whether the source text needs pulling separately), OSHA CFR 1915
-      excerpts, `case_data/cases_v1.json`.
+- [ ] Ingest the Watchstander corpus: NAVSEA 8010 Manual — original manual
+      text, Chapters 4 ("Hot Work and Fire Watch") and 11 ("Fire and Smoke
+      Boundaries"), pulled fresh from the source PDF, not the pre-extracted
+      `case_data/navsea_8010_psns_v2014.json` summaries (decided 2026-08-08,
+      see ARCHITECTURE.md ADR-005) — plus OSHA CFR 1915 excerpts and
+      `case_data/cases_v1.json`.
 - [ ] `chunker.py`: real sentence/paragraph-aware chunking (not a blind
       character-count cut).
 - [ ] `embedder.py`: wire to `sentence-transformers` (e.g.
