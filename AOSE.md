@@ -42,7 +42,7 @@ This is the same principle as the section above, aimed at a different actor: **v
 
 ## Where the discipline is still open
 
-- Nothing currently tracked here. The multi-package HITL loop's non-idempotency (`hitl_gate_node`'s old `interrupt()`-in-a-loop pattern) was the item previously listed — fixed 2026-07-28 (commit `ff91b3b`, ADR-022), restructured into `hitl_prepare_node` / `hitl_route` / `hitl_gate_single_node` fanned out via `Send()`. See ARCHITECTURE.md Section 5 and Decision Log.
+- `_fire_watch_capacity_conflicts()`'s size gate checks raw per-fire-watch package count, not per-time-window concurrency — found 2026-08-08 while updating its tests for ADR-023's limit change (1 → 4). A group spread across genuinely non-overlapping schedule windows can still exceed the raw-count gate and get flagged, even though no more than the limit was ever concurrently active. Over-flagging direction, not under-flagging — lower severity than most rows in ARCHITECTURE.md Known Debt, where this is tracked in full. Not fixed this pass.
 
 ## Accepted, not open
 

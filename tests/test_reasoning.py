@@ -102,7 +102,12 @@ def test_safety_brief_includes_governing_procedure_when_installation_set(monkeyp
     Site-scoped grounding: a hot_work package tagged with
     governing_installation='PSNS' must get a governing-procedure citation
     from the NAVSEA 8010 ruleset in addition to (not instead of) the case
-    citation, and the UNVERIFIED caveat must survive into the brief.
+    citation. All entries in navsea_8010_psns_v2014.json were verified
+    against primary-source text 2026-08-08 (ARCHITECTURE.md ADR-023), so
+    the UNVERIFIED caveat should no longer appear here -- see
+    test_reasoning's sibling assertion in test_procedural_lookup.py for
+    coverage of the caveat mechanism itself, decoupled from this file's
+    real (and now verified) content.
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     a = make_wp(
@@ -121,7 +126,7 @@ def test_safety_brief_includes_governing_procedure_when_installation_set(monkeyp
     brief = generate_safety_brief(a)
 
     assert "PSNS" in brief.precedent_context
-    assert "UNVERIFIED" in brief.precedent_context
+    assert "UNVERIFIED" not in brief.precedent_context
     # Case citation must still be present -- procedural grounding is
     # additive, not a replacement.
     assert any(

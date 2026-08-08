@@ -14,15 +14,45 @@ def test_unknown_installation_returns_none():
     assert cite_governing_procedure("NASNI", [HazardCategory.HOT_WORK]) is None
 
 
-def test_psns_hot_work_returns_citation_with_unverified_caveat():
+def test_psns_hot_work_returns_citation_without_unverified_caveat():
     """
-    Every entry in navsea_8010_psns_v2014.json is currently verified=false
-    (structural extraction only, not confirmed against primary-source
-    text) -- the citation must surface that caveat, not hide it.
+    All seven entries in navsea_8010_psns_v2014.json were verified against
+    the primary-source PDF text on 2026-08-08 (see the file's own
+    verification_note and ARCHITECTURE.md ADR-023) -- the citation for a
+    verified entry must not carry the UNVERIFIED caveat. This test is
+    coupled to the current, real state of that file on purpose: if a
+    future entry gets added and reverts this to verified=false, this test
+    should fail loudly rather than silently keep asserting the old state.
     """
     citation = cite_governing_procedure("PSNS", [HazardCategory.HOT_WORK])
     assert citation is not None
     assert "PSNS" in citation
+    assert "UNVERIFIED" not in citation
+
+
+def test_cite_governing_procedure_surfaces_unverified_caveat_when_entry_says_so(monkeypatch):
+    """
+    Regression coverage for the caveat mechanism itself, decoupled from
+    whatever navsea_8010_psns_v2014.json's real verification state happens
+    to be right now (that file went from all-unverified to all-verified in
+    one session -- a test asserting real-file content would have silently
+    lost coverage of the UNVERIFIED path the moment that happened, without
+    anyone noticing until a genuinely-unverified entry got added again and
+    the caveat failed to appear). Injects a synthetic unverified entry
+    directly instead.
+    """
+    fake_entry = {
+        "procedure_id": "FAKE-1",
+        "section": "Fake Section",
+        "summary": "fake summary",
+        "verified": False,
+    }
+    monkeypatch.setattr(
+        "agent_core.procedural_lookup.procedures_for_hazard",
+        lambda installation, hazard: [fake_entry],
+    )
+    citation = cite_governing_procedure("PSNS", [HazardCategory.HOT_WORK])
+    assert citation is not None
     assert "UNVERIFIED" in citation
 
 

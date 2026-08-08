@@ -29,15 +29,15 @@ INCOMPATIBLE_HAZARD_PAIRS: set[frozenset[HazardCategory]] = {
 
 # NAVSEA8010-4.4.3 ("Limitations to Single Fire Watch with Multiple Hot
 # Workers") establishes that a single fire watch cannot supervise
-# unlimited concurrent hot work -- but the exact numeric limit is
-# UNVERIFIED against the primary-source PDF text (see
-# case_data/navsea_8010_psns_v2014.json's verification_note). 1 is used
-# here as a conservative default -- i.e. any fire watch covering more
-# than one concurrent hot-work package is flagged -- deliberately on the
-# same over-flagging-is-the-safe-direction posture as the rest of this
-# module, not because 1 has been confirmed as the actual regulatory
-# limit. Raise this only after someone reads the actual section text.
-MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH = 1
+# unlimited concurrent hot work. Verified against the primary-source PDF
+# text 2026-08-08 (S0570-AC-CCM-010/8010, Chapter 4.4.3, pp. 4-3 -- 4-4):
+# "No more than four hot workers shall be attended by a single fire
+# watch." Previously set to 1 as a conservative placeholder pending
+# verification (see case_data/navsea_8010_psns_v2014.json's
+# verification_note and ARCHITECTURE.md ADR-023) -- that placeholder is
+# now replaced with the actual regulatory limit, not left artificially
+# conservative now that the primary source has been read.
+MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH = 4
 
 
 def _frame_ranges_overlap(a: WorkPackageState, b: WorkPackageState) -> bool:
@@ -182,10 +182,10 @@ def _fire_watch_capacity_conflicts(
             covered = ", ".join(sorted(wp.work_package_id for wp in group))
             rationale = (
                 f"Fire watch '{watch_id}' covers {len(group)} concurrent hot-work "
-                f"packages ({covered}), exceeding the configured limit of "
+                f"packages ({covered}), exceeding the limit of "
                 f"{MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH} (NAVSEA8010-4.4.3 -- "
-                f"limitation on single fire watch with multiple hot workers; exact "
-                f"numeric limit UNVERIFIED against primary source, see "
+                f"'No more than four hot workers shall be attended by a single fire "
+                f"watch,' verified against primary source, see "
                 f"case_data/navsea_8010_psns_v2014.json)."
             )
             violations.append((a, b, rationale))

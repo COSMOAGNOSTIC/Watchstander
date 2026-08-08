@@ -4,56 +4,56 @@
   "distribution_statement": "DISTRIBUTION STATEMENT A: APPROVED FOR PUBLIC RELEASE; DISTRIBUTION IS UNLIMITED",
   "document_date": "2014-08-26",
   "installation": "PSNS",
-  "verification_note": "Section titles and topical scope were extracted via automated document fetch, not a verbatim primary-source read. 'summary' fields below are accurate to that structural extraction. Any field marked verified=false has NOT been confirmed against the primary-source PDF text for exact numeric/procedural specifics (counts, distances, durations) and must not be treated as a citable exact requirement until someone reads the actual section and confirms it.",
+  "verification_note": "Section titles and topical scope were originally extracted via automated document fetch, not a verbatim primary-source read -- every entry below was marked verified=false on that basis. All seven entries were verified against the actual primary-source PDF text on 2026-08-08 (full text of Chapter 4 and Chapter 11 pulled and read directly, not re-extracted automatically) and are now marked verified=true, with summaries corrected where the original structural-extraction phrasing was imprecise (see each entry's git history / ARCHITECTURE.md ADR-023 for what changed). A future entry added to this file starts at verified=false again until someone repeats this process for it -- verified=true is earned per-entry, not inherited by the file as a whole.",
   "procedures": [
     {
       "procedure_id": "NAVSEA8010-4.2",
       "hazard_category": "hot_work",
       "section": "Chapter 4.2 - Hot Work Authorization",
       "summary": "Hot work requires written authorization before commencing: written notice, designated signing authority approval, posting of the notice at the work site, and notification to the Commanding Officer's representative.",
-      "verified": false
+      "verified": true
     },
     {
       "procedure_id": "NAVSEA8010-4.3",
       "hazard_category": "hot_work",
       "section": "Chapter 4.3 - Gas-Free Procedures and Special Hazards",
       "summary": "Hot work is governed by gas-free testing procedures; certain compartments/spaces are restricted from hot work; protective coverings, precautions around lines/piping carrying flammable or combustible fluids, proximity controls around flammables/combustibles, restrictions near ammunition/explosives, and special precautions for battery-charging areas all apply.",
-      "verified": false
+      "verified": true
     },
     {
       "procedure_id": "NAVSEA8010-4.4.3",
       "hazard_category": "hot_work",
       "section": "Chapter 4.4.3 - Limitations to Single Fire Watch with Multiple Hot Workers",
-      "summary": "A single fire watch cannot supervise unlimited concurrent hot work activity -- the manual places a limitation on how many hot workers one fire watch can cover at once. Exact numeric limit not confirmed against primary text.",
-      "verified": false
+      "summary": "A single fire watch may cover multiple hot workers in one work area, subject to limitations: no more than four hot workers may be attended by a single fire watch, the fire watch must have an unobstructed view of all hot work operations from one fixed location with no physical obstructions, the fire watch cannot rove between compartments while on duty, and a means of communicating with all hot workers must be provided so the fire watch can immediately halt operations if a fire occurs.",
+      "verified": true
     },
     {
       "procedure_id": "NAVSEA8010-4.4.4",
       "hazard_category": "hot_work",
       "section": "Chapter 4.4.4 - Hot Work Involving Multiple Levels",
-      "summary": "Hot work spanning multiple deck levels requires enhanced fire watch protocols beyond a single-level assignment.",
-      "verified": false
+      "summary": "When hot material from hot work could involve more than one level (trunks, machinery spaces, scaffolding), a fire watch shall be stationed at each level unless positive means are in place to prevent the spread or fall of hot material.",
+      "verified": true
     },
     {
       "procedure_id": "NAVSEA8010-4.4.6",
       "hazard_category": "hot_work",
       "section": "Chapter 4.4.6 - Blind Compartment Hot Work",
-      "summary": "Hot work performed in a compartment not directly observable by the fire watch (a 'blind compartment') requires special fire watch provisions beyond standard line-of-sight supervision.",
-      "verified": false
+      "summary": "If a hot work job involves multiple blind compartments (spaces not within a fire watch's direct line of sight), fire watches shall be posted simultaneously in each blind compartment involved.",
+      "verified": true
     },
     {
       "procedure_id": "NAVSEA8010-11.1",
       "hazard_category": "hot_work",
       "section": "Chapter 11.1 - Fire Zone Boundaries",
-      "summary": "Fire zone boundaries must be maintained and marked; temporary access cuts through fire zone boundaries during industrial work are permitted under controlled conditions and must be recorded (audit trail of boundary openings); boundaries may be temporarily degraded during maintenance and must be tracked as such.",
-      "verified": false
+      "summary": "Fire zone boundaries must be maintained and marked; temporary access cuts through fire zone boundaries during industrial work are permitted only under controlled conditions (non-combustible fume-tight closures, no aluminum) and must be recorded in an up-to-date record of boundary openings kept aboard ship; disabling or degrading a boundary closure requires FSC approval and a temporary closure system such as fire-resistant smoke curtains.",
+      "verified": true
     },
     {
       "procedure_id": "NAVSEA8010-11.1.7",
       "hazard_category": "hot_work",
       "section": "Chapter 11.1.7 - Boundaries on Carrier Type Ships",
-      "summary": "Special fire zone boundary provisions apply specifically to aircraft carrier-type ships, distinct from the general fire zone boundary rules elsewhere in Chapter 11.",
-      "verified": false
+      "summary": "On carrier-type ships, hangar division door travel paths must remain unobstructed so the doors can be operated in a fire; if maintenance renders a door mechanically inoperable, a means (e.g. a chain-fall) must be provided to close it, and if a door will be totally immovable, the work must be sequenced and approved by the FSC so at least one set of doors is always available to close.",
+      "verified": true
     }
   ]
 }

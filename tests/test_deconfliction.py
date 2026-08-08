@@ -259,65 +259,103 @@ def test_conflict_still_flagged_when_schedules_actually_overlap():
     assert "hot_work" in rationale and "confined_space" in rationale
 
 
+def _hot_work_group(count: int, fire_watch_id: str, start, end) -> list[WorkPackageState]:
+    """
+    Builds `count` spatially-unrelated hot-work packages sharing one
+    fire watch and one overlapping schedule window -- the minimal shape
+    needed to exercise `_fire_watch_capacity_conflicts` without a
+    spatial/hazard-pair conflict also being in play. Frame ranges are
+    spread far apart (1000 frames per package) specifically so no pair
+    is spatially linked -- this is meant to isolate the N-way capacity
+    check, not the pairwise geometry check.
+    """
+    return [
+        make_wp(
+            work_package_id=f"WP-HOT-{i}",
+            hazard_categories=[HazardCategory.HOT_WORK],
+            spatial=SpatialCoordinates(frame_start=i * 1000, frame_end=i * 1000 + 5),
+            fire_watch_id=fire_watch_id,
+            scheduled_start=start,
+            scheduled_end=end,
+        )
+        for i in range(count)
+    ]
+
+
 def test_fire_watch_capacity_flagged_when_exceeded():
     """
-    NAVSEA8010-4.4.3: a single fire watch cannot supervise unlimited
-    concurrent hot work. Two spatially-unrelated hot-work packages
-    sharing the same fire_watch_id and overlapping schedule must still
-    be flagged -- this is a capacity constraint, not a geometry one.
+    NAVSEA8010-4.4.3, verified against primary source 2026-08-08: "No
+    more than four hot workers shall be attended by a single fire
+    watch." Five spatially-unrelated hot-work packages sharing one fire
+    watch and an overlapping schedule must be flagged -- this is a
+    capacity constraint, not a geometry one -- while four must not be
+    (see test_fire_watch_capacity_not_flagged_at_exactly_the_limit).
     """
-    assert MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH == 1
+    assert MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH == 4
 
     same_day_am = datetime(2026, 8, 3, 7, 0)
     same_day_pm = datetime(2026, 8, 3, 15, 0)
 
-    a = make_wp(
-        work_package_id="WP-HOT-A",
-        hazard_categories=[HazardCategory.HOT_WORK],
-        spatial=SpatialCoordinates(frame_start=1, frame_end=5),
-        fire_watch_id="FW-1",
-        scheduled_start=same_day_am,
-        scheduled_end=same_day_pm,
-    )
-    b = make_wp(
-        work_package_id="WP-HOT-B",
-        hazard_categories=[HazardCategory.HOT_WORK],
-        spatial=SpatialCoordinates(frame_start=900, frame_end=905),  # far away, no geometry link
-        fire_watch_id="FW-1",
-        scheduled_start=same_day_am,
-        scheduled_end=same_day_pm,
-    )
+    group = _hot_work_group(5, "FW-1", same_day_am, same_day_pm)
+    find_all_conflicts(group)
 
-    find_all_conflicts([a, b])
-
-    assert "WP-HOT-B" in a.conflicts
+    a = group[0]
+    assert len(a.conflicts) == 4
     assert "NAVSEA8010-4.4.3" in a.conflict_rationale
+    assert "No more than four hot workers" in a.conflict_rationale
+
+
+def test_fire_watch_capacity_not_flagged_at_exactly_the_limit():
+    """
+    Regression guard for an off-by-one: exactly four hot workers on one
+    fire watch is within NAVSEA8010-4.4.3's stated limit, not over it --
+    `_fire_watch_capacity_conflicts` must use `<=`, not `<`, when
+    deciding a group is within bounds.
+    """
+    same_day_am = datetime(2026, 8, 3, 7, 0)
+    same_day_pm = datetime(2026, 8, 3, 15, 0)
+
+    group = _hot_work_group(4, "FW-1", same_day_am, same_day_pm)
+    find_all_conflicts(group)
+
+    for wp in group:
+        assert wp.conflicts == []
 
 
 def test_fire_watch_capacity_not_flagged_when_schedules_dont_overlap():
-    week1 = datetime(2026, 8, 3, 7, 0)
-    week1_end = datetime(2026, 8, 3, 15, 0)
-    week3 = datetime(2026, 8, 17, 7, 0)
-    week3_end = datetime(2026, 8, 17, 15, 0)
+    """
+    Five packages assigned to one fire watch is over the limit of 4 by
+    raw count, but if the five are spread across five mutually
+    non-overlapping days, no two of them are ever concurrently active --
+    the fire watch never actually covers more than one at a time.
+    `_fire_watch_capacity_conflicts` must not flag any pair here.
 
-    a = make_wp(
-        work_package_id="WP-HOT-A",
-        hazard_categories=[HazardCategory.HOT_WORK],
-        fire_watch_id="FW-1",
-        scheduled_start=week1,
-        scheduled_end=week1_end,
-    )
-    b = make_wp(
-        work_package_id="WP-HOT-B",
-        hazard_categories=[HazardCategory.HOT_WORK],
-        fire_watch_id="FW-1",
-        scheduled_start=week3,
-        scheduled_end=week3_end,
-    )
+    Deliberately gives every package its own disjoint day (not two
+    packages sharing week1 and three sharing week3, or similar) --
+    `_fire_watch_capacity_conflicts`'s current implementation gates on
+    raw per-fire-watch package count before checking pairwise schedule
+    overlap, so a subgroup of >=2 packages that *do* overlap each other
+    within a >4-package total would still get flagged even though that
+    subgroup alone never exceeds the limit. That's a real, separate gap
+    (see ARCHITECTURE.md Known Debt) -- this test is scoped to the
+    already-correct "genuinely never concurrent" case, not that one.
+    """
+    days = [datetime(2026, 8, 3 + 7 * i, 7, 0) for i in range(5)]
+    packages = [
+        make_wp(
+            work_package_id=f"WP-HOT-{i}",
+            hazard_categories=[HazardCategory.HOT_WORK],
+            spatial=SpatialCoordinates(frame_start=i * 1000, frame_end=i * 1000 + 5),
+            fire_watch_id="FW-1",
+            scheduled_start=day,
+            scheduled_end=day.replace(hour=15),
+        )
+        for i, day in enumerate(days)
+    ]
 
-    find_all_conflicts([a, b])
-    assert a.conflicts == []
-    assert b.conflicts == []
+    find_all_conflicts(packages)
+    for wp in packages:
+        assert wp.conflicts == []
 
 
 def test_fire_watch_capacity_not_flagged_without_shared_fire_watch_id():
@@ -339,24 +377,13 @@ def test_fire_watch_capacity_not_flagged_without_shared_fire_watch_id():
 def test_fire_watch_capacity_conflicts_are_idempotent_on_repeated_invocation():
     same_day_am = datetime(2026, 8, 3, 7, 0)
     same_day_pm = datetime(2026, 8, 3, 15, 0)
-    a = make_wp(
-        work_package_id="WP-HOT-A",
-        hazard_categories=[HazardCategory.HOT_WORK],
-        fire_watch_id="FW-1",
-        scheduled_start=same_day_am,
-        scheduled_end=same_day_pm,
-    )
-    b = make_wp(
-        work_package_id="WP-HOT-B",
-        hazard_categories=[HazardCategory.HOT_WORK],
-        fire_watch_id="FW-1",
-        scheduled_start=same_day_am,
-        scheduled_end=same_day_pm,
-    )
-    find_all_conflicts([a, b])
+    group = _hot_work_group(5, "FW-1", same_day_am, same_day_pm)
+    find_all_conflicts(group)
+    a = group[0]
+    first_conflicts = list(a.conflicts)
     first_rationale = a.conflict_rationale
-    find_all_conflicts([a, b])
-    assert a.conflicts == ["WP-HOT-B"]
+    find_all_conflicts(group)
+    assert a.conflicts == first_conflicts
     assert a.conflict_rationale == first_rationale
 
 
