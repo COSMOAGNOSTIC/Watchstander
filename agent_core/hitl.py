@@ -30,30 +30,60 @@ from agent_core.reasoning import provenance_tag
 from agent_core.state import HitlDisposition, RiskLevel, WorkPackageState
 
 
-_NEGATION_CUES = (
-    " not ",
-    "n't",
-    " unless ",
-    " only if ",
-    " except ",
-    " provided that ",
-    " as long as ",
-    " until ",
-)
+def _extract_decision(raw) -> tuple[HitlDisposition, str | None]:
+    """
+    Reads a disposition (and an optional audit-trail note) from a resume
+    value. The reviewer app's UI is already structured -- a reviewer
+    clicks a literal Approve or Reject button, never types a verdict as
+    prose -- so this function's job is narrow: read the exact token the
+    button produced, and treat everything else as an inert note that can
+    never change which disposition is recorded.
 
-_NEGATION_SCAN_WORDS = 6
+    Two accepted shapes:
+      - a dict, `{"decision": "approved"|"rejected", "note": <str, optional>}`
+        -- the real reviewer app's resume value, and the only shape a
+        real human decision should ever take.
+      - a bare string that is EXACTLY (case-insensitive, whitespace-
+        stripped) one of "approve", "approved", "reject", "rejected" --
+        kept only for direct `graph.invoke(Command(resume=...))` callers
+        in tests/CLI tooling. Any trailing text on a bare string --
+        even something as benign as "approve, looks good" -- now fails
+        closed to INVALID rather than being prefix-matched, because a
+        bare string has no separate channel for rationale; use the dict
+        shape's `note` field for that instead.
 
+    This replaces the previous six-word negation/hedge-cue scanner
+    (ADR-011), which tried to catch conditional or negated free text by
+    checking a fixed list of eight cue phrases against the leading words
+    of the answer. That approach was defeatable by any real-world hedge
+    phrasing not on the list -- confirmed live through the reviewer app
+    itself: a reviewer clicking Approve and typing "contingent on
+    gas-free re-test" into the note field produced the resume string
+    "approve - contingent on gas-free re-test", which matched none of
+    the eight cue phrases and parsed as a clean APPROVED. Rather than
+    grow the cue list indefinitely and stay one unanticipated phrase
+    behind, this removes free-text parsing from the authorization
+    channel entirely: the decision is read as an exact structural
+    token, and any rationale or condition a reviewer attaches is
+    recorded as a note but never inspected to determine disposition.
 
-def _parse_decision(raw) -> HitlDisposition:
-    text = str(raw).strip().lower()
-    lead_window = " ".join(text.split()[:_NEGATION_SCAN_WORDS])
-    if any(cue in f" {lead_window} " for cue in _NEGATION_CUES):
-        return HitlDisposition.INVALID
-    if text.startswith("approve"):
-        return HitlDisposition.APPROVED
-    if text.startswith("reject"):
-        return HitlDisposition.REJECTED
-    return HitlDisposition.INVALID
+    See `HitlDisposition`'s docstring: this system has exactly two live
+    dispositions today (plus fail-closed INVALID) and no conditional-
+    approval state -- a note here is audit trail only, never enforced.
+    """
+    note = None
+    if isinstance(raw, dict):
+        token = str(raw.get("decision", "")).strip().lower()
+        raw_note = raw.get("note")
+        note = raw_note.strip() if isinstance(raw_note, str) and raw_note.strip() else None
+    else:
+        token = str(raw).strip().lower()
+
+    if token in ("approve", "approved"):
+        return HitlDisposition.APPROVED, note
+    if token in ("reject", "rejected"):
+        return HitlDisposition.REJECTED, note
+    return HitlDisposition.INVALID, note
 
 
 def _needs_review(wp: WorkPackageState) -> bool:
@@ -101,12 +131,17 @@ def hitl_gate_single_node(state: HitlSingleState) -> dict:
             "risk_level": wp.risk_level,
             "prompt": (
                 f"Work package {wp.work_package_id} requires human review before "
-                f"it can be approved. Respond with 'approve', 'reject', or a note."
+                f"it can be approved. Submit a structured decision: "
+                f"{{'decision': 'approved'|'rejected', 'note': <optional>}}. "
+                f"A note is recorded for audit but never changes the disposition -- "
+                f"there is no conditional-approval state yet; reject and have the "
+                f"package resubmitted if approval should depend on something not "
+                f"yet true."
             ),
         }
     )
 
-    disposition = _parse_decision(decision)
+    disposition, note = _extract_decision(decision)
     wp.hitl_disposition = disposition
     wp.cleared_for_execution = disposition == HitlDisposition.APPROVED
 
@@ -117,10 +152,10 @@ def hitl_gate_single_node(state: HitlSingleState) -> dict:
         cleared_for_execution=wp.cleared_for_execution,
     )
 
-    wp.conflict_rationale = (
-        (wp.conflict_rationale or "")
-        + f" | HITL decision: {decision} (disposition={disposition.value}, "
-        f"cleared_for_execution={wp.cleared_for_execution})"
-    )
+    rationale_suffix = f" | HITL decision: {disposition.value}"
+    if note:
+        rationale_suffix += f" (note: {note})"
+    rationale_suffix += f" (cleared_for_execution={wp.cleared_for_execution})"
+    wp.conflict_rationale = (wp.conflict_rationale or "") + rationale_suffix
 
     return {"reviewed_packages": [wp]}

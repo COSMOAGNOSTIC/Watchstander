@@ -27,7 +27,7 @@ from langgraph.types import Command
 
 from agent_core import events
 from agent_core.hitl import (
-    _parse_decision,
+    _extract_decision,
     hitl_gate_single_node,
     hitl_prepare_node,
     hitl_route,
@@ -50,30 +50,53 @@ def _build_gate_only_graph():
     return graph.compile(checkpointer=MemorySaver())
 
 
-def test_parse_decision_is_case_insensitive_and_prefix_matched():
-    assert _parse_decision("approve") == HitlDisposition.APPROVED
-    assert _parse_decision("Approved, looks fine") == HitlDisposition.APPROVED
-    assert _parse_decision("REJECT") == HitlDisposition.REJECTED
-    assert _parse_decision("rejected - reschedule") == HitlDisposition.REJECTED
+def test_extract_decision_reads_the_structured_dict_shape():
+    assert _extract_decision({"decision": "approved"}) == (HitlDisposition.APPROVED, None)
+    assert _extract_decision({"decision": "Approve"}) == (HitlDisposition.APPROVED, None)
+    assert _extract_decision({"decision": "rejected"}) == (HitlDisposition.REJECTED, None)
+    assert _extract_decision({"decision": "REJECT"}) == (HitlDisposition.REJECTED, None)
 
 
-def test_parse_decision_fails_closed_on_ambiguous_input():
-    assert _parse_decision("") == HitlDisposition.INVALID
-    assert _parse_decision("looks ok i guess") == HitlDisposition.INVALID
-    assert _parse_decision("maybe") == HitlDisposition.INVALID
+def test_extract_decision_accepts_exact_bare_strings_for_test_and_cli_callers():
+    assert _extract_decision("approve") == (HitlDisposition.APPROVED, None)
+    assert _extract_decision("Approved") == (HitlDisposition.APPROVED, None)
+    assert _extract_decision("REJECT") == (HitlDisposition.REJECTED, None)
+    assert _extract_decision("rejected") == (HitlDisposition.REJECTED, None)
 
 
-def test_parse_decision_fails_closed_on_conditional_or_negated_approve_text():
-    assert _parse_decision("approve only if the marine chemist re-certifies") == HitlDisposition.INVALID
-    assert _parse_decision("approve?? absolutely not") == HitlDisposition.INVALID
-    assert _parse_decision("approve unless the permit lapses") == HitlDisposition.INVALID
-    assert _parse_decision("wouldn't approve this as written") == HitlDisposition.INVALID
+def test_extract_decision_fails_closed_on_ambiguous_or_trailing_text():
+    # No prefix matching and no free-text parsing at all -- a bare string
+    # has no separate channel for rationale, so anything other than an
+    # exact token, including previously-"allowed" trailing rationale,
+    # now fails closed rather than being guessed at.
+    assert _extract_decision("") == (HitlDisposition.INVALID, None)
+    assert _extract_decision("looks ok i guess") == (HitlDisposition.INVALID, None)
+    assert _extract_decision("maybe") == (HitlDisposition.INVALID, None)
+    assert _extract_decision("approve, looks good") == (HitlDisposition.INVALID, None)
+    assert _extract_decision("approved - proceed as planned") == (HitlDisposition.INVALID, None)
 
 
-def test_parse_decision_still_allows_trailing_rationale_after_a_clean_verdict():
-    assert _parse_decision("approve, looks good") == HitlDisposition.APPROVED
-    assert _parse_decision("approved - proceed as planned") == HitlDisposition.APPROVED
-    assert _parse_decision("reject - reschedule after clearing") == HitlDisposition.REJECTED
+def test_extract_decision_note_never_influences_disposition_regardless_of_wording():
+    # Regression test for the live bug this replaces: the reviewer app
+    # used to build the resume value as f"{decision} - {note}" and run
+    # the whole thing through a free-text hedge-cue scanner, so a note
+    # like "contingent on gas-free re-test" -- containing no recognized
+    # cue phrase -- was silently absorbed into a clean APPROVED. Now the
+    # note travels as a separate field and is never inspected to choose
+    # a disposition, no matter what it says -- including if it contains
+    # words like "reject" or "unless" that could have flipped the old
+    # parser's verdict.
+    disposition, note = _extract_decision(
+        {"decision": "approved", "note": "contingent on gas-free re-test"}
+    )
+    assert disposition == HitlDisposition.APPROVED
+    assert note == "contingent on gas-free re-test"
+
+    disposition, note = _extract_decision(
+        {"decision": "rejected", "note": "actually, go ahead and approve this"}
+    )
+    assert disposition == HitlDisposition.REJECTED
+    assert note == "actually, go ahead and approve this"
 
 
 def test_approve_sets_disposition_and_clears_for_execution():
@@ -96,12 +119,16 @@ def test_reject_blocks_the_package_structurally_not_just_in_prose():
     config = {"configurable": {"thread_id": "reject-1"}}
 
     graph.invoke({"work_packages": [wp], "reviewed_packages": []}, config=config)
-    result = graph.invoke(Command(resume="reject - reschedule after clearing"), config=config)
+    result = graph.invoke(
+        Command(resume={"decision": "reject", "note": "reschedule after clearing"}),
+        config=config,
+    )
 
     out = result["reviewed_packages"][0]
     assert out.hitl_disposition == HitlDisposition.REJECTED
     assert out.cleared_for_execution is False
     assert "HITL decision" in out.conflict_rationale
+    assert "reschedule after clearing" in out.conflict_rationale
 
 
 def test_unparseable_decision_fails_closed():
@@ -155,12 +182,13 @@ def test_hitl_decided_event_never_broadcasts_the_raw_reviewer_text(monkeypatch):
     emitted = []
     monkeypatch.setattr(events, "emit", lambda event_type, **payload: emitted.append((event_type, payload)))
 
-    raw_text = "reject - the confined space entry permit for FR-100 hasn't been signed off"
-    graph.invoke(Command(resume=raw_text), config=config)
+    raw_note = "the confined space entry permit for FR-100 hasn't been signed off"
+    graph.invoke(Command(resume={"decision": "reject", "note": raw_note}), config=config)
 
     decided = [payload for event_type, payload in emitted if event_type == "hitl_decided"]
     assert len(decided) == 1
     assert "decision" not in decided[0]
+    assert "note" not in decided[0]
     assert decided[0]["disposition"] == HitlDisposition.REJECTED
     for value in decided[0].values():
-        assert raw_text not in str(value)
+        assert raw_note not in str(value)

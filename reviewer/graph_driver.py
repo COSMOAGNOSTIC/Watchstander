@@ -139,12 +139,24 @@ class ReviewerService:
                     )
         return decided
 
-    def submit_decision(self, thread_id: str, interrupt_id: str, decision_text: str) -> None:
+    def submit_decision(
+        self, thread_id: str, interrupt_id: str, decision: str, note: str | None = None
+    ) -> None:
         """Resumes only this one interrupt -- every other package still
         pending on this or any other thread is left untouched and stays
         reviewable independently (verified directly: see
         reviewer/tests -- partial resume leaves the other interrupt
         pending, it does not require answering every open review in one
-        call)."""
+        call).
+
+        `decision` and `note` are passed to the graph as separate
+        structured fields, never concatenated into one string -- see
+        agent_core/hitl.py's `_extract_decision` docstring for why: the
+        prior string-concatenation shape (`f"{decision} - {note}"`) let
+        a note's wording (e.g. "contingent on gas-free re-test") slip
+        past the old hedge-cue parser and get recorded as a clean
+        approval. Structured fields make that class of bug structurally
+        impossible -- the note can never be mistaken for the decision."""
         config = {"configurable": {"thread_id": thread_id}}
-        self._graph.invoke(Command(resume={interrupt_id: decision_text}), config=config)
+        resume_value = {"decision": decision, "note": note}
+        self._graph.invoke(Command(resume={interrupt_id: resume_value}), config=config)
