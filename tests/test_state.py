@@ -7,7 +7,10 @@ tests, which never happened to construct a CRITICAL-risk package and
 inspect the field before the HITL gate ran on it.
 """
 
-from agent_core.state import HitlDisposition, RiskLevel, WorkPackageState
+import pytest
+from pydantic import ValidationError
+
+from agent_core.state import HitlDisposition, RiskLevel, SpatialCoordinates, WorkPackageState
 
 
 def test_cleared_for_execution_defaults_true_for_a_package_that_never_needs_review():
@@ -47,3 +50,67 @@ def test_cleared_for_execution_still_settable_once_a_disposition_exists():
         cleared_for_execution=True,
     )
     assert wp.cleared_for_execution is True
+
+
+def test_frame_start_after_frame_end_is_rejected():
+    """
+    AOSE Round 5 (Grok AUD-04, reproduced and confirmed). Before this
+    validator existed, a transposed frame_start/frame_end silently changed
+    what _frame_ranges_overlap() reported in deconfliction.py instead of
+    being caught at the door.
+    """
+    with pytest.raises(ValidationError, match="frame_start"):
+        SpatialCoordinates(frame_start=90, frame_end=80)
+
+
+def test_frame_start_equal_to_frame_end_is_allowed():
+    """Closed interval [start, end] -- a single-frame package is valid."""
+    coords = SpatialCoordinates(frame_start=85, frame_end=85)
+    assert coords.frame_start == coords.frame_end == 85
+
+
+def test_frame_range_with_one_side_unset_is_allowed():
+    """Partial frame data is a known, accepted state -- only reject when
+    both sides are present and actually inverted."""
+    coords = SpatialCoordinates(frame_start=85)
+    assert coords.frame_end is None
+
+
+def test_scheduled_start_after_scheduled_end_is_rejected():
+    """
+    AOSE Round 5 (Grok AUD-04, reproduced and confirmed). Before this
+    validator existed, a transposed scheduled_start/scheduled_end made
+    check_conflict() return "no conflict" for a genuinely overlapping,
+    incompatible-hazard-pair pair of packages -- a real under-flag from a
+    single data-entry typo, with nothing downstream able to catch it.
+    """
+    with pytest.raises(ValidationError, match="scheduled_start"):
+        WorkPackageState(
+            work_package_id="WP-BAD-SCHEDULE",
+            description="typo'd schedule, start after end",
+            scheduled_start="2026-08-15T15:00:00",
+            scheduled_end="2026-08-15T07:00:00",
+        )
+
+
+def test_scheduled_start_equal_to_scheduled_end_is_allowed():
+    """Closed interval [start, end] -- a zero-duration/instant task is valid."""
+    wp = WorkPackageState(
+        work_package_id="WP-INSTANT",
+        description="point-in-time task",
+        scheduled_start="2026-08-15T07:00:00",
+        scheduled_end="2026-08-15T07:00:00",
+    )
+    assert wp.scheduled_start == wp.scheduled_end
+
+
+def test_schedule_with_one_side_unset_is_allowed():
+    """Partial schedule data is a known, accepted state (treated as
+    over-flagging/unknown by _schedules_overlap) -- only reject when both
+    sides are present and actually inverted."""
+    wp = WorkPackageState(
+        work_package_id="WP-PARTIAL-SCHEDULE",
+        description="only a start date filled in so far",
+        scheduled_start="2026-08-15T07:00:00",
+    )
+    assert wp.scheduled_end is None
