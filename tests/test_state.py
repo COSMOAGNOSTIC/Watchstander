@@ -52,6 +52,39 @@ def test_cleared_for_execution_still_settable_once_a_disposition_exists():
     assert wp.cleared_for_execution is True
 
 
+def test_cleared_for_execution_fails_closed_for_a_non_critical_review_required_package():
+    """
+    AUD-09 residual gap (AOSE Round 4, `aose-round4-crossreview-gemini-aud09.md`
+    §3.1). The CRITICAL-risk case above was already closed; a package that
+    is NOT critical risk, has no recorded conflict, but has
+    `requires_hitl_review=True` set directly (e.g. a submitter flagging it
+    for review for a reason outside risk-level/conflict machinery) was not
+    -- it read `cleared_for_execution=True` from construction until an
+    actual disposition landed. Regression test for the validator's fix.
+    """
+    wp = WorkPackageState(
+        work_package_id="WP-FLAGGED",
+        description="low risk, no conflict, but flagged for review directly",
+        risk_level=RiskLevel.LOW,
+        requires_hitl_review=True,
+    )
+    assert wp.hitl_disposition is None
+    assert wp.cleared_for_execution is False
+
+
+def test_cleared_for_execution_still_settable_for_a_review_required_package_once_decided():
+    """Same non-fighting-the-authoritative-decision guarantee as the
+    CRITICAL case, for the requires_hitl_review path."""
+    wp = WorkPackageState(
+        work_package_id="WP-FLAGGED-APPROVED",
+        description="flagged for review, already reviewed and approved",
+        requires_hitl_review=True,
+        hitl_disposition=HitlDisposition.APPROVED,
+        cleared_for_execution=True,
+    )
+    assert wp.cleared_for_execution is True
+
+
 def test_frame_start_after_frame_end_is_rejected():
     """
     AOSE Round 5 (Grok AUD-04, reproduced and confirmed). Before this

@@ -242,17 +242,31 @@ class WorkPackageState(BaseModel):
         unreviewed critical package as cleared.
 
         This closes the gap at construction time: a package that is
-        independently CRITICAL risk and hasn't been reviewed yet
-        (`hitl_disposition is None`) is forced to `cleared_for_execution =
-        False` here, regardless of what was passed in. `deconfliction_node`
-        closes the second half of the same gap for packages that only
-        become review-required once a conflict is actually flagged (see
-        deconfliction.py). `hitl_gate_node` remains the sole authority once
-        an actual disposition is recorded -- this validator only tightens
-        the *pending-review* default, it never runs again after that, since
-        by then `hitl_disposition` is no longer `None`.
+        independently CRITICAL risk, OR that has `requires_hitl_review=True`
+        set directly (e.g. a submitter flagging a package for review for a
+        reason outside the risk-level/conflict machinery), and hasn't been
+        reviewed yet (`hitl_disposition is None`) is forced to
+        `cleared_for_execution = False` here, regardless of what was passed
+        in. The `requires_hitl_review` half of this check closes the AUD-09
+        residual gap identified during the AOSE Round 4 cross-review
+        (`aose-round4-crossreview-gemini-aud09.md` §3.1): CRITICAL-risk and
+        conflict-flagged packages were already closed (this validator's
+        original scope, and `deconfliction_node`'s inline flip,
+        respectively), but a package that is neither CRITICAL nor
+        conflict-flagged, yet still has `requires_hitl_review=True` set
+        directly, was not -- it read `cleared_for_execution=True` from the
+        moment it was constructed until an actual disposition landed.
+        `deconfliction_node` closes the conflict-flagged half of the same
+        gap for packages that only become review-required once a conflict
+        is actually detected (see deconfliction.py). `hitl_gate_node`
+        remains the sole authority once an actual disposition is recorded --
+        this validator only tightens the *pending-review* default, it never
+        runs again after that, since by then `hitl_disposition` is no
+        longer `None`.
         """
-        if self.hitl_disposition is None and self.risk_level == RiskLevel.CRITICAL:
+        if self.hitl_disposition is None and (
+            self.risk_level == RiskLevel.CRITICAL or self.requires_hitl_review
+        ):
             self.cleared_for_execution = False
         return self
 
