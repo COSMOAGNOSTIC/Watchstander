@@ -152,7 +152,9 @@ def review_detail(thread_id: str, interrupt_id: str) -> HTMLResponse:
             {brief_html}
         </div>
         <form method="post" action="/review/{html.escape(thread_id)}/{html.escape(interrupt_id)}">
-            <label>Note (optional, appended to the decision record):</label>
+            <label>Note (record-only -- does not attach a condition; there is no
+                conditional-approval state yet, so reject and resubmit once a
+                condition is actually met):</label>
             <textarea name="note" rows="2"></textarea>
             <button class="approve" type="submit" name="decision" value="approve">Approve</button>
             <button class="reject" type="submit" name="decision" value="reject">Reject</button>
@@ -162,6 +164,8 @@ def review_detail(thread_id: str, interrupt_id: str) -> HTMLResponse:
 
 @app.post("/review/{thread_id}/{interrupt_id}")
 def submit_review(thread_id: str, interrupt_id: str, decision: str = Form(...), note: str = Form("")) -> RedirectResponse:
-    decision_text = decision if not note.strip() else f"{decision} - {note.strip()}"
-    service.submit_decision(thread_id, interrupt_id, decision_text)
+    # decision and note travel to the graph as separate fields -- never
+    # concatenated into one string. See ReviewerService.submit_decision's
+    # docstring for the bug this avoids.
+    service.submit_decision(thread_id, interrupt_id, decision, note.strip() or None)
     return RedirectResponse(url="/", status_code=303)

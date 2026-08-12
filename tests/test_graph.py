@@ -48,7 +48,9 @@ def test_graph_end_to_end_rejection_is_structurally_recorded():
     config = {"configurable": {"thread_id": "e2e-2"}}
 
     graph.invoke({"work_packages": [critical], "reviewed_packages": []}, config=config)
-    final = graph.invoke(Command(resume="reject - unsafe as scheduled"), config=config)
+    final = graph.invoke(
+        Command(resume={"decision": "reject", "note": "unsafe as scheduled"}), config=config
+    )
 
     out = final["reviewed_packages"][0]
     assert out.hitl_disposition == HitlDisposition.REJECTED
@@ -72,7 +74,11 @@ def test_graph_reviews_two_packages_independently():
     assert len(interrupts) == 2
 
     resume_map = {
-        i.id: ("approve" if i.value["work_package_id"] == "CRIT-A" else "reject - schedule conflict")
+        i.id: (
+            {"decision": "approve"}
+            if i.value["work_package_id"] == "CRIT-A"
+            else {"decision": "reject", "note": "schedule conflict"}
+        )
         for i in interrupts
     }
 

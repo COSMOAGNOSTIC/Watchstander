@@ -100,3 +100,32 @@ def test_review_detail_for_an_unknown_or_already_decided_package_404s(tmp_path):
     client = _client(tmp_path)
     resp = client.get("/review/no-such-thread/no-such-interrupt")
     assert resp.status_code == 404
+
+
+def test_a_hedge_worded_note_never_flips_or_corrupts_the_decision(tmp_path):
+    """Regression test for the live bug this app used to have: submit_review
+    built the resume value as f"{decision} - {note}" and ran the whole
+    thing through the old free-text hedge-cue parser, so typing a real
+    condition into the note box could slip past it undetected. Decision
+    and note now travel to the graph as separate structured fields (see
+    ReviewerService.submit_decision), so no wording in the note -- not
+    even the literal word "reject" -- can change which disposition gets
+    recorded for an Approve click."""
+    client = _client(tmp_path)
+    client.post("/seed-demo", follow_redirects=False)
+    pending = app_module.service.list_pending_reviews()
+    hw = next(r for r in pending if r.work_package_id == "HW-2201")
+
+    client.post(
+        f"/review/{hw.thread_id}/{hw.interrupt_id}",
+        data={
+            "decision": "approve",
+            "note": "actually now I'm not sure, maybe reject this instead",
+        },
+        follow_redirects=False,
+    )
+
+    decided = app_module.service.list_decided()
+    hw_decided = next(d for d in decided if d["work_package_id"] == "HW-2201")
+    assert hw_decided["disposition"] == "approved"
+    assert hw_decided["cleared_for_execution"] is True

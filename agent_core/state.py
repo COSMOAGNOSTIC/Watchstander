@@ -37,10 +37,29 @@ class HitlDisposition(str, Enum):
     at the HITL gate. Before this existed, `hitl_gate_node` recorded the
     raw decision only as a string appended to `conflict_rationale` -- prose,
     not state -- so "approve" and "reject" produced identical downstream
-    behavior. `approve`/`reject` (case-insensitive prefix match) parse to
-    APPROVED/REJECTED; anything else parses to INVALID and is treated
-    identically to REJECTED for `cleared_for_execution`, below -- the gate
-    fails closed on an unparseable answer rather than defaulting to open.
+    behavior.
+
+    A resume value is read as an exact structural token (see
+    `agent_core.hitl._extract_decision`), not parsed as free text --
+    APPROVED/REJECTED come from an exact match; anything else is INVALID
+    and is treated identically to REJECTED for `cleared_for_execution`,
+    below -- the gate fails closed on an unparseable answer rather than
+    defaulting to open.
+
+    This is a deliberately binary decision model: there is no
+    conditionally-approved state yet. A reviewer who means "approved,
+    but only once X is confirmed" must REJECT today and have the
+    package resubmitted once the condition is actually met -- any note
+    attached to a decision is audit trail only, never enforced. The
+    reserved name for the future third state is `CONDITIONALLY_APPROVED`
+    -- do not introduce a different name or a separate bool flag for
+    this concept later. When it's added, `cleared_for_execution`'s
+    allowlist check (`disposition == HitlDisposition.APPROVED`) needs no
+    change: a `CONDITIONALLY_APPROVED` value already defaults to
+    `cleared_for_execution = False`, same as every other non-APPROVED
+    value today, until whatever resolves the condition explicitly flips
+    it. See ARCHITECTURE.md Known Debt for the resolution-workflow gap
+    this leaves open.
     """
 
     APPROVED = "approved"
@@ -79,6 +98,31 @@ class SpatialCoordinates(BaseModel):
     is_enclosed_or_confined: bool = Field(
         default=False, description="Work performed in a confined/enclosed space per 1915 Subpart B"
     )
+
+    @model_validator(mode="after")
+    def _frame_range_is_ordered(self) -> "SpatialCoordinates":
+        """
+        AOSE Round 5 (Grok AUD-04, reproduced and confirmed valid): with no
+        constraint here, a transposed frame_start/frame_end (a data-entry
+        typo) silently changes what `_frame_ranges_overlap()` in
+        deconfliction.py reports, since that function assumes a closed
+        interval `[frame_start, frame_end]` and never checks the order
+        itself. This is the spatial half of the same defect shape as
+        `_schedule_is_ordered` below; both intervals are closed
+        (`start <= end`) and inclusive by convention, and that convention
+        is enforced here at construction time rather than left implicit.
+        """
+        if (
+            self.frame_start is not None
+            and self.frame_end is not None
+            and self.frame_start > self.frame_end
+        ):
+            raise ValueError(
+                f"frame_start ({self.frame_start}) must be <= frame_end "
+                f"({self.frame_end}) -- frame range is a closed interval "
+                "[frame_start, frame_end]"
+            )
+        return self
 
 
 class SafetyPermitsRequired(BaseModel):
@@ -198,16 +242,58 @@ class WorkPackageState(BaseModel):
         unreviewed critical package as cleared.
 
         This closes the gap at construction time: a package that is
-        independently CRITICAL risk and hasn't been reviewed yet
-        (`hitl_disposition is None`) is forced to `cleared_for_execution =
-        False` here, regardless of what was passed in. `deconfliction_node`
-        closes the second half of the same gap for packages that only
-        become review-required once a conflict is actually flagged (see
-        deconfliction.py). `hitl_gate_node` remains the sole authority once
-        an actual disposition is recorded -- this validator only tightens
-        the *pending-review* default, it never runs again after that, since
-        by then `hitl_disposition` is no longer `None`.
+        independently CRITICAL risk, OR that has `requires_hitl_review=True`
+        set directly (e.g. a submitter flagging a package for review for a
+        reason outside the risk-level/conflict machinery), and hasn't been
+        reviewed yet (`hitl_disposition is None`) is forced to
+        `cleared_for_execution = False` here, regardless of what was passed
+        in. The `requires_hitl_review` half of this check closes the AUD-09
+        residual gap identified during the AOSE Round 4 cross-review
+        (`aose-round4-crossreview-gemini-aud09.md` §3.1): CRITICAL-risk and
+        conflict-flagged packages were already closed (this validator's
+        original scope, and `deconfliction_node`'s inline flip,
+        respectively), but a package that is neither CRITICAL nor
+        conflict-flagged, yet still has `requires_hitl_review=True` set
+        directly, was not -- it read `cleared_for_execution=True` from the
+        moment it was constructed until an actual disposition landed.
+        `deconfliction_node` closes the conflict-flagged half of the same
+        gap for packages that only become review-required once a conflict
+        is actually detected (see deconfliction.py). `hitl_gate_node`
+        remains the sole authority once an actual disposition is recorded --
+        this validator only tightens the *pending-review* default, it never
+        runs again after that, since by then `hitl_disposition` is no
+        longer `None`.
         """
-        if self.hitl_disposition is None and self.risk_level == RiskLevel.CRITICAL:
+        if self.hitl_disposition is None and (
+            self.risk_level == RiskLevel.CRITICAL or self.requires_hitl_review
+        ):
             self.cleared_for_execution = False
+        return self
+
+    @model_validator(mode="after")
+    def _schedule_is_ordered(self) -> "WorkPackageState":
+        """
+        AOSE Round 5 (Grok AUD-04, reproduced and confirmed valid): with no
+        constraint here, a transposed scheduled_start/scheduled_end silently
+        disables every downstream conflict check for this package.
+        `check_conflict()` in deconfliction.py gates on `_schedules_overlap()`
+        first and returns early if it's False -- and `_schedules_overlap()`
+        assumes a closed interval `[scheduled_start, scheduled_end]` without
+        checking the order itself, so one bad data-entry typo (a real
+        scenario, not a contrived one) can make a genuinely overlapping,
+        incompatible-hazard-pair conflict report as "no conflict" with
+        nothing else in the pipeline able to catch it. Enforced here at
+        construction time, same as the frame-range half of this defect in
+        SpatialCoordinates._frame_range_is_ordered.
+        """
+        if (
+            self.scheduled_start is not None
+            and self.scheduled_end is not None
+            and self.scheduled_start > self.scheduled_end
+        ):
+            raise ValueError(
+                f"scheduled_start ({self.scheduled_start}) must be <= "
+                f"scheduled_end ({self.scheduled_end}) -- schedule is a "
+                "closed interval [scheduled_start, scheduled_end]"
+            )
         return self
