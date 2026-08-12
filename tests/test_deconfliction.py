@@ -387,6 +387,136 @@ def test_fire_watch_capacity_conflicts_are_idempotent_on_repeated_invocation():
     assert a.conflict_rationale == first_rationale
 
 
+def test_fire_watch_capacity_flagged_by_worker_count_not_package_count():
+    """
+    AUD-01 (AOSE Round 5, Grok), unit half of the finding. Two packages,
+    three hot workers each, sharing a fire watch and an overlapping
+    schedule: raw package count is 2 (under the limit of 4), but the
+    fire watch is actually covering 6 concurrent hot workers -- over the
+    limit. Before the fix, `_fire_watch_capacity_conflicts` compared
+    `len(group)` and never flagged this at all.
+    """
+    same_day_am = datetime(2026, 8, 3, 7, 0)
+    same_day_pm = datetime(2026, 8, 3, 15, 0)
+    a = make_wp(
+        work_package_id="WP-HOT-A",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        spatial=SpatialCoordinates(frame_start=1, frame_end=5),
+        fire_watch_id="FW-1",
+        hot_worker_count=3,
+        scheduled_start=same_day_am,
+        scheduled_end=same_day_pm,
+    )
+    b = make_wp(
+        work_package_id="WP-HOT-B",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        spatial=SpatialCoordinates(frame_start=900, frame_end=905),
+        fire_watch_id="FW-1",
+        hot_worker_count=3,
+        scheduled_start=same_day_am,
+        scheduled_end=same_day_pm,
+    )
+    find_all_conflicts([a, b])
+    assert a.conflicts == ["WP-HOT-B"]
+    assert "6 concurrent hot workers" in a.conflict_rationale
+
+
+def test_fire_watch_capacity_not_flagged_for_subgroup_that_never_peaks_over_limit():
+    """
+    AUD-01, shape half of the finding -- the exact gap named in
+    `test_fire_watch_capacity_not_flagged_when_schedules_dont_overlap`'s
+    own docstring before this fix existed. Six single-worker packages
+    share one fire watch: three overlap each other in the morning, three
+    separate ones overlap each other in the afternoon, and the two
+    trios never overlap each other. Raw group count is 6 (over the old
+    package-count limit), but peak concurrent coverage is only 3 at any
+    single instant -- under the limit of 4. Must not be flagged.
+    """
+    morning_start = datetime(2026, 8, 3, 7, 0)
+    morning_end = datetime(2026, 8, 3, 11, 0)
+    afternoon_start = datetime(2026, 8, 3, 12, 0)
+    afternoon_end = datetime(2026, 8, 3, 16, 0)
+
+    morning = _hot_work_group(3, "FW-1", morning_start, morning_end)
+    afternoon = _hot_work_group(3, "FW-1", afternoon_start, afternoon_end)
+    for i, wp in enumerate(afternoon):
+        wp.work_package_id = f"WP-HOT-PM-{i}"
+        wp.spatial.frame_start += 100_000
+        wp.spatial.frame_end += 100_000
+
+    group = morning + afternoon
+    find_all_conflicts(group)
+    for wp in group:
+        assert wp.conflicts == []
+
+
+def test_fire_watch_capacity_touching_endpoints_count_as_overlapping():
+    """
+    Closed-interval convention consistency with AUD-04
+    (`_schedule_is_ordered`, state.py): a package ending exactly when
+    another starts must still count as concurrent at that instant, same
+    as `_schedules_overlap`'s `a_start <= b_end and b_start <= a_end`.
+    Four 1-worker packages ending/starting back-to-back at the same
+    instant plus one more overlapping all of them at that instant must
+    read as 5 concurrent workers at that boundary point, over the limit.
+    """
+    t0 = datetime(2026, 8, 3, 7, 0)
+    t1 = datetime(2026, 8, 3, 9, 0)
+    t2 = datetime(2026, 8, 3, 11, 0)
+
+    early = [
+        make_wp(
+            work_package_id=f"WP-EARLY-{i}",
+            hazard_categories=[HazardCategory.HOT_WORK],
+            spatial=SpatialCoordinates(frame_start=i * 1000, frame_end=i * 1000 + 5),
+            fire_watch_id="FW-1",
+            scheduled_start=t0,
+            scheduled_end=t1,
+        )
+        for i in range(4)
+    ]
+    late = make_wp(
+        work_package_id="WP-LATE",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        spatial=SpatialCoordinates(frame_start=9000, frame_end=9005),
+        fire_watch_id="FW-1",
+        scheduled_start=t1,
+        scheduled_end=t2,
+    )
+    group = early + [late]
+    find_all_conflicts(group)
+    assert late.conflicts != []
+    assert "5 concurrent hot workers" in late.conflict_rationale
+
+
+def test_fire_watch_capacity_unscheduled_package_contributes_a_baseline():
+    """
+    A package missing `scheduled_start`/`scheduled_end` can't be placed
+    on the sweep-line, but the rest of this module treats missing
+    schedule data as unknown, not "no overlap" (`_schedules_overlap`
+    returns True) -- the same posture applies here: its
+    `hot_worker_count` is added as a constant baseline present at every
+    point on the line, not silently dropped. Three single-worker
+    scheduled packages (under the limit alone) plus one unscheduled
+    2-worker package pushes the peak to 5, over the limit.
+    """
+    same_day_am = datetime(2026, 8, 3, 7, 0)
+    same_day_pm = datetime(2026, 8, 3, 15, 0)
+    scheduled = _hot_work_group(3, "FW-1", same_day_am, same_day_pm)
+    unscheduled = make_wp(
+        work_package_id="WP-HOT-UNSCHEDULED",
+        hazard_categories=[HazardCategory.HOT_WORK],
+        spatial=SpatialCoordinates(frame_start=9000, frame_end=9005),
+        fire_watch_id="FW-1",
+        hot_worker_count=2,
+        # no scheduled_start/scheduled_end set
+    )
+    group = scheduled + [unscheduled]
+    find_all_conflicts(group)
+    assert unscheduled.conflicts != []
+    assert "5 concurrent hot workers" in unscheduled.conflict_rationale
+
+
 def test_conflict_still_flagged_when_schedule_data_is_missing():
     """
     Missing schedule data must default to "temporally linked" (unknown

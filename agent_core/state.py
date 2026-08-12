@@ -190,6 +190,18 @@ class WorkPackageState(BaseModel):
         "are checked against NAVSEA8010-4.4.3's single-fire-watch-with-multiple-hot-"
         "workers limitation in deconfliction.py.",
     )
+    hot_worker_count: int = Field(
+        default=1,
+        ge=1,
+        description="Number of hot workers this package contributes toward its fire "
+        "watch's concurrent-worker tally (NAVSEA8010-4.4.3). AUD-01 (AOSE Round 5): "
+        "`_fire_watch_capacity_conflicts` in deconfliction.py previously counted "
+        "*packages* per fire watch, not workers -- two packages with three welders "
+        "each read as '2', under the limit of 4, when the fire watch was actually "
+        "covering 6 concurrent hot workers. Defaults to 1 so a package that never "
+        "sets this explicitly is still counted, rather than silently contributing "
+        "zero to the tally.",
+    )
 
     risk_level: RiskLevel = RiskLevel.LOW
     requires_hitl_review: bool = False
