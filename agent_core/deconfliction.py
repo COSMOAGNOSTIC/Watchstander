@@ -147,20 +147,103 @@ def check_conflict(a: WorkPackageState, b: WorkPackageState) -> str | None:
     return None
 
 
+def _fire_watch_peak_concurrency(
+    group: list[WorkPackageState],
+) -> tuple[int, list[WorkPackageState]]:
+    """
+    AUD-01 (AOSE Round 5, Grok): the previous implementation compared
+    `len(group)` -- raw package count -- against the limit. That's wrong
+    on two independent axes: (1) unit -- two packages with three hot
+    workers each read as "2", under the limit of 4, while the fire watch
+    was actually covering 6 concurrent hot workers; (2) shape -- even
+    once weighted by `hot_worker_count`, summing every package in the
+    group overcounts packages that are never actually concurrent (see
+    `test_fire_watch_capacity_not_flagged_when_schedules_dont_overlap`'s
+    own docstring, which named this exact gap before it was fixed here),
+    and undercounts nothing, but a naive "total workers across the whole
+    group" figure still isn't what NAVSEA8010-4.4.3 is regulating -- it's
+    peak *simultaneous* coverage, not total assigned load.
+
+    This is a weighted sweep-line over closed intervals
+    `[scheduled_start, scheduled_end]`, matching the closed-interval
+    convention `_schedule_is_ordered` (state.py, AUD-04) already
+    enforces at construction time: touching endpoints count as
+    overlapping. At a tied timestamp, start events are processed before
+    end events specifically so a package ending at T and one starting at
+    T are both counted as active at T -- processing ends first would
+    silently undercount the one instant they actually overlap.
+
+    Packages missing `scheduled_start` or `scheduled_end` can't be
+    placed on the sweep-line at all, and the rest of this module treats
+    missing schedule data as unknown, not as "no overlap"
+    (`_schedules_overlap` returns True) -- the same over-flagging-is-
+    -safe posture applies here: an unscheduled package's
+    `hot_worker_count` is added as a constant baseline present at every
+    point on the line, rather than being silently dropped from the
+    tally, which would be the unsafe direction.
+
+    Returns `(peak_worker_count, packages_active_at_that_peak)`. All
+    sort/comparison keys here are `datetime` only (`scheduled_start`/
+    `scheduled_end` are always `datetime` once WorkPackageState
+    construction succeeds) -- Grok's own AUD-01 patch mixed `float` and
+    `datetime` sort keys and crashed; there's nothing to mix here.
+    """
+    scheduled = [
+        wp for wp in group if wp.scheduled_start is not None and wp.scheduled_end is not None
+    ]
+    unscheduled = [
+        wp for wp in group if wp.scheduled_start is None or wp.scheduled_end is None
+    ]
+
+    active: dict[str, WorkPackageState] = {wp.work_package_id: wp for wp in unscheduled}
+    running = sum(wp.hot_worker_count for wp in unscheduled)
+    peak = running
+    peak_active = dict(active)
+
+    # is_end=0 (start) sorts before is_end=1 (end) at a tied timestamp --
+    # see docstring above for why that ordering is the correct one for
+    # closed, touching-counts-as-overlapping intervals.
+    sweep_events = sorted(
+        (
+            *((wp.scheduled_start, 0, wp) for wp in scheduled),
+            *((wp.scheduled_end, 1, wp) for wp in scheduled),
+        ),
+        key=lambda event: (event[0], event[1]),
+    )
+
+    for _, is_end, wp in sweep_events:
+        if is_end == 0:
+            active[wp.work_package_id] = wp
+            running += wp.hot_worker_count
+        else:
+            active.pop(wp.work_package_id, None)
+            running -= wp.hot_worker_count
+        if running > peak:
+            peak = running
+            peak_active = dict(active)
+
+    return peak, list(peak_active.values())
+
+
 def _fire_watch_capacity_conflicts(
     packages: list[WorkPackageState],
 ) -> list[tuple[WorkPackageState, WorkPackageState, str]]:
     """
     Fire-watch capacity (NAVSEA8010-4.4.3) is an N-way constraint -- how
-    many concurrent hot-work packages one fire watch covers -- not a
+    many concurrent hot *workers* one fire watch covers -- not a
     pairwise geometry/hazard check like everything else in this module,
     so it can't live inside `check_conflict()`, which only ever sees two
-    packages at a time. Packages are grouped by `fire_watch_id`; within
-    a group that exceeds `MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH`,
-    every temporally-overlapping pair is flagged -- temporal, not
+    packages at a time. Packages are grouped by `fire_watch_id`; a
+    group's peak concurrent `hot_worker_count` is computed with a
+    weighted sweep-line (`_fire_watch_peak_concurrency`, AUD-01 fix --
+    replaces the old raw-package-count comparison), and if that peak
+    exceeds `MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH`, every
+    temporally-overlapping pair in the group is flagged -- temporal, not
     spatial, because fire watch capacity is about how many hot-work
     evolutions one watchstander is actively covering *right now*,
-    regardless of where aboard the ship each one is.
+    regardless of where aboard the ship each one is. Flagging is still
+    done pairwise (unchanged from before) once a group is known to be
+    over capacity; only the over-capacity *decision* changed.
 
     Packages with no `fire_watch_id` set are never included -- silently
     grouping unassigned packages together would fabricate a capacity
@@ -174,15 +257,16 @@ def _fire_watch_capacity_conflicts(
 
     violations: list[tuple[WorkPackageState, WorkPackageState, str]] = []
     for watch_id, group in by_watch.items():
-        if len(group) <= MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH:
+        peak, _peak_active = _fire_watch_peak_concurrency(group)
+        if peak <= MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH:
             continue
         for a, b in combinations(group, 2):
             if not _schedules_overlap(a, b):
                 continue
             covered = ", ".join(sorted(wp.work_package_id for wp in group))
             rationale = (
-                f"Fire watch '{watch_id}' covers {len(group)} concurrent hot-work "
-                f"packages ({covered}), exceeding the limit of "
+                f"Fire watch '{watch_id}' peaks at {peak} concurrent hot workers "
+                f"among ({covered}), exceeding the limit of "
                 f"{MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH} (NAVSEA8010-4.4.3 -- "
                 f"'No more than four hot workers shall be attended by a single fire "
                 f"watch,' verified against primary source, see "
