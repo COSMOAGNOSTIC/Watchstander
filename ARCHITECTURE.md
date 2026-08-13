@@ -40,30 +40,43 @@ Out of scope for v1: Navy mishap data (classification/aggregation risk — delib
 
 ```mermaid
 flowchart LR
+    classDef core fill:#1f6feb,stroke:#0d419d,color:#fff,stroke-width:1px
+    classDef gate fill:#da3633,stroke:#8e1c1a,color:#fff,stroke-width:1px
+    classDef data fill:#8250df,stroke:#5a32a3,color:#fff,stroke-width:1px
+    classDef live fill:#2da44e,stroke:#1a7f37,color:#fff,stroke-width:1px
+    classDef schema fill:#57606a,stroke:#32383f,color:#fff,stroke-width:1px
+
     Entry(["entry"]) --> Deconf["deconfliction_node<br/>(deconfliction.py)<br/>deterministic overlap check"]
     Deconf --> Reason["reasoning_node<br/>(reasoning.py)<br/>SafetyBrief synthesis, LLM + fallback"]
     Reason --> HitlPrep["hitl_prepare_node<br/>(hitl.py)<br/>splits reviewed vs. needs-review"]
-    HitlPrep -->|no review needed| End(["END"])
-    HitlPrep -->|Send() fan-out, one per package| Hitl["hitl_gate_single_node<br/>(hitl.py)<br/>interrupt() — genuine human pause, one package per invocation"]
+    HitlPrep -->|"no review needed"| End(["END"])
+    HitlPrep -->|"Send() fan-out, one per package"| Hitl["hitl_gate_single_node<br/>(hitl.py)<br/>interrupt() — genuine human pause, one package per invocation"]
     Hitl --> End
+
+    class Entry,Deconf,Reason,HitlPrep core
+    class Hitl gate
 
     CaseData[("case_data/cases_v1.json<br/>sourced OSHA/DOL cases")] --> Retrieval["retrieval.py<br/>TF-IDF ranked case lookup"]
     Retrieval --> Reason
+    class CaseData,Retrieval data
 
     State[["state.py<br/>WorkPackageState schema"]] -.-> Deconf
     State -.-> Reason
     State -.-> Hitl
+    class State schema
 
     Deconf --> Events["events.py<br/>WebSocket broadcaster"]
     Reason --> Events
     Hitl --> Events
     Events --> Viz["visualizer/<br/>Godot 4 live schematic deck plan"]
+    class Events,Viz live
 
-    Eval["eval/<br/>fixed-scenario harness vs. checked-in baseline"] -.->|regression-tests| Deconf
-    Eval -.->|regression-tests| Retrieval
+    Eval["eval/<br/>fixed-scenario harness vs. checked-in baseline"] -.->|"regression-tests"| Deconf
+    Eval -.->|"regression-tests"| Retrieval
+    class Eval schema
 ```
 
-This is the same diagram as README.md's Architecture section, kept here as the canonical copy — update both together if the graph shape changes.
+*A larger, annotated version of this diagram with a legend and per-node explanations lives at [`docs/architecture-diagram.html`](docs/architecture-diagram.html) — open it directly in a browser.*
 
 ## 4. Reasoning and Grounding Model
 
