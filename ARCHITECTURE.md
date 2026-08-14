@@ -76,7 +76,7 @@ flowchart LR
     class Eval schema
 ```
 
-*A larger, annotated version of this diagram with a legend and per-node explanations lives at [`docs/architecture-diagram.html`](docs/architecture-diagram.html) — open it directly in a browser.*
+*A larger, annotated version of this diagram with a legend and per-node explanations lives at [`docs/architecture-diagram.html`](https://cosmoagnostic.github.io/Watchstander/architecture-diagram.html) — open it directly in a browser.*
 
 ## 4. Reasoning and Grounding Model
 

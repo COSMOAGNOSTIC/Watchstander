@@ -57,7 +57,7 @@ flowchart LR
     class Eval schema
 ```
 
-*A larger, annotated version of this diagram with a legend and per-node explanations lives at [`docs/architecture-diagram.html`](docs/architecture-diagram.html) — open it directly in a browser.*
+*A larger, annotated version of this diagram with a legend and per-node explanations lives at [`docs/architecture-diagram.html`](https://cosmoagnostic.github.io/Watchstander/architecture-diagram.html) — open it directly in a browser.*
 
 - **`agent_core/state.py`** — `WorkPackageState` schema: hazard categories, spatial coordinates, required permits, risk level.
 - **`agent_core/deconfliction.py`** — deterministic, testable overlap detection between work packages. Geometry-based, not LLM-dependent, so conflicts are auditable and repeatable.
