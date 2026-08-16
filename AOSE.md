@@ -81,3 +81,9 @@ These are listed here, not hidden, because AOSE's Step 10 says a discovered fail
 ---
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the component map and full decision log (ADR-001 through ADR-013), and [MIGRATION.md](MIGRATION.md) / [PASSDOWN.md](PASSDOWN.md) for the phase-by-phase and session-by-session record this file draws from.
+
+---
+
+## Build Philosophy Reference
+
+The adversarial-review discipline in this file operationalizes the broader engineering philosophy documented in PHILOSOPHY.md - experimental isolation, progressive integration gates, and the four-perspective adversarial check. Read that first if this file's "why" is not obvious from the checklist alone.
