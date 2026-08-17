@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from reviewer import app as app_module
 from reviewer.graph_driver import ReviewerService
+from agent_core.state import HitlDisposition
 
 
 def _client(tmp_path) -> TestClient:
@@ -129,3 +130,62 @@ def test_a_hedge_worded_note_never_flips_or_corrupts_the_decision(tmp_path):
     hw_decided = next(d for d in decided if d["work_package_id"] == "HW-2201")
     assert hw_decided["disposition"] == "approved"
     assert hw_decided["cleared_for_execution"] is True
+
+
+def test_hitl_disposition_survives_a_fresh_checkpoint_reload_with_a_known_type(tmp_path):
+    """
+    Regression coverage for the Open Queue's "hitl_disposition type
+    inconsistency" item: WorkPackageState sets use_enum_values=True, so a
+    package built fresh via validation stores hitl_disposition as a plain
+    string -- but hitl.py's `wp.hitl_disposition = disposition` is a bare
+    attribute assignment, not a re-validation, so a package decided
+    in-process still holds the live HitlDisposition enum member until
+    something reloads it from a real checkpoint.
+
+    This test forces an actual checkpoint round trip -- a brand new
+    ReviewerService against the same sqlite file, not the same in-memory
+    service instance every other test here reuses -- and proves that
+    neither cleared_for_execution nor the dashboard's "is not None"
+    pending check depend on which type wins. If either broke because of
+    the type difference, this test fails; today it should pass,
+    confirming the inconsistency is cosmetic, not a safety gap.
+    """
+    client = _client(tmp_path)
+    db_path = str(tmp_path / "test_reviewer.db")
+
+    client.post("/seed-demo", follow_redirects=False)
+    pending = app_module.service.list_pending_reviews()
+    hw = next(r for r in pending if r.work_package_id == "HW-2201")
+
+    client.post(
+        f"/review/{hw.thread_id}/{hw.interrupt_id}",
+        data={"decision": "approve", "note": "checked schedule, clear to proceed"},
+        follow_redirects=False,
+    )
+
+    config = {"configurable": {"thread_id": hw.thread_id}}
+    live_state = app_module.service._graph.get_state(config)
+    live_wp = next(
+        wp for wp in live_state.values["reviewed_packages"]
+        if wp.work_package_id == "HW-2201"
+    )
+    live_type = type(live_wp.hitl_disposition)
+
+    app_module.service.close()
+    fresh_service = ReviewerService(db_path)
+    reloaded_state = fresh_service._graph.get_state(config)
+    reloaded_wp = next(
+        wp for wp in reloaded_state.values["reviewed_packages"]
+        if wp.work_package_id == "HW-2201"
+    )
+    reloaded_type = type(reloaded_wp.hitl_disposition)
+    fresh_service.close()
+
+    print(f"live hitl_disposition type: {live_type}")
+    print(f"reloaded hitl_disposition type: {reloaded_type}")
+
+    assert live_wp.hitl_disposition == HitlDisposition.APPROVED
+    assert reloaded_wp.hitl_disposition == HitlDisposition.APPROVED
+    assert live_wp.cleared_for_execution is True
+    assert reloaded_wp.cleared_for_execution is True
+    assert reloaded_wp.hitl_disposition is not None
