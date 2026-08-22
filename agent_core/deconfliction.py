@@ -15,29 +15,27 @@ from collections import defaultdict
 from itertools import combinations
 
 from agent_core import events
+from agent_core.rules_config import load_hazard_rules
 from agent_core.state import HazardCategory, WorkPackageState
 
-# Hazard category pairs that are unsafe to run concurrently in
-# overlapping/adjacent spatial envelopes. Sourced from OSHA 1915
-# Subpart D (hot work) and Subpart B (confined/enclosed spaces) --
-# e.g. hot work in a space can ignite an adjacent, uncleared space.
-INCOMPATIBLE_HAZARD_PAIRS: set[frozenset[HazardCategory]] = {
-    frozenset({HazardCategory.HOT_WORK, HazardCategory.CONFINED_SPACE}),
-    frozenset({HazardCategory.HOT_WORK, HazardCategory.WORKING_ALOFT}),
-    frozenset({HazardCategory.WORKING_ALOFT, HazardCategory.FALL_PROTECTION}),
-}
-
-# NAVSEA8010-4.4.3 ("Limitations to Single Fire Watch with Multiple Hot
-# Workers") establishes that a single fire watch cannot supervise
-# unlimited concurrent hot work. Verified against the primary-source PDF
-# text 2026-08-08 (S0570-AC-CCM-010/8010, Chapter 4.4.3, pp. 4-3 -- 4-4):
-# "No more than four hot workers shall be attended by a single fire
-# watch." Previously set to 1 as a conservative placeholder pending
-# verification (see case_data/navsea_8010_psns_v2014.json's
-# verification_note and ARCHITECTURE.md ADR-023) -- that placeholder is
-# now replaced with the actual regulatory limit, not left artificially
-# conservative now that the primary source has been read.
-MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH = 4
+# ADR-030: hazard-pair rules and the fire-watch capacity limit used to be
+# hand-typed constants here. They're now sourced from
+# case_data/hazard_rules_v1.json via rules_config.load_hazard_rules(),
+# validated against a real schema at import time -- this module no longer
+# has two independent places (this file, and whatever a future rule editor
+# writes to) that could silently drift out of sync. Both names below are
+# kept exactly as before so every existing import/test is unaffected; only
+# where the values come from has changed. See rules_config.py and
+# ARCHITECTURE.md ADR-030/031 for the full rationale, and
+# case_data/hazard_rules_v1.json's own source_citation field for where
+# each rule traces back to (OSHA 1915 Subpart D/B for the hazard pairs,
+# NAVSEA8010-4.4.3 for the fire-watch limit -- verified against the
+# primary-source PDF 2026-08-08, see ADR-023).
+_HAZARD_RULES = load_hazard_rules()
+INCOMPATIBLE_HAZARD_PAIRS: set[frozenset[HazardCategory]] = _HAZARD_RULES.as_pair_set()
+MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH = (
+    _HAZARD_RULES.max_concurrent_hot_workers_per_fire_watch
+)
 
 
 def _frame_ranges_overlap(a: WorkPackageState, b: WorkPackageState) -> bool:

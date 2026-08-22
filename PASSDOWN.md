@@ -276,3 +276,76 @@ One real, disclosed design consequence: the real print has the bow on the right 
 **Next up:** the real Godot render is now overdue across two phases — worth prioritizing next time Donnie has the editor open, specifically checking both views (not just the default) since the Deck Plan view's calibration wasn't re-verified this session, only re-confirmed unchanged from Phase 8. After that, either `reviewer/`'s real-intake-form follow-up, or Phase 6's remaining open items.
 
 **Addendum, same day — confirmed live end-to-end, then two more direct fixes:** Donnie tested the Phase 9 patch on his own machine. The connectivity fix worked, but `demo_broadcaster.py`'s blind `time.sleep(3)` plus exit-immediately-after-replay meant its server (a daemon thread) could die before Godot even connected if there was any real-world delay switching windows — fixed by having it wait for an actual client and stay running afterward. Once connected, markers rendered for the first time ever against a real print, and the result was reported directly: "it looks like a colored smudge... the color palette is wrong and hard to see on a white background... make the pinpoints not look like an ink smudge." Both the pastel `HAZARD_COLOR` palette and `gen_assets.py`'s `glow_sprite()` (a soft Gaussian blur) were tuned for the old dark schematic background and never re-tuned for the real white print — fixed with the Okabe-Ito colorblind-safe palette and a new crisp `marker_pin()` asset (ADR-028), plus labels switched to fixed dark text with a white outline for legibility regardless of hazard color. Not yet re-confirmed live by Donnie as of this note.
+
+---
+
+## 17. Session Notes — 2026-08-21: Phases 10-11
+
+**Status:** Phase 10 mostly done (reschedule suggestion, declarative rule config + audit primitive, perf benchmark, all with regression tests, 101/101 full suite passing). Phase 11 (visualizer manual-insert interaction) scoped and designed, not built.
+
+**Note (2026-08-21):** a related prototype, built on Watchstander's own architecture, was demonstrated to outside stakeholders aligned with the project on 2026-08-20; the resulting minutes surfaced five concrete things worth pulling into Watchstander itself, ranked and built in priority order this session, in a cloned sandbox (this build environment has no Godot, so anything needing the visualizer stayed design-only -- see Phase 11).
+
+**1. `agent_core/reschedule_suggestion.py` (ADR-030).** A flagged conflict previously came with only a rationale for why it was blocked, never a concrete alternative. `suggest_reschedule()` closes that gap with a bounded, deterministic nearest-offset search, re-using `deconfliction.py`'s own `check_conflict()` and `_fire_watch_capacity_conflicts()` rather than reimplementing them. Deliberately not built on OR-Tools CP-SAT (already flagged in Section 9's Extraction Candidates table for the *harder* temporal chit-expiration problem) -- this is a single-package bounded search, not a joint optimization, and Design Principle 7 (ADR-020/021) already commits this repo to evaluating before reaching for a dependency the problem doesn't need. Never mutates state, never auto-applies. Not yet wired into `reasoning_node`/`SafetyBrief` or the reviewer UI -- disclosed as Known Debt, two integration points identified.
+
+**2. ADR-031 — hard constraint vs. soft preference, named explicitly.** Authorization windows (a chit's or tag-out's `valid_until`) constrain what's physically or legally permitted; schedule timing is a preference about when work happens within what's permitted. This distinction was already true of how the codebase behaves; it hadn't been stated as its own architectural principle before. Pure documentation, no code change -- the point is that future scheduling-adjacent code (a chit-expiration engine, a multi-package resequencer) inherits the rule at design time instead of re-discovering it.
+
+**3. `agent_core/rules_config.py` + `case_data/hazard_rules_v1.json` + `agent_core/rules_audit.py` (ADR-032).** `deconfliction.py`'s hazard-pair rules and fire-watch capacity limit are now schema-validated declarative data, not hand-typed Python constants -- an unrecognized hazard category, a self-paired rule, or a non-positive limit fails loudly at load time. Both original constant names kept in `deconfliction.py` unchanged, so nothing else in the codebase needed to change. `rules_audit.py` is an append-only JSONL primitive (who/when/field/old/new/reason) for a future rule-editing tool to call -- nothing calls it automatically yet, since that tool doesn't exist, disclosed as Known Debt rather than left implicit.
+
+**4. `eval/perf_benchmark.py` (ADR-033).** Watchstander had no benchmark on record for detection speed -- `eval/`'s existing harness scores correctness only, never speed. Deliberately kept separate from `eval/run_eval.py`'s output, which `tests/test_eval_harness.py` asserts for exact equality against a checked-in baseline -- mixing non-deterministic wall-clock timing into that dict would make the regression gate flaky by construction. First run: 200 synthetic packages, 19,900 pairwise checks, 57 flagged, **0.0113 seconds, zero LLM calls, zero network access**.
+
+**5. Phase 11 — visualizer manual-insert interaction.** Scoped in MIGRATION.md, not built. This build sandbox has no Godot installed (same limitation ADR-019/ADR-025 already disclosed) -- writing untested `.gd` scene code here risks handing back something that looks plausible but silently doesn't run. Left as a ready-to-pick-up design instead.
+
+**Verification this session:** 101/101 tests passing in a clean sandbox venv (`.venv/bin/python -m pytest -q -k "not retrieval"`, retrieval's heavier optional deps not installed this session -- unrelated to any change made). New test files: `test_reschedule_suggestion.py` (6), `test_rules_config.py` (7), `test_rules_audit.py` (4), `test_perf_benchmark.py` (2) -- 19 new regression tests total, all exercising real code paths, none mocked.
+
+**Not done, deliberately:** the two Phase 10 integration points (suggestion -> `SafetyBrief`, suggestion -> reviewer UI) and the rule-editing tool itself (no GUI exists yet) -- all next steps, all disclosed as Known Debt rather than silently skipped. Phase 11 needs Donnie's own machine, where Godot is actually installed.
+
+**Next up:** either of the two Phase 10 integration points (suggestion surfaced in the reviewer app is probably the highest-leverage next demo moment), or Phase 11's visualizer interaction once there's Godot access to verify against. Full technical feedback on the demo minutes themselves is logged separately outside this repo, not duplicated here.
+
+---
+
+## 18. Session Notes — 2026-08-21 (same day, continued): AOSE Round 6 -- independent Fable + Opus cross-review of Session 17's work
+
+**Status:** Both reviews complete. AUD-10 fixed and regression-tested. ADR-031's false claim corrected in place. Remaining findings logged as Known Debt, not fixed this pass -- deliberately, not silently.
+
+**Why this round happened:** Donnie asked directly whether it was time for an independent Opus or Fable run on Session 17's work. Per this repo's own hard rule from Round 5 ("the model that finds a bug never writes its fix") and the RE-TRACE routing rule (`claude/aose-model-routing-registry.md`: "the fix gets traced cold by a different session or model that did not write it"), the answer was yes by the repo's own standard -- nothing built in Session 17 had been independently traced yet. Two reviewers ran in parallel, each scoped to a different question:
+
+- **Fable** — cold line-trace of the full diff (`reschedule_suggestion.py`, `rules_config.py`, `rules_audit.py`, `deconfliction.py`'s refactor, `eval/perf_benchmark.py`, and all new tests). Matches its established strength in this repo's registry: highest precision on record, zero fabrications across three prior rounds.
+- **Opus** — independent architectural judgment on ADR-030's one debatable call (hand-rolled search vs. OR-Tools CP-SAT), not a line-level bug hunt.
+
+### Fable verdict table
+
+| ID | Claim | Verdict |
+|---|---|---|
+| AUD-10 | Pre-existing, unrelated fire-watch violation makes `suggest_reschedule` reject every offset | CONFIRMED (ran it) -- fixed this session, see ADR-034 |
+| AUD-11 | `_shifted_copy` shares mutable `conflicts`/`spatial` objects with the original package (shallow `model_copy`) | CONFIRMED (ran it) -- latent, not firing today, no test guards it |
+| AUD-12 | Docstring says missing `target_id` returns `None`; code raises `ValueError` | CONFIRMED (traced) -- code/test is the intended behavior, docstring is the bug, not yet corrected |
+| AUD-13 | `schema_version` never validated against 1; unknown JSON keys silently ignored | CONFIRMED (ran it: version 999 + junk key loads clean) |
+| AUD-14 | One truncated audit-log line makes every prior entry unreadable | CONFIRMED (ran it: `JSONDecodeError`) |
+| AUD-15 | "Append-only" is convention, not enforcement | CONFIRMED by inspection |
+| AUD-16 | Perf-benchmark docstring's conflict-count claim false at n=10 | CONFIRMED (ran it: 0 flagged at n=10) |
+| AUD-17 | `_candidate_offsets` hangs on non-positive `step` | Traced, not run -- real, only reachable via caller misuse |
+| AUD-18 | Duplicate `work_package_id`s silently drop from the validation set | Traced, unverified edge case |
+| AUD-19 | Fire-watch branch of `suggest_reschedule` had zero test coverage | **CONFIRMED -- direct cause of AUD-10 shipping undetected; 2 regression tests added this session** |
+| AUD-20 | One new test's ID-list assertion is trivially true | CONFIRMED by inspection |
+| AUD-21 | Backward compatibility of the rules-config extraction (old hardcoded values vs. new JSON) | **VERIFIED CLEAN -- no drift** |
+| AUD-22 | "Nearest offset wins" ordering at default args | **VERIFIED CLEAN** |
+
+### Opus verdict (architectural, not itemized as AUD findings)
+
+**Sound decision, wrong supporting arguments, incomplete in three ways.** Full detail:
+
+1. Not using OR-Tools is the right call, but ADR-030's own justification ("materially smaller problem") is the weak argument -- the strong one is that `suggest_reschedule()` has exactly one decision variable (a scalar offset on one package), which makes it a 1-D linear scan, not a constraint-satisfaction problem at all. A solver would add zero search power here. Opus measured the actual scaling: 500 packages, 8-week window, 15-min steps -- 151ms for the pairwise-check path. No objection there.
+2. **Measured performance cliff**, separate from the scaling question above: `_fire_watch_capacity_conflicts()` was built for one-time reporting (builds a full formatted string per violating pair) and gets called once per candidate offset inside the search loop, discarding the string every time. Measured directly: 74 seconds at 50 packages on one fire watch, ~72 minutes at 200 -- a 1,438x gap at n=200 that's pure discarded string formatting, not fundamental to the search. Logged as Known Debt, not fixed this session.
+3. **"Nearest offset wins" is a plausible-sounding heuristic, not a validated objective** -- minimizing `|shift|` has no concept of shift boundaries, weekends, or the fact that moving earlier is usually harder than moving later operationally. Opus's own test runs got the search to recommend starting hot work nearly two days earlier than planned. `state.py` has no shift/calendar/movability model at all, so this isn't a quick fix.
+4. **ADR-031 contained a false claim**, corrected in place this session (see ARCHITECTURE.md ADR-031's correction note): it said `reschedule_suggestion.py` already respects the hard-constraint/soft-preference distinction implicitly. Not relaxing a rule `deconfliction.py` enforces is not the same as respecting a constraint `deconfliction.py` doesn't model -- a chit's `valid_until` isn't represented anywhere in the schema today, so the search can suggest a shift landing outside a real authorization window without anything noticing.
+5. **The travel-window comparison in ADR-030/031 is a single worked example, not a validated general case** -- it demonstrates asymmetric multi-party reasoning (which packages are movable, which aren't) that `suggest_reschedule()` doesn't actually have.
+6. **Most important finding, not previously stated anywhere:** this module converts every existing `deconfliction.py` false negative (documented in §9 Known Debt -- adjacency tolerance, `deck_level` unused, same-category pairs that can't trigger `INCOMPATIBLE_HAZARD_PAIRS`) from a missed flag into an **active recommendation**. Worked example: `_vertically_stacked()`'s known gap means two aloft packages on the same frame range never conflict -- the search will therefore suggest a slot putting one aloft crew into exact simultaneity with another. A recommendation carries more implied authority than a silence. Logged as Known Debt this session; not previously disclosed in ADR-030.
+
+Both reviewers independently confirmed the same reassuring floor: **nothing found is unsafe in the HITL sense** -- no path returns a suggestion that still actually conflicts by `deconfliction.py`'s own rules. Every real finding is either "the feature quietly stops working" (AUD-10, fixed) or "the suggestion could be operationally worse than it should be" (the objective-function gaps, disclosed, not yet fixed), not "a hazard gets missed and nobody's told."
+
+**What got fixed this session:** AUD-10 only (`reschedule_suggestion.py`'s fire-watch check now scoped to violations naming the candidate), with two new regression tests (`test_unrelated_preexisting_fire_watch_violation_does_not_block_a_suggestion`, `test_fire_watch_violation_actually_involving_the_target_still_blocks_it`) -- 10/10 in `test_reschedule_suggestion.py`, full suite unaffected elsewhere. ADR-031's false claim corrected in place, struck visibly rather than silently edited, per this repo's own convention for handling a documentation error found after the fact.
+
+**Deliberately not fixed this session:** the `O(M^3)` performance cliff, the objective-function/calendar-awareness gap, the docstring/code contradiction (AUD-12), the rules-config schema gaps (AUD-13), the audit-log truncation fragility (AUD-14/15), and the benchmark docstring's inaccurate claim (AUD-16) -- all logged as Known Debt rows in ARCHITECTURE.md rather than silently skipped. Donnie's own call, made explicitly: fix the one functional defect and the one factual documentation error now, log the rest, don't rabbit-hole the whole list in one sitting.
+
+**Next up:** the performance cliff (Opus's finding) is probably the next highest-priority item if this module gets demoed against any hot-work-heavy scenario -- it's the one most likely to actually embarrass a live demo. After that, either of the two Session 17 integration points (suggestion -> `SafetyBrief`, suggestion -> reviewer UI), or Phase 11's visualizer interaction.
+

@@ -245,6 +245,40 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
 
 ---
 
+## Phase 10 — Reschedule suggestion (decision-support only)
+
+- [x] `agent_core/reschedule_suggestion.py`: `suggest_reschedule()` searches nearest-offset-first for the smallest whole-step schedule shift to one flagged package that clears every conflict, re-checked against `deconfliction.py`'s exact pairwise `check_conflict()` and N-way `_fire_watch_capacity_conflicts()` — never a re-implementation of the rules, always the same ones. Never mutates any `WorkPackageState`, never auto-applies a shift (ADR-030)
+- [x] Deliberately not built on OR-Tools CP-SAT despite Section 9's Extraction Candidates table already flagging it for the harder temporal chit-expiration engine — this is a bounded single-package search, not a joint optimization; see ADR-030's full reasoning and Known Debt for when CP-SAT would actually become worth evaluating for this module too
+- [x] `RescheduleSuggestion.source` fixed at `"deterministic_search"`, mirroring `SafetyBrief.source`'s provenance-tagging convention (ADR-003) — a suggestion is always algorithmically produced, never LLM-sourced, and is tagged as such rather than left ambiguous
+- [x] ADR-031: named the hard-constraint/soft-preference distinction explicitly as its own architectural principle (authorization/safety windows are never a search variable; schedule-timing convenience is) — previously true of this codebase's behavior but never stated as a rule future scheduling-adjacent code must inherit
+- [x] 6 new regression tests (`tests/test_reschedule_suggestion.py`): smallest conflict-free shift found, nearest-offset-wins over a further valid one, no-solution-within-window returns `None` cleanly, no-schedule-to-shift returns `None` cleanly, unknown `target_id` raises, and — the one most worth having — a shift that would clear the original conflict but reintroduce a new one against an unrelated third package is correctly rejected in favor of a further offset that clears all of them. 88/88 full suite passing (`-k "not retrieval"`, sandbox venv)
+- [ ] **Not done, logged as Known Debt, not an oversight:** no wiring into `reasoning_node`/`SafetyBrief.recommended_action` or the reviewer UI yet — a reviewer today can only get a suggestion by calling the function directly. Two integration points identified, neither started
+- [x] `agent_core/rules_config.py` + `case_data/hazard_rules_v1.json`: `deconfliction.py`'s hardcoded `INCOMPATIBLE_HAZARD_PAIRS`/`MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH` extracted into a schema-validated declarative config file, so rules are editable without touching the code that enforces them. `HazardRuleSet` rejects an unrecognized hazard category, a self-paired rule, or a non-positive limit at load time; both constant names kept unchanged in `deconfliction.py` so every existing import/test is unaffected (ADR-032)
+- [x] `agent_core/rules_audit.py`: append-only JSONL audit primitive (`record_rule_change`/`read_audit_log`) for who/when/field/old/new/reason on any future rule edit — deliberately scoped as a primitive, not a tool, since no rule-editing UI exists yet to call it automatically (ADR-032, Known Debt)
+- [x] 12 new regression tests across `tests/test_rules_config.py` and `tests/test_rules_audit.py`: default file loads and matches the exact values `deconfliction.py` has always used, `deconfliction.py`'s constants provably come from the same config, three separate malformed-config rejection cases (unknown category, self-pair, non-positive limit), missing-file failure, a valid custom ruleset round-trips, audit record/read round-trips, append-only ordering across multiple writes, missing-log returns empty rather than erroring, and the on-disk log is genuinely one-JSON-object-per-line. 99/99 full suite passing
+- [x] `eval/perf_benchmark.py`: standalone detection-latency benchmark over synthetic packages at increasing scale — Watchstander had no benchmark on record for detection speed until now. Deliberately kept out of `eval/run_eval.py`'s exact-match-tested output — see ADR-033. First run: 200 synthetic packages, 19,900 pairwise checks, 57 flagged, **0.0113 seconds, zero LLM calls, zero network access**. 2 new regression tests (`tests/test_perf_benchmark.py`) checking shape/determinism, not timing values. 101/101 full suite passing
+- [x] **AOSE Round 6** (independent Fable + Opus cross-review, same day): AUD-10 — a pre-existing, unrelated fire-watch capacity violation anywhere in the package list vetoed every candidate offset — fixed (ADR-034) with 2 new regression tests. ADR-031's false claim about `reschedule_suggestion.py` already respecting authorization windows corrected in place. 12 further findings (a measured `O(M^3)` performance cliff in the fire-watch re-check, a `|shift|`-only objective with no calendar awareness, a docstring/code contradiction, rules-config schema gaps, audit-log truncation fragility) logged as Known Debt, not fixed this pass — full verdict tables in PASSDOWN.md §18. 10/10 in `test_reschedule_suggestion.py`, 103/103 full suite passing
+
+**Definition of done:** A flagged conflict can be handed a concrete, deterministic, never-auto-applied alternative schedule that's checked against the same rules the rest of the pipeline already trusts, without changing who decides or adding a solver dependency the problem doesn't need. Hazard rules are schema-validated data, not hand-typed constants, with an audit primitive ready for whenever a rule-editing tool exists to call it. A citable detection-speed number now exists. **Met** for the core search function, config extraction, audit primitive, benchmark, and all regression suites; UI/reasoning-layer wiring and the rule-editing tool itself intentionally deferred.
+
+---
+
+## Phase 11 — Visualizer manual-insert interaction (design only, not started)
+
+**Not built this session.** Godot 4 isn't installed in this build sandbox (same limitation ADR-025/ADR-019 already disclosed for the 2D visualizer work) — writing untested `.gd` scene code here risks handing back something that looks plausible but silently doesn't run, which is worse than not writing it. This phase is scoped and ready to pick up on Donnie's own machine where the engine is available to actually verify against.
+
+**What it's for:** drop a new task onto the schedule (e.g. an unplanned 3-hour aloft window) and see color-coded conflict bars light up instantly. `visualizer/` already renders live work-package/conflict/HITL state on real deck-plan drawings (Section 8); it has no interaction model yet, only display.
+
+**Scoped design, not yet built:**
+- [ ] A click-to-place interaction on the active view (Inboard Profile or Deck Plan) that creates a new synthetic `WorkPackageState`-shaped event at the clicked frame/deck position — mirrors `demo_broadcaster.py`'s existing event shape rather than inventing a new one
+- [ ] The new package is sent through the real `deconfliction_node` path (not a client-side approximation) so the highlighted result is the actual system's answer, not a visual trick — likely means the visualizer needs a live path back to `agent_core`, which today only pushes one direction (server -> Godot over the existing WebSocket, `events.py`)
+- [ ] Conflict bars use the existing Okabe-Ito `CONFLICT_COLOR`/`marker_pin()` convention from ADR-028, not a new palette
+- [ ] Re-check latency should be visibly instant relative to the interaction (this session's `eval/perf_benchmark.py` result — sub-20ms at 200 packages — suggests detection itself won't be the bottleneck; any perceptible lag would come from the round trip, not the deconfliction logic)
+
+**Definition of done (not yet met):** a user can click an empty point on the live schematic, a new work package appears, and any real conflict it causes against currently-displayed packages highlights within the same interaction — verified with an actual Godot run, not a mockup.
+
+---
+
 ## Phase status
 
 | Phase | Status | Date done |
@@ -262,3 +296,5 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
 | 7 — Real HITL reviewer web app | ✅ (auth, intake form, live updates scoped out) | 2026-08-08 |
 | 8 — Real print as the 2D visualizer background | ✅ (Godot-render verification still pending) | 2026-08-08 |
 | 9 — Connectivity fix + Inboard Profile default view + switchable views | ✅ confirmed live on Donnie's machine | 2026-08-08 |
+| 10 — Reschedule suggestion + declarative rules + perf benchmark | 🟡 core modules + tests done, UI/reasoning wiring and rule-editing tool deferred | 2026-08-21 |
+| 11 — Visualizer manual-insert interaction | ⬜ designed, not built — needs Godot (not in this sandbox) | |
