@@ -432,3 +432,25 @@ Both reviewers independently confirmed the same reassuring floor: **nothing foun
 - `hazard_rules_v1.json` and `named_rules_v1.json` are two files describing the same pairs; tests keep them in lockstep, but a future merge into one file would be cleaner.
 
 **Next up:** Session 5 -- judgment flags routed to a named Gas Free Engineer. The `contact_role` field here is the hook; Session 5 needs a notional roster mapping roles to notional people.
+
+## 23. Session Notes — 2026-11-05: Upgrade Session 5 of 16 -- judgment flags routed to a named Gas Free Engineer
+
+**Branch:** `session-05-judgment`, stacked on `session-04-rules`. Not merged.
+**Status:** Done. 268/268 tests passing (243 -> 268, all 25 new in `tests/test_judgment.py`), installed and run as CI does. `eval.run_eval` unchanged.
+
+**Pre-build search:** no judgment, roster, or person concept anywhere; "Gas Free Engineer" existed only as a Session 4 `contact_role` string. The eval already recorded the engine's blind spots as known gaps (`gap-adjacent-frames-not-touching`, `gap-simultaneous-confined-space-entries`), and an unlocated hot-work/confined-space package was silently treated as "no spatial link".
+
+**What was built** (commit `e1dbfad`):
+- New `RuleCategory.JUDGMENT` and rules WS-JF-001 (hot work within `JUDGMENT_ADJACENCY_FRAMES`=3 frames of a concurrent confined space, not overlapping, not already a conflict), WS-JF-002 (simultaneous confined-space entries in the same compartment or overlapping frames), WS-JF-003 (hot work or confined space with no compartment and no complete frame range). All route to the Gas Free Engineer, escalation Safety Officer. A judgment flag is "a person must decide", never a violation.
+- `agent_core/judgment.py` -- `judgment_flags(packages, roster)`: deterministic, sorted by `flag_id` (e.g. `WS-JF-002:B+C`), order-independent, pure. Reuses `deconfliction`'s own overlap helpers so "concurrent" means the same thing in both places (unknown schedule = concurrent).
+- `case_data/roster_notional_v1.json` -- 5 invented people (GFE primary Riley Example, backup Jordan Placeholder; Safety Officer, Fire Safety Coordinator, Competent Person). Loader rejects any entry not marked `notional: true`, duplicate IDs, or two primaries per role; `judgment_flags()` raises before producing anything if a judgment rule's role has no primary.
+- Session 4 citation test tightened: a NAVSEA cite's `verified` must equal the site ruleset's flag (WS-JF-001 cites NAVSEA8010-4.3, verified there); every CFR cite must be `verified: false`.
+
+**Known gaps, not fixed (candidates for Session 11):**
+- The 3-frame threshold is a notional review prompt, not a sourced distance; should be site-configurable.
+- `judgment.py` imports private helpers (`_frame_ranges_overlap`, `_same_compartment`, `_schedules_overlap`) from `deconfliction.py`; intentional to keep one definition, but they should become public if more modules need them.
+- Routing ignores shifts: always the role's primary. Backup GFE is listed but unused until Session 6's shift calendar.
+- `gap-two-aloft-packages-stacked` (deck_level unused) is not a GFE matter and has no judgment rule.
+- Not wired into the graph, brief, or reviewer yet (Session 8).
+
+**Next up:** Session 6 -- crews, a shift calendar, locked packages, contractor windows. Shift-aware routing of judgment flags (on-shift GFE) is a natural fit there.
