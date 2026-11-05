@@ -28,6 +28,7 @@ import json
 import os
 
 from agent_core import events
+from agent_core.deconfliction import MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH
 from agent_core.procedural_lookup import cite_governing_procedure
 from agent_core.retrieval import cite_best_matching_case
 from agent_core.state import SafetyBrief, WorkPackageState
@@ -66,6 +67,8 @@ _REQUIRED_LLM_KEYS = ("executive_summary", "precedent_context", "recommended_act
 _PROVENANCE_TAGS = {
     "llm": "[SOURCE: LLM SYNTHESIS]",
     "deterministic-fallback": "[SOURCE: DETERMINISTIC FALLBACK - LLM OFFLINE]",
+    # Re-check 2 N06: the LLM is skipped on purpose, not offline.
+    "deterministic-template": "[SOURCE: DETERMINISTIC TEMPLATE - LLM NOT USED]",
 }
 
 
@@ -181,8 +184,54 @@ def _deterministic_fallback(context: dict) -> dict:
     }
 
 
+def _partnerless_fallback(context: dict) -> dict:
+    """
+    Re-check 2 N06: a package flagged on its own (today, a fire watch it
+    overloads by itself) has no partner, so the pair template's "conflict
+    with an overlapping work package" and "reschedule one package / add a
+    barrier" are false and ineffective. Moving it keeps the same workers on
+    the same watch; the remedies have to reduce the load on the watch.
+    """
+    wp_id, rationale = context["work_package_id"], context["conflict_rationale"] or ""
+    executive_summary = f"{wp_id} was flagged on its own, with no conflicting partner package. {rationale}"
+    if "Fire watch" in rationale:
+        recommended_action = (
+            f"Do not start {wp_id} until the hot workers on its fire watch are at or below "
+            f"the limit of {MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH} at every moment: reduce "
+            f"the hot-worker count, assign an additional fire watch, or split the work across "
+            f"times. Then the HITL reviewer signs off below."
+        )
+    else:
+        recommended_action = (
+            f"Do not start {wp_id} until a competent person resolves the finding above "
+            f"and the HITL reviewer signs off below."
+        )
+    precedent_context = context["case_citation"] or (
+        "No sourced case on file yet for this hazard category "
+        "(case_data expansion is tracked in MIGRATION.md Phase 4)."
+    )
+    if context.get("procedural_citation"):
+        precedent_context = f"{precedent_context} | {context['procedural_citation']}"
+    return {
+        "executive_summary": executive_summary,
+        "precedent_context": precedent_context,
+        "recommended_action": recommended_action,
+    }
+
+
 def generate_safety_brief(wp: WorkPackageState) -> SafetyBrief:
     context = _grounding_context(wp)
+
+    if not wp.conflicts:
+        # Partner-less flag: deterministic only, so no model can invent a partner.
+        fields, source = _partnerless_fallback(context), "deterministic-template"
+        tagged_summary = f"{provenance_tag(source)} {fields['executive_summary']}"
+        return SafetyBrief(
+            executive_summary=tagged_summary,
+            precedent_context=fields["precedent_context"],
+            recommended_action=fields["recommended_action"],
+            source=source,
+        )
 
     llm_result = _call_llm(context)
     if llm_result is not None:

@@ -171,7 +171,8 @@ class SafetyBrief(BaseModel):
         description="Concrete deconfliction step, e.g. reschedule, add a barrier, verify permit"
     )
     source: str = Field(
-        description="How this brief was generated: 'llm' or 'deterministic-fallback'"
+        description="How this brief was generated: 'llm', 'deterministic-fallback' (LLM "
+        "unavailable), or 'deterministic-template' (LLM deliberately not used)"
     )
 
 

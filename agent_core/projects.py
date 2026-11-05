@@ -190,6 +190,10 @@ def rollup_project(
 
     _require_inputs(certificate_findings=certificate_findings,
                     judgment_flags=judgment_flags, schedule_findings=schedule_findings)
+    # Re-check 2 R02: guard *before* materializing. A shared one-shot iterator
+    # was exhausted by one rollup and read as "no findings" by the next.
+    _require_collections(certificate_findings=certificate_findings,
+                         judgment_flags=judgment_flags, schedule_findings=schedule_findings)
     certificate_findings, judgment_flags, schedule_findings = (
         list(certificate_findings), list(judgment_flags), list(schedule_findings))
     members = [by_id[i] for i in project.work_package_ids]

@@ -429,3 +429,82 @@ def test_recheck_n05_rollup_without_due_date_does_not_compare_unrelated_times():
     aware = wp(start=dt(2027, 1, 12, 7, tzinfo=timezone.utc), end=dt(2027, 1, 12, 15, tzinfo=timezone.utc))
     r = rollup_project(proj, [aware], as_of=dt(2027, 1, 10), **NONE)
     assert r.past_due is False and r.late_package_ids == []
+
+
+# ===== review-01 re-check 2 (R02 via rollup; N06; N07) =====
+
+
+FINDINGS_ENTRY_POINTS = {
+    "package_status": lambda p, certs: package_status(
+        p, certificate_findings=certs, judgment_flags=[], schedule_findings=[]),
+    "rollup_project": lambda p, certs: rollup_project(
+        Project(project_id="P", name="n", work_package_ids=[p.work_package_id]), [p], as_of=T0,
+        certificate_findings=certs, judgment_flags=[], schedule_findings=[]),
+}
+
+
+@pytest.mark.parametrize("entry", sorted(FINDINGS_ENTRY_POINTS))
+def test_recheck2_r02_every_findings_entry_point_refuses_one_shot_iterators(entry):
+    # The guard was applied one call site at a time and reopened twice; this
+    # covers every public function that takes findings.
+    b = wp("B", permits_required=SafetyPermitsRequired(hot_work_permit=True))
+    with pytest.raises(TypeError, match="collection"):
+        FINDINGS_ENTRY_POINTS[entry](b, iter(check_certificates(b, [])))
+
+
+def test_recheck2_r02_shared_list_across_rollups_is_correct():
+    a, b = wp("A"), wp("B", permits_required=SafetyPermitsRequired(hot_work_permit=True))
+    certs = check_certificates(b, [])
+    kw = dict(certificate_findings=certs, judgment_flags=[], schedule_findings=[])
+    ra = rollup_project(Project(project_id="PA", name="a", work_package_ids=["A"]), [a, b], as_of=T0, **kw)
+    rb = rollup_project(Project(project_id="PB", name="b", work_package_ids=["B"]), [a, b], as_of=T0, **kw)
+    assert (ra.overall_status, rb.overall_status) == (PackageStatus.CLEARED, PackageStatus.HAS_FINDINGS)
+
+
+def _self_overload_brief():
+    state = deconfliction_node({"work_packages": [wp(hz=[H.HOT_WORK], fire_watch_id="F", hot_worker_count=5)]})
+    return reasoning_node(state)["work_packages"][0].safety_brief
+
+
+def test_recheck2_n06_self_overload_brief_names_no_partner_and_no_pair_remedy(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    b = _self_overload_brief()
+    assert "overlapping work package" not in b.executive_summary
+    assert "reschedule one package" not in b.recommended_action
+    assert "barrier" not in b.recommended_action
+
+
+def test_recheck2_n06_self_overload_brief_explains_capacity_and_real_remedies(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    b = _self_overload_brief()
+    assert "fire watch" in b.executive_summary.lower() and "4" in b.executive_summary
+    assert "hot workers" in b.recommended_action and "fire watch" in b.recommended_action
+
+
+def test_recheck2_n06_partnerless_brief_is_labelled_template_not_llm_offline():
+    # The LLM is skipped on purpose here, so "LLM OFFLINE" would be a false label (ADR-003).
+    b = _self_overload_brief()
+    assert b.source == "deterministic-template"
+    assert b.executive_summary.startswith("[SOURCE: DETERMINISTIC TEMPLATE - LLM NOT USED]")
+
+
+def test_recheck2_n06_partnerless_brief_never_calls_the_llm(monkeypatch):
+    from agent_core import reasoning
+    monkeypatch.setattr(reasoning, "_call_llm", lambda ctx: pytest.fail("LLM called for a partner-less brief"))
+    assert _self_overload_brief().source == "deterministic-template"
+
+
+def test_recheck2_n07_unrequired_certificate_kind_does_not_abort_the_check():
+    p = wp(permits_required=SafetyPermitsRequired(hot_work_permit=True))
+    certs = [Certificate(certificate_id="HW", work_package_id="WP-1", kind=K.HOT_WORK_PERMIT, valid_from=T0, valid_until=T1),
+             Certificate(certificate_id="FP", work_package_id="WP-1", kind=K.FALL_PROTECTION_PLAN,
+                         valid_from=dt(2027, 1, 12, 7, tzinfo=timezone.utc), valid_until=dt(2027, 1, 12, 15, tzinfo=timezone.utc))]
+    assert check_certificates(p, certs) == []
+
+
+def test_recheck2_n07_mixed_times_on_a_required_kind_still_refuse():
+    p = wp(permits_required=SafetyPermitsRequired(hot_work_permit=True))
+    c = Certificate(certificate_id="HW", work_package_id="WP-1", kind=K.HOT_WORK_PERMIT,
+                    valid_from=dt(2027, 1, 12, 7, tzinfo=timezone.utc), valid_until=dt(2027, 1, 12, 15, tzinfo=timezone.utc))
+    with pytest.raises(ValueError, match="timezone"):
+        check_certificates(p, [c])
