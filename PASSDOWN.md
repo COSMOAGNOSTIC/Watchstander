@@ -477,3 +477,19 @@ Both reviewers independently confirmed the same reassuring floor: **nothing foun
 - Locks are absolute; no "lock expires" or partial lock (start fixed, end flexible).
 
 **Next up:** triage Codex's `review-01` findings (in a session that didn't write the code), then Session 7 -- the shift-aware fix suggester.
+
+## 25. Session Notes — 2026-11-05: review-01 triage and a written review loop
+
+**Branch:** `fix-review-01`, stacked on `session-06-crews` (includes the merged `review-01` report). Not merged.
+
+**Why this happened:** Codex's review-01 of Sessions 2–5 reported 17 reproduced findings (9 high). The builder first accepted all 17 from reading the report alone. AOSE's rule "criticism is input, not authority" already existed, but only as narrative in AOSE.md, which no session loads, and the Session 1 pause note had dropped it. Donnie caught the gap.
+
+**What changed:**
+- `AGENTS.md` (read by Codex) and `CLAUDE.md` (imports it, read by Claude Code): the 8 session rules, the review loop, and the merge rules, loaded automatically every session. Review loop: the reviewer reports reproduced vs traced with a SHA; the builder gives every finding a verdict (CONFIRMED / AGREE-TRACED / DISPUTED with evidence) before fixing; Donnie settles disputes; the reviewer re-checks fixes.
+- `reviews/TEMPLATE.md`: response format with a required verdict per finding.
+- AOSE.md: pause note replaced by a five-line operating checklist plus the review cadence.
+- review-01 verdicts: all 17 independently reproduced at `12d3873` and on this branch (`reviews/review-01-repro.py`). No disputes. Decisions D1 (how status accounts for findings) and D2 (R09 changes inherited detection) await Donnie.
+
+**Housekeeping:** `integrate-01-03` is still on GitHub. This session's proxy refuses branch deletion, so Donnie needs to delete it in the GitHub UI.
+
+**Next up:** Donnie answers D1/D2 → fix all 17 on this branch, test-first → Codex re-checks the fixes → merge chain Sessions 4–6 plus fixes → Session 7.
