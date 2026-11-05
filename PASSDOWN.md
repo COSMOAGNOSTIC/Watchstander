@@ -349,3 +349,21 @@ Both reviewers independently confirmed the same reassuring floor: **nothing foun
 
 **Next up:** the performance cliff (Opus's finding) is probably the next highest-priority item if this module gets demoed against any hot-work-heavy scenario -- it's the one most likely to actually embarrass a live demo. After that, either of the two Session 17 integration points (suggestion -> `SafetyBrief`, suggestion -> reviewer UI), or Phase 11's visualizer interaction.
 
+
+## 19. Session Notes — 2026-11-05: Upgrade Session 1 of 16 -- docs cleanup
+
+**Branch:** `session-01-cleanup` (from `main` @ `aa3a4b5`). Not merged to `main`.
+**Status:** Done. 169/169 tests passing (`pip install -e ".[dev,retrieval,reviewer]"` then `pytest -v`, same as CI; run locally on Python 3.13, CI matrix is 3.11/3.12).
+
+**What changed** (commit `7607f26`, docs only -- `git diff --stat` confirmed only README.md, ARCHITECTURE.md, AOSE.md):
+- README: license line corrected to Apache 2.0 (matches `LICENSE`); visualizer described as rendering over real HAER drawings, with a note that the demo GIF predates that; module list adds `reschedule_suggestion.py`, `rules_config.py`, `rules_audit.py`.
+- ARCHITECTURE: header "Last updated" moved to 2026-08-21; the fire-watch raw-count Known Debt row marked CLOSED (the AUD-01 sweep-line, `_fire_watch_peak_concurrency()`, already fixed it), original text kept as history.
+- AOSE: same fire-watch entry marked CLOSED; ADR range corrected to 001-034; numbering note explaining the two different "Round 6"s; new **Paused** banner -- the full adversarial loop is deferred for upgrade sessions 1-16. Interim practice: green CI before merge, the session that finds a bug never writes its fix, cross-model review at Session 11 (engine) and Session 16 (final), red-team pass after the web UI (Sessions 12-15).
+
+**Verified before committing:** every factual claim in the patch checked against the code (`LICENSE` is Apache 2.0; `_fire_watch_peak_concurrency()` exists in `agent_core/deconfliction.py`; ADR-034 is the highest ADR; the three new modules and `case_data/hazard_rules_v1.json` exist).
+
+**`phase7_hitl_reviewer.patch`:** left in place as instructed. Its contents are already in the repo -- every file it touches exists, and the only differing lines are later improvements (`submit_decision` now takes the note as a separate argument instead of string-concatenating it; the PASSDOWN status line was updated after Phases 8-9). It no longer applies in either direction. Safe to delete whenever you choose.
+
+**Found, not fixed (out of this session's three-file scope):** `pyproject.toml` still declares `license = { text = "MIT" }` while `LICENSE` and now README say Apache 2.0. One-line fix; good candidate to fold into Session 2 or 16.
+
+**Next up:** Session 2 -- projects, priority, due dates, status rollup. Per the session rules: first search the repo for existing project/priority/status/due-date symbols and report what exists, then failing tests, then implementation.
