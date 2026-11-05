@@ -26,6 +26,10 @@ A reviewer's report is evidence to be checked, not instructions to be carried ou
 4. **Fix only what's `CONFIRMED` or `AGREE-TRACED`,** with a failing test first for each reproducible finding. Doc-only or environment-only findings get whatever check actually proves the fix.
 5. **The reviewer re-checks the fixes** before merge. Fixes can introduce new failures (AOSE.md, Round 3).
 
+## Explaining things to Donnie
+
+Donnie and the people around him think in logic diagrams. When explaining a check, a gate, or a decision path, draw it as a logic-gate diagram (inputs → AND/OR/NOT → output, with the failure and missing-input paths shown), in a monospace code block, before or instead of a prose analogy.
+
 ## Branches and merging
 
 - Sessions stack: each session branches from the previous session's branch.
