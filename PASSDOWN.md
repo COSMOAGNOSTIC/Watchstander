@@ -349,3 +349,23 @@ Both reviewers independently confirmed the same reassuring floor: **nothing foun
 
 **Next up:** the performance cliff (Opus's finding) is probably the next highest-priority item if this module gets demoed against any hot-work-heavy scenario -- it's the one most likely to actually embarrass a live demo. After that, either of the two Session 17 integration points (suggestion -> `SafetyBrief`, suggestion -> reviewer UI), or Phase 11's visualizer interaction.
 
+
+## 21. Session Notes — 2026-11-05: Upgrade Session 3 of 16 -- certificates checked against the whole work window
+
+**Branch:** `session-03-certificates` (from `main` @ `aa3a4b5`). Not merged. Sections 19 and 20 (Sessions 1 and 2) live on their own branches; merge in session order and expect trivial end-of-file conflicts in this file.
+**Status:** Done. 192/192 tests passing on this branch (169 -> 192, all 23 new in `tests/test_certificates.py`), installed and run as CI does.
+
+**Pre-build search:** no certificate, validity, or expiry code existed. `SafetyPermitsRequired` (five booleans in `state.py`) recorded only that a permit is *required*, with no dates, and nothing read it. ADR-031 already states authorization windows are a hard constraint and that `valid_until` was unmodeled; `reschedule_suggestion.py`'s docstring names the unbuilt "chit-expiration engine". This session supplies the data model and the coverage check, not that engine.
+
+**What was built** (`agent_core/certificates.py`, commit `c4237e7`):
+- `Certificate` -- ID, work package ID, `CertificateKind`, closed window [`valid_from`, `valid_until`]; an unordered window is rejected.
+- `CertificateKind` mirrors `SafetyPermitsRequired` field-for-field (same names, same order). A test fails if a permit flag is ever added without a kind, so a new permit can't go silently unchecked.
+- `check_certificates(pkg, certificates)` -- for each required permit, the union of that package's certificates of that kind must cover the whole scheduled window. Findings: MISSING (none on file), NOT_COVERED (exact uncovered intervals listed, e.g. expires 1500 on a job to 1900), UNSCHEDULED (fails closed: needs a permit but has no complete schedule). Back-to-back renewals ending/starting at the same instant count as continuous. Duplicate certificate IDs raise. Never mutates the package.
+
+**Known gaps, not fixed (candidates for Session 11):**
+- Not wired in: no graph node, brief, or reviewer calls it yet, and `suggest_reschedule()` still can't see certificate windows (ADR-031's open point stands until Session 7 re-checks suggestions against every rule).
+- No revocation or issuer/authority field; a certificate is trusted if it exists. Session 4 (named rules, who-to-call) is the natural place for issuing authority.
+- Timezone-aware vs naive datetimes are not normalized (same gap as Session 2).
+- Certificates are per package; one certificate covering several packages in the same space would need one record each.
+
+**Next up:** Session 4 -- named rules with IDs, CFR cites, and who-to-call.
