@@ -3,6 +3,8 @@
 **Status:** Proposed / Living Engineering Practice
 **Author:** Donnie Langford
 
+> **Paused (2026-11, upgrade sessions 1–16).** The full adversarial loop is deferred while the architecture settles. In the meantime: CI must be green before merge; the session that finds a bug never writes its fix (fixes happen in a separate session); a cross-model review of the engine runs at Session 11 and a final review at Session 16; a red-team pass is planned after the web UI (Sessions 12–15). The record below is unchanged.
+
 ## What this is
 
 AOSE is a repeatable engineering discipline for building AI-enabled systems: build the smallest working version, then deliberately try to break it — as an inexperienced user, an expert user, a malicious actor, a failed component, and a changed environment would — before fixing what's found and converting every real failure into a permanent regression test. It treats AI-generated critique as input to be judged, never as authority to be trusted, and it explicitly expects the loop to repeat every time the system changes.
@@ -66,7 +68,7 @@ The second was Donnie directly re-litigating Round 5's design choice, correctly:
 
 ## Where the discipline is still open
 
-- `_fire_watch_capacity_conflicts()`'s size gate checks raw per-fire-watch package count, not per-time-window concurrency — found 2026-08-08 while updating its tests for ADR-023's limit change (1 → 4). A group spread across genuinely non-overlapping schedule windows can still exceed the raw-count gate and get flagged, even though no more than the limit was ever concurrently active. Over-flagging direction, not under-flagging — lower severity than most rows in ARCHITECTURE.md Known Debt, where this is tracked in full. Not fixed this pass.
+- **CLOSED:** the AUD-01 fix replaced this with a weighted sweep-line (`_fire_watch_peak_concurrency()` in `deconfliction.py`); original entry kept as history. `_fire_watch_capacity_conflicts()`'s size gate checked raw per-fire-watch package count, not per-time-window concurrency — found 2026-08-08 while updating its tests for ADR-023's limit change (1 → 4). A group spread across genuinely non-overlapping schedule windows can still exceed the raw-count gate and get flagged, even though no more than the limit was ever concurrently active. Over-flagging direction, not under-flagging — lower severity than most rows in ARCHITECTURE.md Known Debt, where this is tracked in full. Not fixed this pass.
 - `reviewer/` has no auth, no real work-package intake form, and no live-updating dashboard — see ARCHITECTURE.md §8.5 Known Debt. Acceptable for one local reviewer on their own machine; would need addressing before any wider exposure.
 - Both real-print 2D backgrounds' pixel calibration (ADR-025, ADR-027) was checked with a Python/PIL mockup, not an actual Godot render — no Godot binary in this build sandbox. Worth a real in-editor screenshot next time the scene is opened, checking both views (not just the default Inboard Profile), to true up anything the mockup missed.
 
@@ -78,9 +80,12 @@ The second was Donnie directly re-litigating Round 5's design choice, correctly:
 
 These are listed here, not hidden, because AOSE's Step 10 says a discovered failure becomes one of three things: fixed and tested, an accepted risk, or documented technical debt. All three categories exist in this repo on purpose.
 
+
+**Numbering note.** ARCHITECTURE.md calls the independent review of 2026-08-21 "AOSE Round 6." In this file, Round 6 is the 2026-08-08 connectivity round above. The 2026-08-21 review is not written up here yet; it is recorded in ARCHITECTURE.md (ADR-031 correction, ADR-034, and Known Debt) and PASSDOWN.md. Nothing has been renumbered.
+
 ---
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the component map and full decision log (ADR-001 through ADR-013), and [MIGRATION.md](MIGRATION.md) / [PASSDOWN.md](PASSDOWN.md) for the phase-by-phase and session-by-session record this file draws from.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the component map and full decision log (ADR-001 through ADR-034), and [MIGRATION.md](MIGRATION.md) / [PASSDOWN.md](PASSDOWN.md) for the phase-by-phase and session-by-session record this file draws from.
 
 ---
 
