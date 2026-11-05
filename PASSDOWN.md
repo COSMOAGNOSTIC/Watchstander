@@ -349,3 +349,25 @@ Both reviewers independently confirmed the same reassuring floor: **nothing foun
 
 **Next up:** the performance cliff (Opus's finding) is probably the next highest-priority item if this module gets demoed against any hot-work-heavy scenario -- it's the one most likely to actually embarrass a live demo. After that, either of the two Session 17 integration points (suggestion -> `SafetyBrief`, suggestion -> reviewer UI), or Phase 11's visualizer interaction.
 
+
+## 20. Session Notes — 2026-11-05: Upgrade Session 2 of 16 -- projects, priority, due dates, status rollup
+
+**Branch:** `session-02-projects` (from `main` @ `aa3a4b5`, not from `session-01-cleanup`). Not merged. Session 1's PASSDOWN entry (section 19) lives on `session-01-cleanup`; merging both will need a trivial end-of-file conflict resolution in this file -- merge Session 1 first.
+**Status:** Done. 194/194 tests passing (169 -> 194, all 25 new in `tests/test_projects.py`), installed and run as CI does.
+
+**Pre-build search:** no project, priority, due-date, status or rollup symbols existed anywhere. Building blocks reused from `state.py`: `scheduled_start`/`scheduled_end`, `requires_hitl_review`, `risk_level`, `hitl_disposition`, `cleared_for_execution`. No completion/DONE field exists on a package, and none was invented.
+
+**What was built** (`agent_core/projects.py`, commit `b44729e`):
+- `Priority` (urgent/high/routine/low); `Project` (ID, name, priority default routine, optional `due_date`, `work_package_ids`; duplicates rejected).
+- `package_status()` -- derived, never stored. Worst-first: BLOCKED (reviewed and not approved, or not cleared for an unknown reason) > PENDING_REVIEW > UNSCHEDULED > CLEARED. Fails closed: a package with `cleared_for_execution=False` never reads CLEARED.
+- `rollup_project(project, packages, as_of)` -- overall = worst package status; counts and IDs per status; `late_package_ids` (scheduled_end after due date; ending exactly on it is not late); `past_due` judged against `as_of`, never the clock. Unknown or duplicated package IDs raise `ValueError` (same convention as `suggest_reschedule()`). Empty project rolls up UNSCHEDULED, never green.
+- `sort_projects()` -- priority, then due date (none last), then ID. Does not mutate input.
+- Also fixed: `pyproject.toml` license metadata MIT -> Apache-2.0 (found in Session 1).
+
+**Known gaps, not fixed (candidates for the Session 11 review):**
+- Mixing timezone-aware and naive datetimes (due date vs. package schedule) raises `TypeError` from the comparison; the repo doesn't standardize on one yet.
+- A package listed in two projects isn't detected; each project rolls it up independently.
+- Not wired into anything yet -- no graph node, brief, or reviewer reads it.
+- Unscheduled packages can't be judged late; they surface under UNSCHEDULED instead.
+
+**Next up:** Session 3 -- certificates with valid-from/valid-until, checked against the whole work window (not just the start). Relevant prior art: ADR-031 already states authorization windows are a hard constraint and records that nothing in `state.py` models a chit's `valid_until` today.
