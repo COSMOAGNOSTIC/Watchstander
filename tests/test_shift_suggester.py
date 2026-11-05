@@ -101,6 +101,8 @@ def test_certificate_that_does_not_cover_the_new_shift_rejects_it():
                          valid_from=day(6), valid_until=day(15, 30))
     out = run(block + [tank_entry()], certificates=[permit], max_shifts=2)
     assert out.suggestion is None
+    # review-02 S07-05: prove both candidates were assessed before checking why.
+    assert [r.shift_id for r in out.rejected] == ["20270112-SWING", "20270113-MID"]
     assert all("WS-CT-001" in r.rule_ids for r in out.rejected)
 
 
@@ -125,6 +127,7 @@ def test_judgment_flag_on_a_moved_package_rejects_every_shift():
     block = [wp("WELD-1", [H.HOT_WORK], day(7), day(11), comp=None)]
     out = run(block, max_shifts=3)
     assert out.suggestion is None
+    assert [r.shift_id for r in out.rejected] == ["20270112-SWING", "20270113-MID", "20270113-DAY"]
     assert all("WS-JF-003" in r.rule_ids for r in out.rejected)
 
 
@@ -207,3 +210,91 @@ def test_touching_the_new_shift_start_counts_as_overlap():
     # Closed intervals (repo convention): an entry ending 15:30 overlaps a block moved to start 15:30.
     out = run(weld_block() + [tank_entry(end=day(15, 30))])
     assert out.rejected[0].shift_id == "20270112-SWING" and "WS-HZ-001" in out.rejected[0].rule_ids
+
+
+# ===== review-02 (Codex, Session 7) =====
+
+from agent_core.crews import Shift  # noqa: E402
+
+
+def test_s07_01_crew_member_with_no_end_blocks_the_suggestion():
+    pkgs = [wp("WELD-1", [H.HOT_WORK], day(7), day(8)),
+            wp("PARTIAL", [], day(14), None, locked=True, lock_reason="notional fixed ongoing assignment")]
+    out = run(pkgs, max_shifts=1)
+    assert out.suggestion is None and out.rejected == []
+    assert "PARTIAL" in out.reason and "incomplete schedule" in out.reason
+
+
+def test_s07_01_unscheduled_crew_member_blocks_the_suggestion():
+    pkgs = [wp("WELD-1", [H.HOT_WORK], day(7), day(8)), wp("FLOAT", [], None, None)]
+    out = run(pkgs)
+    assert out.suggestion is None and "FLOAT" in out.reason
+
+
+def test_s07_01_other_crews_incomplete_schedules_do_not_block():
+    pkgs = [wp("WELD-1", [H.HOT_WORK], day(7), day(8)), wp("TANK-X", [], None, None, crew="CR-TANK", comp="TANK-9")]
+    assert run(pkgs).suggestion is not None
+
+
+def test_s07_02_candidate_where_the_block_starts_outside_that_shift_is_rejected():
+    cal = ShiftCalendar(shifts=[Shift(shift_id="LONG", name="LONG", start=day(7), end=day(15)),
+                                Shift(shift_id="SHORT", name="SHORT", start=day(15), end=day(16)),
+                                Shift(shift_id="FOLLOWING", name="FOLLOWING", start=day(16), end=day(23))])
+    out = run([wp("JOB", [], day(14), day(14, 30))], target="JOB", calendar=cal, max_shifts=1)
+    assert out.suggestion is None
+    [r] = out.rejected
+    assert r.shift_id == "SHORT" and r.rule_ids == [] and any("does not start" in x for x in r.reasons)
+
+
+def test_s07_02_every_suggested_move_starts_inside_the_named_shift():
+    s = run(weld_block() + [tank_entry()]).suggestion
+    shift = next(x for x in CAL.shifts if x.shift_id == s.to_shift_id)
+    assert all(shift.start <= m.suggested_start < shift.end for m in s.moves)
+
+
+def test_s07_03_unlocated_overhead_work_gets_no_suggestion():
+    aloft = wp("ALOFT", [H.WORKING_ALOFT], day(7), day(8), comp=None)
+    aloft = aloft.model_copy(update={"spatial": SC(is_aloft=True)})
+    other = wp("OTHER", [], day(15, 30), day(17), crew="CR-TANK")
+    out = run([aloft, other], target="ALOFT", max_shifts=2)
+    assert out.suggestion is None
+    assert len(out.rejected) == 2 and all(any("overhead" in x for x in r.reasons) for r in out.rejected)
+
+
+def test_s07_03_aloft_hazard_without_flag_or_frames_is_also_unverifiable():
+    p = wp("ALOFT", [H.WORKING_ALOFT], day(7), day(8))
+    out = run([p], target="ALOFT", max_shifts=1)
+    assert out.suggestion is None and any("overhead" in x for x in out.rejected[0].reasons)
+
+
+def test_s07_03_overhead_with_frames_next_to_a_concurrent_frameless_package_is_unverifiable():
+    aloft = W(work_package_id="ALOFT", description="n", hazard_categories=[H.WORKING_ALOFT],
+              spatial=SC(frame_start=40, frame_end=44, is_aloft=True),
+              scheduled_start=day(7), scheduled_end=day(8), crew_id="CR-WELD")
+    below = wp("BELOW", [], day(15, 30), day(17), crew="CR-TANK", comp="TANK-9")
+    out = run([aloft, below], target="ALOFT", max_shifts=1)
+    assert out.suggestion is None and any("overhead" in x for x in out.rejected[0].reasons)
+
+
+def test_s07_03_overhead_with_frames_on_both_sides_and_no_overlap_passes():
+    aloft = W(work_package_id="ALOFT", description="n", hazard_categories=[H.WORKING_ALOFT],
+              spatial=SC(frame_start=40, frame_end=44, is_aloft=True),
+              scheduled_start=day(7), scheduled_end=day(8), crew_id="CR-WELD")
+    below = W(work_package_id="BELOW", description="n", spatial=SC(frame_start=90, frame_end=95),
+              scheduled_start=day(15, 30), scheduled_end=day(17), crew_id="CR-TANK")
+    assert run([aloft, below], target="ALOFT").suggestion is not None
+
+
+@pytest.mark.parametrize("bad", [0, -1])
+def test_s07_04_non_positive_max_shifts_raises(bad):
+    with pytest.raises(ValueError, match="max_shifts"):
+        run(weld_block(), max_shifts=bad)
+
+
+def test_s07_03_moving_under_a_fixed_unlocated_overhead_job_is_unverifiable():
+    # Builder-found while fixing S07-03: neither package has frames and the overhead one is fixed.
+    mover = wp("WELD-1", [], day(7), day(8), comp=None)
+    fixed_aloft = W(work_package_id="ALOFT-FIXED", description="n", hazard_categories=[H.WORKING_ALOFT],
+                    spatial=SC(is_aloft=True), scheduled_start=day(15, 30), scheduled_end=day(17), crew_id="CR-TANK")
+    out = run([mover, fixed_aloft], max_shifts=1)
+    assert out.suggestion is None and any("ALOFT-FIXED" in x for x in out.rejected[0].reasons)
