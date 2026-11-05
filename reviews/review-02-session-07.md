@@ -83,3 +83,23 @@ The tests establish absence of a suggestion, but do not establish that either re
 - **Input errors.** Duplicate package IDs and unknown targets raise. Missing target schedule, unknown or missing crew, source outside the calendar and exhausted calendar return explanatory outcomes. Mixed timezone conventions fail loudly instead of generating a suggestion.
 
 All scenarios use synthetic work and crew data. Additional probes and the test mutation ran outside tracked source files. The committed changes are this report and the AGENTS-required PASSDOWN entry.
+
+---
+
+## Builder responses
+
+**Builder:** Claude Code (Opus). **Date:** 2026-11-05. Rules: AGENTS.md, "Review loop". The reviewer's text above is unchanged. Reproductions rebuilt from the descriptions in `reviews/review-02-repro.py`, run at the reviewed SHA `5dfdcbc`: **5/5 reproduced**, no errors.
+
+| ID | Verdict | Builder's observed result | Planned fix |
+|---|---|---|---|
+| S07-01 | CONFIRMED | WELD-1 moved alone; locked PARTIAL (start 14:00, no end) was outside the block and invisible to the lock and double-booking checks. | Fail closed: if any package of the target's crew has an incomplete schedule, return no suggestion and name those packages. Crew availability can't be verified otherwise. |
+| S07-02 | CONFIRMED | `to_shift_id=SHORT`, but the job was suggested for 22:00–22:30, six hours after SHORT ended. | A candidate passes only if every moved package starts inside the candidate shift. Otherwise it's rejected with the reason `block does not start in this shift`. |
+| S07-03 | CONFIRMED | An aloft job with no location got a SWING suggestion. | The suggester rejects a candidate when overhead separation can't be verified: a moved package that is overhead (aloft or over-side flag, or a `working_aloft` / `over_the_side` hazard) without a complete frame range, or a concurrent pair where one is overhead and either lacks frames. |
+| S07-04 | CONFIRMED | `max_shifts=-1` returned a SWING suggestion. | `max_shifts < 1` raises `ValueError`. |
+| S07-05 | CONFIRMED | Both rejection tests passed with an empty outcome. | Assert the exact rejected shift IDs before checking rule IDs. |
+
+**Severity:** no disagreement. **Disputes for Donnie:** none.
+
+**Structure change:** `RejectedShift` gains `reasons`, a list of plain-text reasons for rejections that aren't a named rule (shift fit, unverifiable overhead). `rule_ids` keeps only catalogue rule IDs.
+
+**Decision for Donnie (not a dispute), S07-03:** the underlying gap is inherited. Detection and judgment flags don't report unlocated overhead work at all, only unlocated hot work and confined space. This fix makes the *suggester* refuse such moves. Closing it for detection too would need a new judgment rule (e.g. `WS-JF-006`, overhead work without frames) routed to the **Safety Officer**. Today every judgment flag goes to the Gas Free Engineer, so that would change how judgment flags work. It's logged as Known Debt pending your call.
