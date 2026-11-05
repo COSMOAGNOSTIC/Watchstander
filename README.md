@@ -7,7 +7,7 @@ A LangGraph-based multi-agent system for **OSHA 1915 (Shipyard Employment)** spa
 
 ![Work packages placed on a schematic deck plan by frame range and deck level, a flagged conflict linking two overlapping packages in red, and the Safety Review station pulsing while a human HITL decision is pending](docs/visualizer-demo.gif)
 
-Every deconfliction check, safety-brief synthesis, and HITL gate pause is broadcast as a WebSocket event ([`agent_core/events.py`](agent_core/events.py)) and rendered live in a 2D schematic deck plan ([`visualizer/`](visualizer/README.md)) built in Godot 4 — work packages appear where their real frame range and deck level place them, conflicts draw as red links, and a flagged package visibly waits at the Safety Review station until a human decides. See [ARCHITECTURE.md](ARCHITECTURE.md) Section 8 for why this is a generated schematic rather than an imported real ship drawing.
+Every deconfliction check, safety-brief synthesis, and HITL gate pause is broadcast as a WebSocket event ([`agent_core/events.py`](agent_core/events.py)) and rendered live in a 2D scene over real HAER ship drawings ([`visualizer/`](visualizer/README.md)) built in Godot 4 — work packages appear where their real frame range and deck level place them, conflicts draw as red links, and a flagged package visibly waits at the Safety Review station until a human decides. See [ARCHITECTURE.md](ARCHITECTURE.md) Section 8 (ADR-025, ADR-027) for how the real HAER drawings are used. The demo GIF above predates that change and still shows the earlier generated schematic.
 
 ## What it does
 
@@ -49,7 +49,7 @@ flowchart LR
     Deconf --> Events["events.py<br/>WebSocket broadcaster"]
     Reason --> Events
     Hitl --> Events
-    Events --> Viz["visualizer/<br/>Godot 4 live schematic deck plan"]
+    Events --> Viz["visualizer/<br/>Godot 4 live scene on real HAER drawings"]
     class Events,Viz live
 
     Eval["eval/<br/>fixed-scenario harness vs. checked-in baseline"] -.->|"regression-tests"| Deconf
@@ -68,8 +68,10 @@ flowchart LR
 - **`agent_core/graph.py`** — graph assembly: `entry -> deconfliction -> reasoning -> hitl_gate -> END`.
 - **`case_data/`** — sourced OSHA/DOL case histories (`cases_v1.json`) and site-scoped governing-procedure rulesets (`navsea_8010_psns_v2014.json`), tagged by hazard category, used to ground rationale generation.
 - **`agent_core/events.py`** — lazy WebSocket broadcaster, no-op with no listener, feeding the visualizer.
-- **`visualizer/`** — Godot 4 project rendering the graph's activity as a live schematic deck plan.
+- **`visualizer/`** — Godot 4 project rendering the graph's activity as a live scene over real HAER ship drawings (Inboard Profile default, Deck Plan switchable).
 - **`reviewer/`** — local FastAPI app, the real human-facing Approve/Reject interface: full brief, LLM-vs-deterministic provenance, genuine `interrupt()`/`Command(resume=...)` (see ARCHITECTURE.md Section 8.5).
+- **`agent_core/reschedule_suggestion.py`** — suggests a conflict-free schedule shift for one flagged package, re-checked against the same deterministic rules. A pure query: it never changes a schedule, and it is not yet wired into the graph or the reviewer (see ARCHITECTURE.md ADR-030, ADR-034 and Known Debt).
+- **`agent_core/rules_config.py`** / **`agent_core/rules_audit.py`** — declarative hazard rules loaded from `case_data/hazard_rules_v1.json`, and an append-only audit trail for rule changes (ARCHITECTURE.md ADR-032).
 - **`eval/`** — fixed-scenario evaluation harness scoring the deterministic-fallback path against a checked-in baseline (see ARCHITECTURE.md Section 7).
 
 ## Watch It Live
@@ -113,4 +115,4 @@ Public-domain, civilian shipyard OSHA data only. No Navy mishap data — deliber
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Apache License 2.0 — see [LICENSE](LICENSE).
