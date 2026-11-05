@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections import defaultdict
 from itertools import combinations
 
-from agent_core import events
+from agent_core import events, named_rules
 from agent_core.rules_config import load_hazard_rules
 from agent_core.state import HazardCategory, WorkPackageState
 
@@ -92,8 +92,27 @@ def _vertically_stacked(a: WorkPackageState, b: WorkPackageState) -> bool:
 
 def check_conflict(a: WorkPackageState, b: WorkPackageState) -> str | None:
     """
-    Returns a human-readable conflict rationale if `a` and `b` should
-    not run concurrently, or None if no conflict is detected.
+    Human-readable rationale for a conflict between `a` and `b`, or None.
+    Thin wrapper over `_detect_conflict`, which also yields the named
+    rule IDs (see `conflict_rule_ids`) -- one detection path, so the
+    rationale and the rule IDs can never disagree.
+    """
+    found = _detect_conflict(a, b)
+    return found[1] if found else None
+
+
+def conflict_rule_ids(a: WorkPackageState, b: WorkPackageState) -> list[str]:
+    """Sorted named-rule IDs (case_data/named_rules_v1.json) for this pair; [] if no conflict."""
+    found = _detect_conflict(a, b)
+    return found[0] if found else []
+
+
+def _detect_conflict(
+    a: WorkPackageState, b: WorkPackageState
+) -> tuple[list[str], str] | None:
+    """
+    Returns `(rule_ids, rationale)` if `a` and `b` should not run
+    concurrently, or None if no conflict is detected.
 
     Two packages are only ever flagged if they're both spatially *and*
     temporally linked -- see `_schedules_overlap`. Packages scheduled
@@ -121,7 +140,8 @@ def check_conflict(a: WorkPackageState, b: WorkPackageState) -> str | None:
 
     if hazard_overlap and spatially_linked:
         pair_desc = ", ".join(sorted(h.value for p in hazard_overlap for h in p))
-        return (
+        rule_ids = sorted(named_rules.rule_for_hazard_pair(p).rule_id for p in hazard_overlap)
+        return rule_ids, (
             f"Incompatible hazard categories ({pair_desc}) detected in overlapping "
             f"spatial envelope between {a.work_package_id} and {b.work_package_id}."
         )
@@ -136,7 +156,7 @@ def check_conflict(a: WorkPackageState, b: WorkPackageState) -> str | None:
         # the actual overhead party explicitly instead of assuming positionally.
         a_overhead = a.spatial.is_aloft or a.spatial.is_over_side
         overhead, underlying = (a, b) if a_overhead else (b, a)
-        return (
+        return [named_rules.rule_for_overhead_work().rule_id], (
             f"Overhead work ({overhead.work_package_id}) and underlying work "
             f"({underlying.work_package_id}) share an overlapping frame range with "
             f"no vertical deconfliction confirmed."

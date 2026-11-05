@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "source_note": "Named rule catalogue (Session 4). One entry per thing the deterministic engine actually checks: each incompatible hazard pair in hazard_rules_v1.json, the overhead-work check, the fire-watch capacity limit, and one per certificate kind. Contacts are ROLES, never named people. Citation 'verified' follows navsea_8010_psns_v2014.json's convention: true only for an entry read against the primary source (the three NAVSEA entries were, on 2026-08-08, ADR-023). Every 29 CFR section below was added in Session 4 from general knowledge of Part 1915's structure and is verified=false until someone reads the eCFR text for it and flips it. These citations explain a rule; they never decide one -- detection stays in deconfliction.py and certificates.py.",
+  "rules": [
+    {
+      "rule_id": "WS-HZ-001",
+      "title": "Hot work in or adjacent to a confined or enclosed space",
+      "category": "hazard_pair",
+      "applies_to": ["hot_work", "confined_space"],
+      "citations": [
+        {"source": "29 CFR 1915.14", "verified": false},
+        {"source": "NAVSEA8010-4.4.4", "verified": true}
+      ],
+      "contact_role": "Gas Free Engineer",
+      "escalation_role": "Safety Officer",
+      "note": "29 CFR 1915.14 covers hot work in confined/enclosed spaces (Subpart B). NAVSEA8010-4.4.4 (multiple levels) is cited because hot material can travel between the spaces involved."
+    },
+    {
+      "rule_id": "WS-HZ-002",
+      "title": "Hot work in the same envelope as work aloft",
+      "category": "hazard_pair",
+      "applies_to": ["hot_work", "working_aloft"],
+      "citations": [
+        {"source": "29 CFR 1915.503", "verified": false},
+        {"source": "NAVSEA8010-4.4.4", "verified": true}
+      ],
+      "contact_role": "Fire Safety Coordinator",
+      "escalation_role": "Safety Officer",
+      "note": "Falling slag or sparks reaching staging or workers aloft; NAVSEA8010-4.4.4 requires a fire watch at each level unless positive means prevent spread or fall of hot material."
+    },
+    {
+      "rule_id": "WS-HZ-003",
+      "title": "Work aloft concurrent with fall-protection work in the same envelope",
+      "category": "hazard_pair",
+      "applies_to": ["working_aloft", "fall_protection"],
+      "citations": [
+        {"source": "29 CFR 1915.159", "verified": false},
+        {"source": "29 CFR 1915.77", "verified": false}
+      ],
+      "contact_role": "Safety Officer",
+      "escalation_role": null,
+      "note": "Known Debt (ARCHITECTURE.md): working aloft requires fall protection, so this pair can flag a compliant configuration. Kept as a review prompt, not a violation finding."
+    },
+    {
+      "rule_id": "WS-OH-001",
+      "title": "Overhead work above other work with no vertical deconfliction confirmed",
+      "category": "overhead",
+      "applies_to": [],
+      "citations": [],
+      "contact_role": "Safety Officer",
+      "escalation_role": null,
+      "note": "No specific 29 CFR section mapped yet for overhead work above other crews; left uncited rather than guessed. Fires when one package is aloft or over the side and the other shares its frame range."
+    },
+    {
+      "rule_id": "WS-FW-001",
+      "title": "Fire watch covering more than four concurrent hot workers",
+      "category": "fire_watch",
+      "applies_to": [],
+      "citations": [
+        {"source": "NAVSEA8010-4.4.3", "verified": true},
+        {"source": "29 CFR 1915.504", "verified": false}
+      ],
+      "contact_role": "Fire Safety Coordinator",
+      "escalation_role": "Safety Officer",
+      "note": "Limit of four from NAVSEA8010-4.4.3, verified against the primary source (ADR-023)."
+    },
+    {
+      "rule_id": "WS-CT-001",
+      "title": "Hot work permit must cover the whole work window",
+      "category": "certificate",
+      "applies_to": ["hot_work_permit"],
+      "citations": [
+        {"source": "NAVSEA8010-4.2", "verified": true},
+        {"source": "29 CFR 1915.503", "verified": false}
+      ],
+      "contact_role": "Fire Safety Coordinator",
+      "escalation_role": "Safety Officer",
+      "note": null
+    },
+    {
+      "rule_id": "WS-CT-002",
+      "title": "Confined space entry permit must cover the whole work window",
+      "category": "certificate",
+      "applies_to": ["confined_space_entry_permit"],
+      "citations": [
+        {"source": "29 CFR 1915.12", "verified": false}
+      ],
+      "contact_role": "Gas Free Engineer",
+      "escalation_role": "Safety Officer",
+      "note": null
+    },
+    {
+      "rule_id": "WS-CT-003",
+      "title": "Fall protection plan must cover the whole work window",
+      "category": "certificate",
+      "applies_to": ["fall_protection_plan"],
+      "citations": [
+        {"source": "29 CFR 1915.159", "verified": false}
+      ],
+      "contact_role": "Safety Officer",
+      "escalation_role": null,
+      "note": null
+    },
+    {
+      "rule_id": "WS-CT-004",
+      "title": "Marine chemist certificate must cover the whole work window",
+      "category": "certificate",
+      "applies_to": ["marine_chemist_certificate"],
+      "citations": [
+        {"source": "29 CFR 1915.14", "verified": false},
+        {"source": "29 CFR 1915.7", "verified": false}
+      ],
+      "contact_role": "Gas Free Engineer",
+      "escalation_role": "Safety Officer",
+      "note": null
+    },
+    {
+      "rule_id": "WS-CT-005",
+      "title": "Competent person inspection must cover the whole work window",
+      "category": "certificate",
+      "applies_to": ["competent_person_inspection"],
+      "citations": [
+        {"source": "29 CFR 1915.7", "verified": false}
+      ],
+      "contact_role": "Competent Person",
+      "escalation_role": "Gas Free Engineer",
+      "note": null
+    }
+  ]
+}

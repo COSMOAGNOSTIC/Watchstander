@@ -29,6 +29,7 @@ from typing import Iterable
 
 from pydantic import BaseModel, model_validator
 
+from agent_core import named_rules
 from agent_core.state import WorkPackageState
 
 
@@ -69,6 +70,7 @@ class CertificateFinding(BaseModel):
     work_package_id: str
     kind: CertificateKind
     issue: CertificateIssue
+    rule_id: str
     uncovered: list[tuple[datetime, datetime]]
     certificate_ids: list[str]
     message: str
@@ -126,11 +128,12 @@ def check_certificates(
             key=lambda c: (c.valid_from, c.certificate_id),
         )
         ids = [c.certificate_id for c in matching]
+        rule_id = named_rules.rule_for_certificate_kind(kind).rule_id
 
         if start is None or end is None:
             findings.append(CertificateFinding(
                 work_package_id=pkg.work_package_id, kind=kind,
-                issue=CertificateIssue.UNSCHEDULED, uncovered=[], certificate_ids=ids,
+                issue=CertificateIssue.UNSCHEDULED, rule_id=rule_id, uncovered=[], certificate_ids=ids,
                 message=f"{kind.value}: package has no complete schedule, "
                 "so certificate coverage cannot be verified",
             ))
@@ -143,7 +146,7 @@ def check_certificates(
         spans = "; ".join(f"{_fmt(a)} to {_fmt(b)}" for a, b in gaps)
         what = "no certificate on file" if not matching else "not covered"
         findings.append(CertificateFinding(
-            work_package_id=pkg.work_package_id, kind=kind, issue=issue,
+            work_package_id=pkg.work_package_id, kind=kind, issue=issue, rule_id=rule_id,
             uncovered=gaps, certificate_ids=ids,
             message=f"{kind.value}: {what} for {spans}",
         ))
