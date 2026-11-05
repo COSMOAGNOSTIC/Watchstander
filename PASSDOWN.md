@@ -566,3 +566,12 @@ Reviewed `fix-review-01` at `38e0616b6df88b8de36cd11b146171a2d4673855` on `revie
 ## Review 02 · Session 7
 
 Reviewed `session-07-shift-suggester` at `5dfdcbc00786ce28b531e27e1e912c8ff0a1fd18` against `main` at `c3a41ffd579048019dbecf2b2fbee3fa192cd986`, on `review-02`. Findings are in `reviews/review-02-session-07.md`: five reproduced issues, including incomplete crew members omitted before lock/availability checks, destination shift misidentification for shorter shifts, and unlocated overhead work getting a passing suggestion. Hold for triage of the two high-severity findings. All 387 tests passed and eval matched its baseline. Independent revalidation of 141 returned candidates, shift-edge, overnight, DST, calendar-gap and input-purity checks passed within the documented limits.
+
+## 30. Session Notes — 2026-11-05: review-02 (Session 7) triage and fixes
+
+**Branch:** `session-07-shift-suggester` (now includes the `review-02` report). Not merged; waiting on Codex's re-check.
+**Review (Codex at `5dfdcbc`):** 5 findings, 2 high. Incomplete crew members bypassed block, lock, and availability checks; unlocated overhead work got a passing suggestion; a short destination shift could be misnamed; negative `max_shifts` was accepted; two tests passed with empty results.
+**Builder:** 5/5 independently reproduced (`reviews/review-02-repro.py`); verdicts committed first (`d52dde4`); fixed in `b6ce52f` with one more builder-found overhead gap; 399 tests passed; eval baseline unchanged.
+**Decision for Donnie:** the inherited gap where detection and judgment never report unlocated overhead work. Option: new judgment rule `WS-JF-006` routed to the Safety Officer (all judgment flags go to the GFE today). Logged as Known Debt until decided.
+**Environment note:** `pip install -e ".[dev,retrieval,reviewer]"` as root works (399 passed via `python3 -m pytest`), but this image's bare `pytest` is a separate uv-tool install that can't see system packages. A Watchstander environment's setup script should account for that.
+**Next up:** Codex re-check of review-02 → merge Session 7 → Session 8.

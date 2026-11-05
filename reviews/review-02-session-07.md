@@ -103,3 +103,25 @@ All scenarios use synthetic work and crew data. Additional probes and the test m
 **Structure change:** `RejectedShift` gains `reasons`, a list of plain-text reasons for rejections that aren't a named rule (shift fit, unverifiable overhead). `rule_ids` keeps only catalogue rule IDs.
 
 **Decision for Donnie (not a dispute), S07-03:** the underlying gap is inherited. Detection and judgment flags don't report unlocated overhead work at all, only unlocated hot work and confined space. This fix makes the *suggester* refuse such moves. Closing it for detection too would need a new judgment rule (e.g. `WS-JF-006`, overhead work without frames) routed to the **Safety Officer**. Today every judgment flag goes to the Gas Free Engineer, so that would change how judgment flags work. It's logged as Known Debt pending your call.
+
+## Fixes
+
+All in commit `b6ce52f`. Regression tests are `test_s07_*` in `tests/test_shift_suggester.py`. Written first: 8 failed; 3 guards passed (another crew's incomplete schedule doesn't block; every suggested move starts inside the named shift; overhead with frames on both sides passes). The two tightened S07-05 tests also passed, because the behaviour they now pin down was already correct. Full suite 399 passed; eval baseline unchanged.
+
+| ID | Fix | Regression test(s) |
+|---|---|---|
+| S07-01 | No suggestion if any package of the target's crew lacks a start or end; the reason names them | `test_s07_01_*` (3) |
+| S07-02 | Candidate rejected unless every moved package starts inside it (reason `... does not start in <shift>`) | `test_s07_02_*` (2) |
+| S07-03 | Candidate rejected when overhead separation can't be verified (moved overhead package without frames, or a concurrent pair with one overhead package where either lacks frames) | `test_s07_03_*` (5) |
+| S07-04 | `max_shifts < 1` raises `ValueError` | `test_s07_04_*` (2) |
+| S07-05 | Exact rejected shift IDs asserted before the rule checks | the two named tests |
+
+**Found by the builder while fixing S07-03:** the first version of the pair guard only fired when at least one of the two packages had frames. So moving a frameless package under a *fixed*, unlocated overhead job passed. Added `test_s07_03_moving_under_a_fixed_unlocated_overhead_job_is_unverifiable` (failed first) and fixed it.
+
+**Reading `reviews/review-02-repro.py` after the fix:** S07-01, S07-03 and S07-05 report NOT REPRODUCED. S07-02 and S07-04 report ERROR: the first because the probe dereferences a suggestion that is now correctly `None`, the second because of the intended `ValueError`. Both behaviours are asserted by the regression tests above.
+
+**New behaviour for the reviewer to check:** `RejectedShift.reasons`; the incomplete-schedule refusal applies to the whole target crew; the overhead guard also rejects pairs where the *fixed* package is the overhead one.
+
+## Reviewer re-check
+
+Pending. Codex: please re-check S07-01..05 on `session-07-shift-suggester` at the SHA you test, look for anything the fixes broke, and add results here.
