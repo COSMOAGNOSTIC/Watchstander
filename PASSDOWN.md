@@ -454,3 +454,26 @@ Both reviewers independently confirmed the same reassuring floor: **nothing foun
 - Not wired into the graph, brief, or reviewer yet (Session 8).
 
 **Next up:** Session 6 -- crews, a shift calendar, locked packages, contractor windows. Shift-aware routing of judgment flags (on-shift GFE) is a natural fit there.
+
+## 24. Session Notes — 2026-11-05: Upgrade Session 6 of 16 -- crews, shift calendar, locked packages, contractor windows
+
+**Branch:** `session-06-crews`, stacked on `session-05-judgment`. Not merged. **Hold merging until the Codex review of Sessions 2-5 (`review-01`) is triaged**, per Donnie.
+**Status:** Done. 304/304 tests passing (268 -> 304: 35 in `tests/test_crews.py`, 1 in `tests/test_reschedule_suggestion.py`), installed and run as CI does. `eval.run_eval` unchanged.
+
+**Pre-build search:** no crew, shift, lock, contractor, or calendar concept anywhere; `WorkPackageState` had no crew or lock field, and `suggest_reschedule()` would shift any package. Session 3's certificate check already contained the closed-interval coverage logic needed for contractor windows.
+
+**What was built** (commit `6461002`):
+- `agent_core/crews.py` -- `Shift`, `ShiftCalendar` (sorted, unique IDs, no overlaps; half-open `shift_at`; `next_shift(after)` for Session 7; `from_daily_pattern` with midnight-crossing shifts), `Window`, `Crew` (organic, or contractor with `contractor_windows`; a contractor with no windows may work nowhere), `is_movable()`.
+- `check_schedule_constraints(packages, crews, calendar)` -- report-only, sorted, order-independent. New named rules, category `schedule`, contact Production Planner: WS-SC-001 unknown crew; WS-SC-002 contractor work outside windows (whole window; unscheduled contractor package reported, fails closed); WS-SC-003 work outside the shift calendar (gaps reported); WS-SC-004 crew double-booked (strict overlap, so back-to-back is fine). Uncited on purpose: planning constraints, not regulations.
+- `state.py` -- `crew_id`, `locked`, `lock_reason` on `WorkPackageState`; locked requires a reason. All default off.
+- `agent_core/intervals.py` -- `uncovered()` moved out of `certificates.py`; certificate tests unchanged and green.
+- `reschedule_suggestion.py` -- returns `None` for a locked target (test proves the same pair gets a suggestion when unlocked).
+
+**Known gaps, not fixed (candidates for review):**
+- Shift-aware routing of judgment flags (on-shift GFE) not done; roster has no shift assignment yet. Fits Session 7 or 8.
+- `suggest_reschedule()` still knows nothing about shifts, crews, contractor windows, or certificates -- it only respects the lock. That is Session 7's job.
+- Unscheduled packages are skipped by the calendar and double-booking checks (projects rollup already reports them as UNSCHEDULED); only contractor packages fail closed.
+- Calendar is concrete shifts; no holidays, recurring exceptions, or per-crew calendars.
+- Locks are absolute; no "lock expires" or partial lock (start fixed, end flexible).
+
+**Next up:** triage Codex's `review-01` findings (in a session that didn't write the code), then Session 7 -- the shift-aware fix suggester.
