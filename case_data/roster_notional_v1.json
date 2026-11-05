@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source_note": "NOTIONAL roster for demos and tests. Every name is invented and every entry must carry notional=true; the loader refuses anything else. No real ship, yard, or personnel data. One primary per role is who a flag routes to; non-primary entries are listed backups (shift-aware routing is Session 6).",
+  "people": [
+    {"person_id": "NP-GFE-01", "display_name": "Riley Example", "role": "Gas Free Engineer", "primary": true, "notional": true},
+    {"person_id": "NP-GFE-02", "display_name": "Jordan Placeholder", "role": "Gas Free Engineer", "primary": false, "notional": true},
+    {"person_id": "NP-SO-01", "display_name": "Casey Sample", "role": "Safety Officer", "primary": true, "notional": true},
+    {"person_id": "NP-FSC-01", "display_name": "Morgan Demo", "role": "Fire Safety Coordinator", "primary": true, "notional": true},
+    {"person_id": "NP-CP-01", "display_name": "Taylor Fixture", "role": "Competent Person", "primary": true, "notional": true}
+  ]
+}

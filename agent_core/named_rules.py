@@ -40,6 +40,7 @@ class RuleCategory(str, Enum):
     OVERHEAD = "overhead"
     FIRE_WATCH = "fire_watch"
     CERTIFICATE = "certificate"
+    JUDGMENT = "judgment"  # not a violation: a call the engine cannot make, routed to a person
 
 
 class Citation(BaseModel):

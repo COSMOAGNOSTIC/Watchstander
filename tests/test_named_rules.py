@@ -68,10 +68,16 @@ def test_contacts_are_roles_not_named_people():
 
 
 def test_only_primary_source_checked_citations_are_marked_verified():
-    verified = {c.source for r in RULES for c in r.citations if c.verified}
-    # These were read against the primary-source PDF on 2026-08-08 (ADR-023);
-    # nothing added in Session 4 may claim verification it didn't earn.
-    assert verified <= {"NAVSEA8010-4.2", "NAVSEA8010-4.4.3", "NAVSEA8010-4.4.4"}
+    # A NAVSEA cite may say verified only if the site ruleset says so (read against the
+    # primary-source PDF, ADR-023). No 29 CFR cite has been read against eCFR yet.
+    with open("case_data/navsea_8010_psns_v2014.json", encoding="utf-8") as f:
+        site = {p["procedure_id"]: p["verified"] for p in json.load(f)["procedures"]}
+    for r in RULES:
+        for c in r.citations:
+            if c.source.startswith("NAVSEA"):
+                assert c.verified == site[c.source], (r.rule_id, c.source)
+            else:
+                assert c.verified is False, (r.rule_id, c.source)
 
 
 def test_navsea_citations_exist_in_the_site_ruleset():
