@@ -191,3 +191,31 @@ The builder's historical reproduction script cannot substantiate the claimed pos
 **Severity:** no disagreement. **Disputes for Donnie:** none.
 
 **Design note for Donnie (not a dispute), R06:** after this fix, calling the pair check with two different records that share an ID becomes an error rather than a silent "no conflict". The batch functions already refuse duplicates, so no existing caller should hit it.
+
+### Re-check fixes
+
+All in commit `7c82768`. Regression tests are `test_recheck_*` in `tests/test_review01_fixes.py`. Written first: 10 failed, one per item; 4 guards passed (the same list reused across packages; true self-comparison; a package never concurrent with the overload; a suggestion not landing in a multi-package overload). Full suite 355 passed; eval 14/14 with the baseline unchanged.
+
+| ID | Fix | Regression test |
+|---|---|---|
+| R02 | `package_status` raises `TypeError` unless each findings input is a re-iterable collection | `test_recheck_r02_*` |
+| R06 | `_detect_conflict` returns `None` only when `a is b`; distinct records sharing an ID raise `ValueError` | `test_recheck_r06_*` |
+| R09 | `_package_loads()`: each package's own worst concurrent load on its watch; `fire_watch_overloads` returns every package whose load exceeds the limit | `test_recheck_r09_*` |
+| R13 | `require_comparable` over the schedule and this package's certificates before any sort | `test_recheck_r13_*` |
+| R14 | `fmt_time` shows microseconds when non-zero | `test_recheck_r14_*` |
+| N01 | `deconfliction_result` lists packages flagged by rationale with `conflicts_with: []`; `reasoning_node` briefs them | `test_recheck_n01_*` |
+| N02 | Suggester rejects any candidate that appears in `fire_watch_overloads(trial_group)` | `test_recheck_n02_*` |
+| N03 | `_shifted_copy` shifts in UTC, converts back to the original zone, and validates the copy | `test_recheck_n03_*` |
+| N04 | `uncovered` returns gaps in the work window's zone; `fmt_time` appends the UTC offset for aware times | `test_recheck_n04_*` |
+| N05 | Rollup checks comparability only when a due date exists | `test_recheck_n05_*` |
+
+**How to read the re-check script's output.** `reviews/review-01-recheck-repro.py` labels any exception as ERROR, so it can never count a crash as a fix. After the fix, R02 and R06 show ERROR because the bad input is now refused with the intended exception (`TypeError: ... must be a collection` and `ValueError: two distinct records share work_package_id`), and each refusal is asserted by its regression test. Every other item reads NOT REPRODUCED. `reviews/review-01-repro.py` now runs on the current API. Its R04, R06, R13 and R17 probes stop on the intended validation errors, also each covered by a regression test.
+
+**New behaviour for the reviewer to check:**
+- The fire-watch rationale now reads "reaches N concurrent hot workers while <package> is active", per package.
+- `check_conflict(a, b)` raises for distinct records that share an ID.
+- Human-facing times for aware input now include an offset, e.g. `01:15 -08:00`.
+
+### Reviewer re-check 2
+
+Pending. Codex: please re-check R02, R06, R09, R13, R14 and N01–N05 against `fix-review-01` at the SHA you test, and look for anything these fixes broke.

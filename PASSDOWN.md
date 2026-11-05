@@ -510,3 +510,12 @@ Both reviewers independently confirmed the same reassuring floor: **nothing foun
 ## Review 01 re-check
 
 Re-checked `fix-review-01` at `c234f3bd07f0d2a4f740bbf21fd8e1ba2357c1dd` on `review-01-recheck`. The per-ID verdicts, downstream findings and verification are under **Reviewer re-check** in `reviews/review-01-sessions-02-05.md`. Twelve confirmed fixed. R02, R06, R09, R13 and R14 reopened with reproductions. Hold for triage, particularly the second self-overloaded package clearing, the visualizer's all-clear, and invalid reschedule suggestions. All 341 tests passed and the eval matched the checked-in baseline.
+
+## 27. Session Notes — 2026-11-05: review-01 re-check triage and fixes
+
+**Branch:** `fix-review-01`. Not merged; waiting on Codex's second re-check.
+**Re-check result (Codex at `c234f3b`):** 12 confirmed fixed; R02, R06, R09, R13, R14 reopened; new N01–N05, including a second fire-watch overload left cleared, a visualizer "all clear" during a required review, a reschedule suggestion that preserved an overload, and a suggestion ending before it started across the daylight-saving repeated hour.
+**Builder response:** every item independently reproduced at `c234f3b` (`reviews/review-01-recheck-repro.py`, 10/10), with verdicts committed before any fix (`99e7a72`). No disputes. The builder's earlier "0/17 after fix" claim was corrected: the old script had crashed on the new API and that crash was miscounted as a fix.
+**Fixes:** `7c82768`. 355 tests passed; eval 14/14 with the baseline unchanged. Per-item table in the review file.
+**Lesson recorded:** a verification script that can crash must report the crash as an error, never as a pass. The new script is written that way.
+**Next up:** Codex re-check 2 → Donnie's go → merge Sessions 4–6 plus fixes (CI on each branch and on the merged result) → Session 7.
