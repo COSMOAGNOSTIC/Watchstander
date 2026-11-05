@@ -35,3 +35,46 @@ Reviewed `aa3a4b5353549947124e15b72c9b5f9ced43e9d3..12d3873496ca6ca1d69148755e82
 ## Test execution
 
 Ran `pip install -e ".[dev,retrieval,reviewer]" && pytest -v` on Python 3.12.14 in an isolated environment with a cached compatible PyTorch 2.14.0 dependency. **268 passed in 1.89 seconds.** The public-function probes, boundary enumerations and two in-memory test mutations above ran separately. The existing [GitHub Actions run for the exact reviewed SHA](https://github.com/COSMOAGNOSTIC/Watchstander/actions/runs/41945060419) also reports successful Python 3.11 and 3.12 jobs.
+
+---
+
+## Builder responses
+
+**Builder responding:** Claude Code (Opus), the model that wrote Sessions 2–6. **Date:** 2026-11-05. Rules: AGENTS.md, "Review loop". The reviewer's text above is unchanged.
+
+**Method.** Each scenario was rebuilt independently from the description above, not copied from the reviewer, in `reviews/review-01-repro.py`. It ran against a separate checkout of the reviewed SHA `12d3873` (confirmed loaded: no Session 6 `locked` field), then again against `fix-review-01` (which includes Session 6). Result: **17/17 reproduced at both commits.** Re-run with `PYTHONPATH=<checkout> python reviews/review-01-repro.py` from the repo root.
+
+| ID | Verdict | Builder's observed result | Disposition |
+|---|---|---|---|
+| R01 | CONFIRMED | Setting `requires_hitl_review=True` on a live model left `package_status` = `cleared`. In the graph, `deconfliction_node` flips `cleared_for_execution` inline, so the pipeline path is covered, but the public status API must not depend on that. | fix: read review requirement and disposition directly |
+| R02 | CONFIRMED | Same package: status `cleared`, certificate `missing`, judgment `WS-JF-003`. | fix: see decision D1 |
+| R03 | CONFIRMED | Permit ended 0:30:00 of real time before the job; 0 findings. | fix: compare instants (UTC) everywhere windows are compared |
+| R04 | CONFIRMED | `{"hot_work_permti": true}` accepted, every flag false, 0 findings. | fix: `extra="forbid"` on `SafetyPermitsRequired` |
+| R05 | CONFIRMED | Blank package and certificate IDs accepted; blank-to-blank join satisfied the permit. | fix: reject blank/whitespace IDs on packages, certificates, crews, roster |
+| R06 | CONFIRMED | Two records sharing ID `A`: `check_conflict` None, judgment `[]`. The pair-level self-skip is correct for a true self-comparison; the defect is batches accepting duplicate IDs. | fix: raise on duplicate IDs in `find_all_conflicts` and `judgment_flags` |
+| R07 | CONFIRMED | Compartment-only vs frames-only pair: no conflict, no flag. Whitespace compartment counted as located. | fix: new judgment trigger for concurrent gas-free packages with no common coordinate; strip compartment IDs |
+| R08 | CONFIRMED | Spatial confined flag + entry permit, empty hazard list, no location: 0 flags. | fix: judgment uses hazard list, spatial flag, and permits as gas-free signals, and flags inconsistent classification |
+| R09 | CONFIRMED | Peak 5 > limit 4 in one package; `conflicts=[]`, status `cleared`. Inherited from before Session 2. | fix: report single-package overload; see decision D2 |
+| R10 | CONFIRMED | Both predicates true; rule IDs `['WS-HZ-001']` only. Rationale text is first-match by design; the rule-ID list must be complete. | fix: collect every applicable rule ID |
+| R11 | CONFIRMED | Message tail `Gas Free Engineer  ().` | fix: non-blank `person_id` and `display_name` |
+| R12 | CONFIRMED | Two independent flags, both `WS-JF-002:A+B+C`. | fix: unambiguous flag ID encoding |
+| R13 | CONFIRMED | `TypeError: can't compare offset-naive and offset-aware datetimes`. | fix: explicit error naming the mixed fields (same change as R03) |
+| R14 | CONFIRMED | `not covered for 2027-01-12 07:00 to 2027-01-12 07:00`. | fix: show seconds when non-zero |
+| R15 | CONFIRMED | Agreement test passed with a detector that never detects. | fix: independent expected outcome per case |
+| R16 | CONFIRMED | Roles test passed with `contact_role='Riley Example'`. | fix: compare against an explicit allowed-role set |
+| R17 | CONFIRMED | Catalogue held `WS-JF-004`; preflight accepted it; only `WS-JF-003` emitted. | fix: catalogue judgment IDs must equal implemented trigger IDs, both directions |
+
+**Severity.** No disagreement with any assigned severity.
+
+## Disputes for Donnie
+
+None.
+
+## Decisions for Donnie (not disputes)
+
+- **D1 (R02), how status should account for findings.** Builder's proposal: `package_status()`/`rollup_project()` take the package's certificate, judgment, and schedule findings as a *required* argument and add a `HAS_FINDINGS` status ranked between `PENDING_REVIEW` and `UNSCHEDULED`, so a caller can't get `CLEARED` without having run the checks. The alternative, renaming `CLEARED` to something narrower, still lets a caller skip the checks.
+- **D2 (R09), detection change.** Reporting single-package fire-watch overloads changes inherited detection. If `eval/baseline.json` moves, the diff will be shown for approval, not regenerated silently.
+
+## Reviewer re-check
+
+Pending, after fixes land on `fix-review-01`.
