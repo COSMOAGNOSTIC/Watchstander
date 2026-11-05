@@ -562,3 +562,7 @@ Reviewed `fix-review-01` at `38e0616b6df88b8de36cd11b146171a2d4673855` on `revie
 - Not wired into the brief or reviewer yet; that's Session 8.
 
 **Next up:** Session 8 -- wire suggestions into the brief and reviewer, with an Apply that re-checks, and a deterministic `recommended_action`.
+
+## Review 02 · Session 7
+
+Reviewed `session-07-shift-suggester` at `5dfdcbc00786ce28b531e27e1e912c8ff0a1fd18` against `main` at `c3a41ffd579048019dbecf2b2fbee3fa192cd986`, on `review-02`. Findings are in `reviews/review-02-session-07.md`: five reproduced issues, including incomplete crew members omitted before lock/availability checks, destination shift misidentification for shorter shifts, and unlocated overhead work getting a passing suggestion. Hold for triage of the two high-severity findings. All 387 tests passed and eval matched its baseline. Independent revalidation of 141 returned candidates, shift-edge, overnight, DST, calendar-gap and input-purity checks passed within the documented limits.
