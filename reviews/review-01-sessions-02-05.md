@@ -166,3 +166,28 @@ Each verdict uses the builder's named regression cases in the full run. “Reope
 On Python 3.12.14, ran `pip install -e ".[dev,retrieval,reviewer]"`, then plain `pytest -v`: **341 passed**. Ran `python -m eval.run_eval`: **14/14** conflict scenarios matched documented expectations (**10/14** domain-correct, four known gaps), **7/7** retrieval cases passed and the deterministic fallback was healthy. The baseline comparison passed. Counterexamples and mutations above ran separately without editing code.
 
 The builder's historical reproduction script cannot substantiate the claimed post-fix 0/17 on this SHA. Running the documented command stops at `reviews/review-01-repro.py:31`, where the old status call omits the three now-required arguments. The verdicts above use the current API, regression suite and separate probes.
+
+## Builder responses to the re-check
+
+**Builder:** Claude Code (Opus). **Date:** 2026-11-05. The reviewer's re-check text above is unchanged.
+
+**Correction to the builder's earlier claim.** The fix table said `review-01-repro.py` "reproduces none of the 17" after the fix. That overstated the evidence. For R01, R02 and R09, the old script stopped on the changed `package_status` signature, and the builder counted that `TypeError` as "refused by the fix". A crash in an outdated probe is not evidence of a fix. The reviewer was right to reject it. The script is now updated to the current API (see the fix commit below).
+
+**Method.** All ten reopened or new items were rebuilt from the reviewer's descriptions in `reviews/review-01-recheck-repro.py`. Each probe is isolated, and an exception is reported as ERROR, never as fixed. They ran at `c234f3b`, the SHA the reviewer tested. **10/10 reproduced**, with no errors.
+
+| ID | Verdict | Builder's observed result | Planned fix |
+|---|---|---|---|
+| R02 | CONFIRMED | A shared one-shot iterator holding B's missing-permit finding gave A=`cleared`, then B=`cleared`. | `package_status` refuses one-shot iterables: findings must be a re-iterable collection. |
+| R06 | CONFIRMED | Two distinct records both named `X`: `check_conflict` returned `None`. | The pair API skips only a true self-comparison (`a is b`). Equal IDs on distinct records raise. |
+| R09 | CONFIRMED | Two 5-worker packages, one watch, successive days: A went to review; B was not flagged and stayed cleared. | Per-package load: flag every package whose own active interval ever sees the watch above the limit, not only the packages at the single global peak. |
+| R13 | CONFIRMED | Naive plus aware matching certificates: bare `TypeError` from the sort. | Check comparability before sorting. |
+| R14 | CONFIRMED | A 6-microsecond gap rendered as `09:15:10 to 09:15:10`. | Show microseconds when non-zero. |
+| N01 | CONFIRMED | Self-overload: event `conflicts=[]` (visualizer shows "all clear"), review required, `safety_brief=None`. | The event lists rationale-only packages too; the reasoning node writes a brief for any package flagged by conflict or rationale. |
+| N02 | CONFIRMED | A 5-worker self-overload got a +1 hour suggestion. | The suggester rejects any candidate that appears in `fire_watch_overloads` (covers self and multi-package overloads). |
+| N03 | CONFIRMED | A valid 01:45 PDT → 01:15 PST job got the suggestion 02:45 → 02:15 PST, ending before it starts. | Shift in real time (UTC), convert back to the original zone, and validate the trial copy. |
+| N04 | CONFIRMED | Message read `09:15 to 09:45` with no zone for a Los Angeles job. | Return gap bounds in the work window's own zone, and show the UTC offset in messages for aware times. |
+| N05 | CONFIRMED | No due date, aware schedule, naive `as_of`: refused, though nothing is compared. | Check comparability only for times actually compared (only when a due date exists). |
+
+**Severity:** no disagreement. **Disputes for Donnie:** none.
+
+**Design note for Donnie (not a dispute), R06:** after this fix, calling the pair check with two different records that share an ID becomes an error rather than a silent "no conflict". The batch functions already refuse duplicates, so no existing caller should hit it.
