@@ -124,4 +124,52 @@ All in commit `b6ce52f`. Regression tests are `test_s07_*` in `tests/test_shift_
 
 ## Reviewer re-check
 
-Pending. Codex: please re-check S07-01..05 on `session-07-shift-suggester` at the SHA you test, look for anything the fixes broke, and add results here.
+Tested **`f7634875572dce340d1008ce64ba2d0addb0475d`** on `session-07-shift-suggester`. The remote tip still matched after testing. **Four confirmed fixed, S07-03 reopened.** Hold for triage of the remaining overhead suggestion failure.
+
+| ID | Verdict | Evidence |
+|---|---|---|
+| S07-01 | confirmed fixed | The original locked member starting at 14:00 with no end now prevents a suggestion and is named in the reason. Independently tested missing start, missing end, both absent and an incomplete member starting on a later day. All refuse for the target crew. Reassigning the incomplete member to another crew allows the otherwise clean move. Inputs remain unchanged. |
+| S07-02 | confirmed fixed | The LONG → SHORT example now returns no suggestion, with a SHORT rejection containing `rule_ids=[]` and the explicit reason that WELD-1 does not start in SHORT. Independent point-job checks just before, exactly at and just after the candidate end confirm the intended half-open start-membership boundary. Spring-forward and fall-back candidates still preserve elapsed duration and start inside the named shift. |
+| S07-03 | reopened | **High**, `agent_core/shift_suggester.py:100–106,117–124`, inherited `agent_core/deconfliction.py:92–96`. Missing-frame scenarios now refuse, including when the fixed package is overhead. However, a hazard-labeled overhead job with complete frames and default spatial flags can still be suggested directly over concurrent work. Reproduced for both `working_aloft` and `over_the_side`, and with the fixed job being the overhead one. Details below. |
+| S07-04 | confirmed fixed | Zero and negative `max_shifts` raise the intended descriptive `ValueError`. Positive bounded searches continue to return candidates or recorded rejections. |
+| S07-05 | confirmed fixed | Repeated the original in-memory mutation returning an outcome with no suggestion and no rejected shifts. Both tightened certificate and judgment tests now raise `AssertionError`, rather than accepting empty rejection evidence. |
+
+### S07-03 failing scenario
+
+All data is notional. On 2027-01-12:
+
+- ALOFT belongs to CR-WELD and runs 07:00–08:00. Its hazard list contains `working_aloft`, its frame range is 40–44, and `spatial.is_aloft` retains the accepted default of false.
+- BELOW belongs to CR-TANK, has no hazard categories, and runs 15:30–17:00 at frames 40–44.
+- The calendar has DAY 07:00–15:30 and SWING starting at 15:30. Query ALOFT with `max_shifts=1`.
+
+The function returns a SWING suggestion moving ALOFT to 15:30–16:30, with all five check names and no rejected shifts. The same failure occurs with `over_the_side`. Setting ALOFT's spatial overhead flag makes that candidate fail with `WS-OH-001`. Reversing the arrangement, with a non-overhead mover and a fixed hazard-labeled overhead job, also produces the unsafe suggestion.
+
+```text
+hazard label says overhead + both jobs have complete frames
+                          |
+       new guard recognizes overhead but sees no missing data
+                          |
+          conflict detector reads only spatial flags
+                          |
+                 both flags default false
+                          |
+                  no overhead conflict
+                          |
+      suggestion despite concurrent overlapping frame ranges
+```
+
+The underlying hazard/flag disagreement predates this fix. The new suggester guard explicitly accepts the hazard list as an overhead signal, but only uses that signal to test frame completeness. Completing the frames therefore removes its protection without enabling the inherited detector. The existing hazard-only regression exercises the missing-frame case and does not cover this transition. The fix needs to account for conflicting overhead evidence when frames are available, through detection or an explicit refusal of inconsistent classification.
+
+### New behavior checked
+
+**RejectedShift.reasons.** Exercised a reason-only rejection and a rejection carrying both `WS-CT-001` and a shift-fit reason. Both kinds of evidence survive together. The outcome round-trips through JSON, repeated calls produce equal outcomes, and a legacy `RejectedShift` payload containing only `shift_id` and `rule_ids` defaults to an empty reasons list. The original missing-frame cases identify the affected packages. No serialization or evidence-loss regression was found.
+
+**Whole-crew refusal.** The scope is intentionally conservative: an incomplete same-crew job starting on a later day blocks an earlier candidate too. This matches the builder's stated whole-crew policy and reports which record needs attention. It may refuse a move whose earlier availability could be established from the known start alone, but it does not produce a false clearance. Another crew's incomplete nonhazardous work does not trigger this crew-wide refusal. Hazard and overhead checks can still independently block a move involving that other crew.
+
+**Time boundaries and purity.** Point jobs at the candidate end are rejected for shift membership. Point jobs immediately before it pass when the other checks pass. Elapsed duration and candidate membership remain correct through both daylight-saving changes. The whole-crew refusal and reason-producing paths preserved the supplied packages in the independent probes.
+
+### Verification
+
+Ran `pip install -e ".[dev,retrieval,reviewer]"` and plain `pytest -v` on Python 3.12.14 in the existing isolated review environment. **399 passed in 1.65 seconds.** Ran `python -m eval.run_eval`: **14/14** documented conflict expectations match, **10/14** are domain-correct with the four existing known gaps, **7/7** retrieval cases pass, and deterministic fallback health passes. The baseline comparison passed.
+
+The reopened scenarios and additional controls above were actually executed outside tracked source files. This review changes only the report and the AGENTS-required PASSDOWN entry.

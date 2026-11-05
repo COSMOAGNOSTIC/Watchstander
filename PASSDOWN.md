@@ -575,3 +575,7 @@ Reviewed `session-07-shift-suggester` at `5dfdcbc00786ce28b531e27e1e912c8ff0a1fd
 **Decision for Donnie:** the inherited gap where detection and judgment never report unlocated overhead work. Option: new judgment rule `WS-JF-006` routed to the Safety Officer (all judgment flags go to the GFE today). Logged as Known Debt until decided.
 **Environment note:** `pip install -e ".[dev,retrieval,reviewer]"` as root works (399 passed via `python3 -m pytest`), but this image's bare `pytest` is a separate uv-tool install that can't see system packages. A Watchstander environment's setup script should account for that.
 **Next up:** Codex re-check of review-02 → merge Session 7 → Session 8.
+
+## Review 02 re-check
+
+Reviewed `session-07-shift-suggester` at `f7634875572dce340d1008ce64ba2d0addb0475d` on `review-02-recheck`. S07-01, S07-02, S07-04 and S07-05 are confirmed fixed. S07-03 remains open: hazard-only overhead classification with complete overlapping frames bypasses the missing-data guard and the spatial-flag-only detector. Reproduced for moved and fixed overhead jobs. New rejection-reason serialization, mixed reasons/rule IDs, whole-crew refusal, time boundaries and purity checks passed. All 399 tests passed and eval matched the baseline. Details are under **Reviewer re-check** in `reviews/review-02-session-07.md`. Hold for triage of S07-03.
