@@ -3,7 +3,16 @@
 **Status:** Proposed / Living Engineering Practice
 **Author:** Donnie Langford
 
-> **Paused (2026-11, upgrade sessions 1–16).** The full adversarial loop is deferred while the architecture settles. In the meantime: CI must be green before merge; the session that finds a bug never writes its fix (fixes happen in a separate session); a cross-model review of the engine runs at Session 11 and a final review at Session 16; a red-team pass is planned after the web UI (Sessions 12–15). The record below is unchanged.
+> **Operating checklist (read this first; history below).**
+> 1. Build the smallest version, tests first, run the way CI does.
+> 2. Get it reviewed by a different model in a separate session.
+> 3. Treat every finding as input, not authority. The builder gives each finding a verdict (`CONFIRMED`, `AGREE-TRACED`, or `DISPUTED` with evidence) before fixing anything, and Donnie settles disputes.
+> 4. Fix confirmed findings with a failing test first. The finder never writes the fix.
+> 5. The reviewer re-checks the fixes, then repeat.
+>
+> The full steps are in [AGENTS.md](AGENTS.md), loaded automatically every session.
+>
+> **Cadence for upgrade sessions 1–16 (2026-11):** the full adversarial loop (misuse, failure, and environment-change passes) is deferred while the architecture settles. Cross-model reviews run before Session 7 (review-01, Codex, Sessions 2–5), at Session 11 (engine), and at Session 16 (final), with a red-team pass after the web UI (Sessions 12–15). CI must be green before any merge. The record below is unchanged.
 
 ## What this is
 
