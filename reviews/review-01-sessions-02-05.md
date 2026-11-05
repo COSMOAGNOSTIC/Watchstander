@@ -112,4 +112,57 @@ All in commit `08fe4a5` on `fix-review-01`. Regression tests are in `tests/test_
 
 ## Reviewer re-check
 
-Pending. Codex: please re-check each fix against `fix-review-01` at the SHA you test, and record per finding: confirmed fixed, or reopened with a scenario. Please also look for anything the fixes broke (AOSE.md, Round 3).
+Tested `fix-review-01` at **`c234f3bd07f0d2a4f740bbf21fd8e1ba2357c1dd`**. **12 confirmed fixed, 5 reopened.** Hold the merge for the false clearances below. The most consequential one occurs with ordinary, valid inputs on the graph path.
+
+```text
+Five workers on watch F during shift A  ─┐
+Five workers on watch F during shift B  ─┴─ same watch, disjoint shifts
+                                            |
+                                   peak = 5 > limit 4
+                                            |
+                         keep only packages at first peak
+                               /                      \
+                 A has rationale                B has no partner
+                        |                       AND no rationale
+                   HITL required                       |
+                                              cleared_for_execution=True
+```
+
+### Per-finding verdicts
+
+Each verdict uses the builder's named regression cases in the full run. “Reopened” identifies a reproduced counterexample on the tested SHA, including cases where the original example now passes.
+
+| ID | Verdict | Evidence |
+|---|---|---|
+| R01 | confirmed fixed | Setting the review flag on an already constructed, scheduled package yields `PENDING_REVIEW` with all three finding lists empty. |
+| R02 | reopened | **High**, `agent_core/projects.py:119–121,144–149`. The original list-based case yields `HAS_FINDINGS`, and omitted or null inputs fail. But the public API accepts an iterable of findings covering several packages. Pass the same iterator over B's real missing-permit finding to successive calls for A and B. Checking A exhausts it. Both returned `CLEARED`. The rollup materializes its inputs and avoids this particular failure. |
+| R03 | confirmed fixed | The first 01:15–01:45 Los Angeles permit leaves the entire second 01:15–01:45 job uncovered. The structured bounds are 09:15–09:45 UTC. Ordering and overlap regressions also passed. See N03 for a downstream duration regression. |
+| R04 | confirmed fixed | The misspelled permit key raises field-specific validation at package intake. Unknown spatial keys are likewise rejected. See the intake check below. |
+| R05 | confirmed fixed | Blank and whitespace package and certificate identity fields are rejected at construction, before the empty-ID join can occur. |
+| R06 | reopened | **High**, `agent_core/deconfliction.py:131–132` (equal-ID guard in `_detect_conflict`). The batch APIs reject duplicates. The public pair API still returns `None` for two **distinct** records both named X, one hot work and one confined entry, at the same time in the same tank. A true self-comparison and a pair of corrupt records remain indistinguishable to this caller. |
+| R07 | confirmed fixed | Concurrent hot work located only by compartment and confined entry only by frames produce JF-004. Whitespace-only compartments trigger JF-003. The comparable-pair control passes. |
+| R08 | confirmed fixed | An unlocated entry identified by its spatial flag and permit, with an empty hazard list, triggers both JF-003 and JF-005. Consistent classification avoids the mismatch flag. |
+| R09 | reopened | **High**, `agent_core/deconfliction.py:361–369,390–392`. A single five-worker package routes correctly. Give the same watch two five-worker packages on successive days. There is no overlapping pair, and the new overload pass retains only one peak. The node returned A as review-required and uncleared, B as review-free and cleared. Moving B to a different day cannot reduce its five simultaneous workers. See N01 and N02 for downstream effects. |
+| R10 | confirmed fixed | For overlapping frames with both the hazard-pair and overhead predicates true, the ID list contains both HZ-001 and OH-001. The legacy rationale still identifies the hazard pair. |
+| R11 | confirmed fixed | A blank primary person ID, display name or role fails roster validation before routing. |
+| R12 | confirmed fixed | The pairs A+B with C and A with B+C now have distinct IDs. Their JSON-encoded member lists preserve the original boundaries. |
+| R13 | reopened | **Med**, `agent_core/certificates.py:108–111`. A naive job and one aware permit now give a descriptive validation error. With two otherwise valid matching certificates, one naive and one aware, sorting their start times raises a bare `TypeError: can't compare offset-naive and offset-aware datetimes` before the validation helper runs. |
+| R14 | reopened | **Low**, `agent_core/validation.py:56–58`. A 20-second gap is readable. A gap from 09:15:10.000002 to 09:15:10.000008 renders as “09:15:10 to … 09:15:10”. Structured bounds still retain the six-microsecond gap. |
+| R15 | confirmed fixed | Replaced the detector in memory with an always-None function. The rewritten independent-expectations test failed on A/B as intended. |
+| R16 | confirmed fixed | Substituted “Riley Example” as a contact role in memory. Both the allowed-role test and the roster-name test failed as intended. |
+| R17 | confirmed fixed | A catalogue-only judgment rule is refused during preflight. The checked-in catalogue and the implemented trigger set agree. |
+
+### Behaviour changes and downstream findings
+
+- **N01 · high · false all-clear in the visualizer.** Reproduced the event from the self-overload scenario: `deconfliction_result` contained `conflicts=[]` while the node required HITL. Traced the exact display text, “no conflicts detected -- all work packages clear”. One five-worker package suffices. Also ran the reasoning node: the self-overload received no safety brief. The reviewer detail page can still display its rationale. Event and reasoning behavior were exercised in Python; the Godot display path was inspected in source. Locations: `agent_core/deconfliction.py:455–465`, `visualizer/Main.gd:380–385`, `agent_core/reasoning.py:209`.
+- **N02 · high · rescheduling presents an unresolved overload as a solution.** Reproduced with one five-worker package assigned to one watch. `suggest_reschedule` returned a +1 hour suggestion because its candidate check only examines package pairs. All five workers move together. The suggestion API leaves the actual schedule and HITL state untouched. Location: `agent_core/reschedule_suggestion.py:173–187`.
+- **N03 · high · a valid repeated-hour job gets an impossible suggested schedule.** Reproduced with 01:45 PDT to 01:15 PST on 2026-11-01, a valid 30-minute job under the new instant-based validation. The +1 hour suggestion was **02:45 PST to 02:15 PST**, ending before it starts. Wall-clock addition on each bound and an unvalidated model copy let the inverted candidate through. Location: `agent_core/reschedule_suggestion.py:84–89,181–188`.
+- **N04 · med · UTC gap messages omit the time zone.** Reproduced. For the second 01:15–01:45 Los Angeles job, structured UTC bounds refer to the correct instants, but the human-facing message reads “09:15 to … 09:45” without an offset or zone. A reader using the work schedule's zone sees a gap eight hours later. Locations: `agent_core/certificates.py:128–133`, `agent_core/validation.py:56–58`.
+- **N05 · low · rollups reject times they never compare.** Reproduced. With no project due date, one aware package schedule and a naive `as_of`, the rollup raises a mixed-time error. Both lateness calculations are disabled when the due date is absent. Location: `agent_core/projects.py:182–183`.
+- **Strict input validation checked.** Submitted serialized package dictionaries to the graph node with one extra key under each of `spatial` and `permits_required`. Each failed before assessment with the nested field path and `extra_forbidden`. Current reviewer demo seeding, review, and checkpoint reload tests passed. The web routes seed the demo and accept decisions; there is no arbitrary JSON package-upload route in this revision. Historical external payloads were unavailable for compatibility testing.
+
+### Verification
+
+On Python 3.12.14, ran `pip install -e ".[dev,retrieval,reviewer]"`, then plain `pytest -v`: **341 passed**. Ran `python -m eval.run_eval`: **14/14** conflict scenarios matched documented expectations (**10/14** domain-correct, four known gaps), **7/7** retrieval cases passed and the deterministic fallback was healthy. The baseline comparison passed. Counterexamples and mutations above ran separately without editing code.
+
+The builder's historical reproduction script cannot substantiate the claimed post-fix 0/17 on this SHA. Running the documented command stops at `reviews/review-01-repro.py:31`, where the old status call omits the three now-required arguments. The verdicts above use the current API, regression suite and separate probes.

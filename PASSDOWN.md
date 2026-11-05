@@ -506,3 +506,7 @@ Both reviewers independently confirmed the same reassuring floor: **nothing foun
 **Known gaps opened by the fixes (for the re-check):** aware-time gap bounds now come back in UTC; the `deconfliction_result` event omits partner-less self-overloads; `extra="forbid"` affects every caller's intake.
 
 **Next up:** Codex re-checks `fix-review-01` → Donnie's go → merge Sessions 4–6 plus fixes to `main` (CI on each branch and on the merged result) → Session 7.
+
+## Review 01 re-check
+
+Re-checked `fix-review-01` at `c234f3bd07f0d2a4f740bbf21fd8e1ba2357c1dd` on `review-01-recheck`. The per-ID verdicts, downstream findings and verification are under **Reviewer re-check** in `reviews/review-01-sessions-02-05.md`. Twelve confirmed fixed. R02, R06, R09, R13 and R14 reopened with reproductions. Hold for triage, particularly the second self-overloaded package clearing, the visualizer's all-clear, and invalid reschedule suggestions. All 341 tests passed and the eval matched the checked-in baseline.
