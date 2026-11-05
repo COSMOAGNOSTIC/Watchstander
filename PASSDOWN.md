@@ -409,3 +409,26 @@ Both reviewers independently confirmed the same reassuring floor: **nothing foun
 - Certificates are per package; one certificate covering several packages in the same space would need one record each.
 
 **Next up:** Session 4 -- named rules with IDs, CFR cites, and who-to-call.
+
+## 22. Session Notes — 2026-11-05: Upgrade Session 4 of 16 -- named rules with IDs, citations, and who-to-call
+
+**Branch:** `session-04-rules` (from `main` @ `e0522a9`, which now includes Sessions 1-3). Not merged. From here sessions stack: Session 5 branches from this one.
+**Status:** Done. 243/243 tests passing (217 -> 243, all 26 new in `tests/test_named_rules.py`), installed and run as CI does. `python -m eval.run_eval` unchanged against `eval/baseline.json`.
+
+**Pre-build search:** `hazard_rules_v1.json` / `rules_config.py` held the three hazard pairs and the fire-watch limit under one shared `source_citation` string; no rule IDs, per-rule cites, or contacts anywhere. `check_conflict()` returned free text from two branches (hazard pair, overhead); `_fire_watch_capacity_conflicts()` cited NAVSEA8010-4.4.3 inline. Session 3's certificate findings had no rule.
+
+**What was built** (commit `33af925`):
+- `case_data/named_rules_v1.json` -- 10 rules: WS-HZ-001 hot work + confined space, WS-HZ-002 hot work + aloft, WS-HZ-003 aloft + fall protection, WS-OH-001 overhead work, WS-FW-001 fire-watch capacity, WS-CT-001..005 one per certificate kind. Each: title, citations (`source`, `verified`), `contact_role`, `escalation_role`, note. Contact roles used: Gas Free Engineer, Fire Safety Coordinator, Safety Officer, Competent Person.
+- `agent_core/named_rules.py` -- validated loader (fails loudly on duplicate/malformed IDs, unknown hazard or certificate kind, blank contact, uncited rule without a note, wrong `schema_version`) and lookups: `get_rule`, `rule_for_hazard_pair`, `rule_for_overhead_work`, `rule_for_fire_watch_capacity`, `rule_for_certificate_kind`. Explains only; decides nothing.
+- `deconfliction.py` -- `check_conflict()` is now a thin wrapper over `_detect_conflict()`, which returns `(rule_ids, rationale)`; new `conflict_rule_ids()`. Rationale strings are byte-identical to before.
+- `certificates.py` -- `CertificateFinding.rule_id`.
+- Completeness is test-enforced against the live detection constants: every incompatible pair and every certificate kind has exactly one rule, no rule exists for a pair detection doesn't check, and rule IDs always agree with `check_conflict()`.
+
+**Citation honesty -- needs a human:** only NAVSEA8010-4.2, -4.4.3, -4.4.4 are `verified: true` (primary source read 2026-08-08, ADR-023); a test enforces that nothing else claims verification. Every 29 CFR section (1915.7, .12, .14, .77, .159, .503, .504) was added from general knowledge of Part 1915 and is `verified: false`. Before Session 16's recruiter README, someone should read each against eCFR and flip the flag or correct it. WS-OH-001 is deliberately uncited (note says why) rather than guessed.
+
+**Known gaps, not fixed (candidates for Session 11):**
+- Fire-watch findings still return `(a, b, rationale)` tuples without a rule ID; the rule exists (`rule_for_fire_watch_capacity()`), but the tuple shape is consumed by `suggest_reschedule()`, so it was left alone. Session 7/8 should attach it.
+- `WorkPackageState.conflicts`/`conflict_rationale` don't store rule IDs; callers must ask `conflict_rule_ids()`. Wiring into state/brief is Session 8.
+- `hazard_rules_v1.json` and `named_rules_v1.json` are two files describing the same pairs; tests keep them in lockstep, but a future merge into one file would be cleaner.
+
+**Next up:** Session 5 -- judgment flags routed to a named Gas Free Engineer. The `contact_role` field here is the hook; Session 5 needs a notional roster mapping roles to notional people.
