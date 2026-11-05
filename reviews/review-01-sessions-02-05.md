@@ -218,4 +218,47 @@ All in commit `7c82768`. Regression tests are `test_recheck_*` in `tests/test_re
 
 ### Reviewer re-check 2
 
-Pending. Codex: please re-check R02, R06, R09, R13, R14 and N01–N05 against `fix-review-01` at the SHA you test, and look for anything these fixes broke.
+Tested **`e80640934e8ac9bc93a563721890d3acb9c0b48f`** on `fix-review-01`. The remote tip still matched that SHA at the end of testing. **Nine confirmed fixed, R02 reopened.** Two further regressions reproduced below. Hold for triage of the remaining false clearance.
+
+| ID | Verdict | Evidence at the tested SHA |
+|---|---|---|
+| R02 | reopened | **High**, `agent_core/projects.py:191–204`. Direct `package_status` now rejects iterators, and shared lists work correctly. However, reuse the same iterator containing B's actual missing-permit finding across project rollups for A and B. A's rollup consumes it while ignoring the finding for B. B's rollup then materializes an empty list. Both overall statuses returned `CLEARED`. The new guard in the nested status call sees an ordinary list and accepts it. Reproduced through the public rollup API. |
+| R06 | confirmed fixed | Two distinct records named X, one hot work and one confined entry in the same tank and time, raise the intended duplicate-ID `ValueError` through both `check_conflict` and `conflict_rule_ids`. A true self-comparison still returns no conflict. |
+| R09 | confirmed fixed | Both five-worker packages on the same watch on successive days are review-required and uncleared. Both appear in the result event. An independent 1,000-case oracle matched every overloaded package across point intervals, touching ends, partial schedules, varying worker counts and multiple overload periods. |
+| R13 | confirmed fixed | Mixed naive and aware matching certificates produce a descriptive `ValueError` before sorting. The regression test passes. N07 below concerns newly rejected certificates outside the required kinds. |
+| R14 | confirmed fixed | The six-microsecond gap now displays distinct bounds ending in `.000002` and `.000008`. The original 20-second regression also passes. |
+| N01 | confirmed fixed | The self-overload appears in the event with its package ID and an empty partner list, and the reasoning node creates a brief. Traced the Godot consumer: it colors the package marker before iterating partners, and the nonempty event avoids its all-clear branch. The native Godot app was not run. N06 below addresses the new brief's content. |
+| N02 | confirmed fixed | A self-overloaded five-worker package receives no reschedule suggestion. The multi-package candidate guard passes, and the original unrelated-overload regression tests remain green. |
+| N03 | confirmed fixed | The repeated-hour 30-minute job receives a 30-minute suggestion ordered by real time. Independently checked 224 shifts across both spring-forward and fall-back, including point jobs, positive and negative shifts and different durations. Every shifted start and end preserved the requested elapsed offset and duration. |
+| N04 | confirmed fixed | The second Los Angeles 01:15–01:45 window is reported as 01:15–01:45 with `-08:00` offsets, and structured bounds retain the work zone. An independent 1,000-case coverage check across the repeated hour matched an oracle operating on UTC instants. |
+| N05 | confirmed fixed | With no due date, an aware work schedule and naive `as_of` roll up successfully. Due-date comparisons still enforce compatible time conventions. |
+
+The remaining R02 path is reproducible with ordinary scheduled packages A and B, B requiring a hot-work permit and neither having other findings.
+
+```text
+check_certificates(B, []) -> iterator containing B's MISSING finding
+                                      |
+                       rollup(project A, same iterator)
+                         materialize -> ignore B -> CLEARED
+                                      |
+                       rollup(project B, same iterator)
+                         materialize exhausted iterator -> []
+                                      |
+                         collection guard accepts list
+                                      |
+                              B -> CLEARED
+```
+
+### Further regressions
+
+**N06 · med · the new self-overload brief invents a partner and proposes ineffective remedies.** Reproduced with the LLM disabled, one five-worker hot-work package and one fire watch. Its brief begins “was flagged for a spatial/temporal conflict with an overlapping work package”. The recommendation suggests rescheduling one package or adding a physical/administrative barrier. There is only one package, and those changes leave five workers on the watch. The actual capacity rationale is also present, so the reviewer receives conflicting explanations. The new selection at `agent_core/reasoning.py:209–218` feeds the self-overload into the existing pair-only fallback at `agent_core/reasoning.py:153–157,170–174`. The N01 regression checks only that a brief exists. The execution gate remains closed in this reproduction.
+
+**N07 · med · unrelated certificate kinds can now abort a valid coverage check.** Reproduced with a naive scheduled job requiring only a hot-work permit and a naive permit covering the full job. Add an aware fall-protection certificate for that same package, although no fall-protection plan is required. The new preflight at `agent_core/certificates.py:103–108` rejects the call for mixed time conventions. The fall-protection certificate would never participate in a coverage comparison, because the kind loop skips it at lines 110–112. Validation should apply to times the required checks actually compare. This is an assessment failure rather than a false clearance.
+
+### Verification and limits
+
+Ran the workflow commands on Python 3.12.14 in the existing isolated review environment: `pip install -e ".[dev,retrieval,reviewer]"` followed by plain `pytest -v`. **355 passed in 1.59 seconds.** All `test_recheck_*` regressions and the earlier tests ran. Ran `python -m eval.run_eval`: **14/14** conflict scenarios match documented expected behavior, **10/14** are domain-correct with the four recorded gaps, **7/7** retrieval scenarios pass, and the deterministic fallback health check passes. The checked-in baseline comparison passed and the baseline file is unchanged.
+
+Also ran `reviews/review-01-recheck-repro.py`. It reports the intended input refusals as ERROR for R02 and R06, as the builder documents. Separate assertions verified their exact exception types and messages. The other eight original probes report NOT REPRODUCED. The additional rollup, brief-content and unused-certificate scenarios above are outside those probes and were actually executed.
+
+All independent probes ran outside tracked source files. This review commits the report and the AGENTS-required PASSDOWN entry.

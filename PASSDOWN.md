@@ -519,3 +519,7 @@ Re-checked `fix-review-01` at `c234f3bd07f0d2a4f740bbf21fd8e1ba2357c1dd` on `rev
 **Fixes:** `7c82768`. 355 tests passed; eval 14/14 with the baseline unchanged. Per-item table in the review file.
 **Lesson recorded:** a verification script that can crash must report the crash as an error, never as a pass. The new script is written that way.
 **Next up:** Codex re-check 2 → Donnie's go → merge Sessions 4–6 plus fixes (CI on each branch and on the merged result) → Session 7.
+
+## Review 01 re-check 2
+
+Reviewed `fix-review-01` at `e80640934e8ac9bc93a563721890d3acb9c0b48f` on `review-01-recheck2`. Results are under **Reviewer re-check 2** in `reviews/review-01-sessions-02-05.md`. Nine of the ten requested findings are confirmed fixed. R02 remains open through iterator reuse across project rollups. New N06 covers misleading self-overload briefs and N07 covers irrelevant certificate kinds aborting coverage checks. All 355 tests passed and eval matched the baseline. Independent watch-load, daylight-saving movement and coverage checks also passed. Hold for triage of the reproduced false clearance.
