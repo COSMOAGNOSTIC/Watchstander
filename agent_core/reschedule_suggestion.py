@@ -125,7 +125,8 @@ def suggest_reschedule(
     `target_id`, is never grounds to reject an otherwise-clean offset.
 
     Returns `None` if: `target_id` isn't in `packages`, the target has no
-    schedule to shift (nothing to search from), or no conflict-free offset
+    schedule to shift (nothing to search from), the target is `locked`
+    (Session 6: its schedule is fixed), or no conflict-free offset
     exists within `max_shift` in either direction. A `None` result is not
     silently treated as "package is now fine" anywhere -- it just means
     this function found no suggestion; the flagged conflict and the HITL
@@ -141,6 +142,9 @@ def suggest_reschedule(
     if target is None:
         raise ValueError(f"no package with id {target_id!r} in packages")
     if target.scheduled_start is None or target.scheduled_end is None:
+        return None
+    if target.locked:
+        # Session 6: a locked schedule is fixed (crews.is_movable); never propose moving it.
         return None
 
     others = [wp for wp in packages if wp.work_package_id != target_id]

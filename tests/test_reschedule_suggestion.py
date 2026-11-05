@@ -269,3 +269,20 @@ def test_shift_never_reintroduces_a_conflict_with_a_third_package():
     assert suggestion.suggested_start >= c.scheduled_end or suggestion.suggested_end <= datetime(
         2026, 9, 1, 10, 0
     )
+
+
+def test_locked_target_is_never_suggested_a_move():
+    """Session 6: a locked package's schedule is fixed. The same pair that gets a
+    suggestion when unlocked (test_suggests_smallest_conflict_free_shift) must get
+    none once the target is locked -- not a different, 'smaller' move."""
+    kw = dict(
+        spatial=SpatialCoordinates(frame_start=40, frame_end=48, compartment_id="FR-44-TANK"),
+        scheduled_start=datetime(2026, 9, 1, 8, 0),
+        scheduled_end=datetime(2026, 9, 1, 12, 0),
+    )
+    confined = make_wp(work_package_id="WP-CONFINED", hazard_categories=[HazardCategory.CONFINED_SPACE], **kw)
+    unlocked = make_wp(work_package_id="WP-HOTWORK", hazard_categories=[HazardCategory.HOT_WORK], **kw)
+    locked = make_wp(work_package_id="WP-HOTWORK", hazard_categories=[HazardCategory.HOT_WORK],
+                     locked=True, lock_reason="notional milestone: fixed by planning", **kw)
+    assert suggest_reschedule([unlocked, confined], "WP-HOTWORK", max_shift=timedelta(days=2)) is not None
+    assert suggest_reschedule([locked, confined], "WP-HOTWORK", max_shift=timedelta(days=2)) is None

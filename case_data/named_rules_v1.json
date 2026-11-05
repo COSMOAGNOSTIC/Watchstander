@@ -233,6 +233,46 @@
       "contact_role": "Gas Free Engineer",
       "escalation_role": "Safety Officer",
       "note": "Judgment flag, not a violation. A package with no compartment and no complete frame range can never be spatially deconflicted, so it is routed to a person instead of being silently treated as unlinked. No citation: this is a data-completeness prompt, not a regulatory requirement."
+    },
+    {
+      "rule_id": "WS-SC-001",
+      "title": "Package assigned to a crew that does not exist",
+      "category": "schedule",
+      "applies_to": [],
+      "citations": [],
+      "contact_role": "Production Planner",
+      "escalation_role": null,
+      "note": "Planning constraint, not a safety regulation; uncited on purpose. An unknown crew_id can't be checked for windows or double-booking, so it is reported rather than skipped."
+    },
+    {
+      "rule_id": "WS-SC-002",
+      "title": "Contractor work outside the contractor's allowed windows",
+      "category": "schedule",
+      "applies_to": [],
+      "citations": [],
+      "contact_role": "Production Planner",
+      "escalation_role": "Ship Superintendent",
+      "note": "Planning constraint, not a safety regulation; uncited on purpose. The whole work window must fall inside the union of the contractor's windows; an unscheduled contractor package cannot be verified and is reported."
+    },
+    {
+      "rule_id": "WS-SC-003",
+      "title": "Work scheduled outside the shift calendar",
+      "category": "schedule",
+      "applies_to": [],
+      "citations": [],
+      "contact_role": "Production Planner",
+      "escalation_role": null,
+      "note": "Planning constraint, not a safety regulation; uncited on purpose. Every part of the work window must fall inside some shift; the uncovered time is reported."
+    },
+    {
+      "rule_id": "WS-SC-004",
+      "title": "One crew booked on overlapping packages",
+      "category": "schedule",
+      "applies_to": [],
+      "citations": [],
+      "contact_role": "Production Planner",
+      "escalation_role": null,
+      "note": "Planning constraint, not a safety regulation; uncited on purpose. Back-to-back packages (one ends when the next starts) are not double-booked."
     }
   ]
 }

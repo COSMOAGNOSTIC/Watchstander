@@ -30,6 +30,7 @@ from typing import Iterable
 from pydantic import BaseModel, model_validator
 
 from agent_core import named_rules
+from agent_core.intervals import uncovered
 from agent_core.state import WorkPackageState
 
 
@@ -80,27 +81,6 @@ def _fmt(t: datetime) -> str:
     return t.strftime("%Y-%m-%d %H:%M")
 
 
-def _uncovered(
-    start: datetime, end: datetime, certs: list[Certificate]
-) -> list[tuple[datetime, datetime]]:
-    """Gaps in [start, end] not covered by any certificate's closed window."""
-    touching = sorted(
-        (max(c.valid_from, start), min(c.valid_until, end))
-        for c in certs
-        if c.valid_until >= start and c.valid_from <= end
-    )
-    if not touching:
-        return [(start, end)]
-    gaps, cursor = [], start
-    for s, e in touching:
-        if s > cursor:
-            gaps.append((cursor, s))
-        cursor = max(cursor, e)
-    if cursor < end:
-        gaps.append((cursor, end))
-    return gaps
-
-
 def check_certificates(
     pkg: WorkPackageState, certificates: Iterable[Certificate]
 ) -> list[CertificateFinding]:
@@ -139,7 +119,7 @@ def check_certificates(
             ))
             continue
 
-        gaps = _uncovered(start, end, matching)
+        gaps = uncovered(start, end, [(c.valid_from, c.valid_until) for c in matching])
         if not gaps:
             continue
         issue = CertificateIssue.NOT_COVERED if matching else CertificateIssue.MISSING

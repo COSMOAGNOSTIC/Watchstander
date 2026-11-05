@@ -40,6 +40,7 @@ class RuleCategory(str, Enum):
     OVERHEAD = "overhead"
     FIRE_WATCH = "fire_watch"
     CERTIFICATE = "certificate"
+    SCHEDULE = "schedule"  # planning constraint (crews, shifts, contractor windows), not regulatory
     JUDGMENT = "judgment"  # not a violation: a call the engine cannot make, routed to a person
 
 

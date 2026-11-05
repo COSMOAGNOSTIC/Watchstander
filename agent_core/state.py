@@ -203,6 +203,18 @@ class WorkPackageState(BaseModel):
         "zero to the tally.",
     )
 
+    crew_id: Optional[str] = Field(
+        default=None,
+        description="Crew assigned to this package (agent_core/crews.py). None means unassigned.",
+    )
+    locked: bool = Field(
+        default=False,
+        description="A locked package's schedule is fixed: no suggester may propose moving it.",
+    )
+    lock_reason: Optional[str] = Field(
+        default=None, description="Required when locked -- why this package cannot move."
+    )
+
     risk_level: RiskLevel = RiskLevel.LOW
     requires_hitl_review: bool = False
 
@@ -280,6 +292,13 @@ class WorkPackageState(BaseModel):
             self.risk_level == RiskLevel.CRITICAL or self.requires_hitl_review
         ):
             self.cleared_for_execution = False
+        return self
+
+    @model_validator(mode="after")
+    def _lock_has_reason(self) -> "WorkPackageState":
+        """A lock with no recorded reason can't be reviewed or challenged later."""
+        if self.locked and not (self.lock_reason and self.lock_reason.strip()):
+            raise ValueError(f"{self.work_package_id}: locked=True requires a lock_reason")
         return self
 
     @model_validator(mode="after")
