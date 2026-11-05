@@ -537,3 +537,28 @@ Reviewed `fix-review-01` at `e80640934e8ac9bc93a563721890d3acb9c0b48f` on `revie
 ## Review 01 re-check 3
 
 Reviewed `fix-review-01` at `38e0616b6df88b8de36cd11b146171a2d4673855` on `review-01-recheck3`. R02, N06 and N07 are confirmed fixed, with no new regression identified in these changes. The new deterministic-template provenance survived the real graph, events, SQLite reload, HTTP queue/detail pages and a rejection. All 364 tests passed and eval matched the baseline. Details and limits are under **Reviewer re-check 3** in `reviews/review-01-sessions-02-05.md`. The review-01 findings are closed across the completed re-checks. Donnie's merge approval and required CI still apply.
+
+## 29. Session Notes — 2026-11-05: Upgrade Session 7 of 16 -- shift-aware fix suggester
+
+**Branch:** `session-07-shift-suggester`, from `main` @ `c3a41ff` (Sessions 1–6 and review-01 merged; CI green on main). Not merged.
+**Status:** Done. 387/387 tests passing (364 → 387, all new in `tests/test_shift_suggester.py`), installed and run as CI does. Eval 14/14, baseline unchanged.
+
+**Pre-build search:** `suggest_reschedule()` moved one package by a whole step either way and knew nothing of shifts, crews, contractor windows, or certificates, though it respected locks and fire-watch overloads. `crews.py` already provided `shift_at`, `next_shift`, and `is_movable`. Nothing moved a crew as a unit or recorded why a candidate was rejected. Nothing called either suggester.
+
+**What was built** (commit `486e099`): `agent_core/shift_suggester.py`, `suggest_crew_shift(packages, target_id, *, crews, calendar, certificates, max_shifts=6)`.
+- The block is every package the target's crew starts in the target's shift. It moves forward as a unit by (later shift start − current shift start), keeping its internal spacing.
+- Each candidate shift is re-checked against conflicts, fire-watch overloads, certificates, schedule rules, and judgment flags, counting only findings that name a moved package.
+- Returns `CrewShiftOutcome`: the suggestion (`applied=False`, `source="deterministic_shift_search"`, and the checks run), every rejected shift with its rule IDs, or a reason. The reasons are: locked package, no crew, unknown crew, no schedule, outside the calendar, no later shift, or nothing passed.
+- Pure. `suggest_reschedule()` is unchanged.
+- Mutation-checked: disabling any one check, or the lock refusal, fails a test.
+
+**Decision recorded (Donnie, 2026-11-05):** Session 8 makes `SafetyBrief.recommended_action` always deterministic. The LLM may only rephrase the summary (AGENTS.md rule 7).
+
+**Known gaps (for Session 11's review):**
+- The block is "starts in the shift"; a package starting late in one shift and running into the next moves with its starting shift.
+- Only the target's crew moves. If another crew's package is the real cause, no alternative is offered for moving that one instead.
+- No preference beyond "earliest passing later shift" (no weekend or overtime cost).
+- Certificates never move, so a block needing a permit valid only in its current shift never gets a suggestion. Correct per ADR-031, but the outcome could say "re-issue permit" more helpfully.
+- Not wired into the brief or reviewer yet; that's Session 8.
+
+**Next up:** Session 8 -- wire suggestions into the brief and reviewer, with an Apply that re-checks, and a deterministic `recommended_action`.
