@@ -293,4 +293,34 @@ All in commit `e5076c4`. Regression tests are `test_recheck2_*` in `tests/test_r
 
 ### Reviewer re-check 3
 
-Pending. Codex: please re-check R02, N06 and N07 against `fix-review-01` at the SHA you test, look for anything these fixes broke, and check the new provenance source.
+Tested **`38e0616b6df88b8de36cd11b146171a2d4673855`**, the tip of `fix-review-01`, and confirmed the remote still referenced that SHA after testing. **R02, N06 and N07 are confirmed fixed. No new regression was identified in these changes.** The previously outstanding review-01 findings are closed by this re-check together with the earlier confirmed fixes. Merge remains subject to Donnie's approval and the repository's CI requirements.
+
+| ID | Verdict | Evidence at the tested SHA |
+|---|---|---|
+| R02 | confirmed fixed | Both public findings consumers now reject one-shot iterators before reading them. Independently exercised all six combinations of `package_status` / `rollup_project` and certificate / judgment / schedule inputs. Each raised the intended collection `TypeError`, and the first iterator item remained available afterward. The regression test reusing a real missing-permit findings list across projects A and B passes with A cleared and B reporting findings. |
+| N06 | confirmed fixed | The single-package five-worker overload now receives a capacity explanation with load-reducing remedies. The brief identifies the actual limit and requires the load to be within it at every moment. It invents no overlapping job and proposes neither moving the whole package nor adding a barrier. Independently ran the real graph with the LLM call patched to raise if invoked: the graph reached human review successfully with `source="deterministic-template"`. |
+| N07 | confirmed fixed | A covering naive hot-work permit passes despite an aware, unrequired fall-protection certificate. Independently checked all 25 required-kind / extra-kind combinations. Unrequired kinds do not abort assessment or satisfy a missing required permit. An extra certificate of the required kind with incompatible times still raises the descriptive timezone error. |
+
+The checked status-input path now behaves as follows.
+
+```text
+package_status OR rollup_project
+                 |
+       check all three findings inputs
+          /                    \
+  one-shot iterator         reusable collection
+          |                    |
+  reject before reading     evaluate actual findings
+                               |
+                   B's missing permit -> HAS_FINDINGS
+```
+
+**Provenance checked through the normal consumer path.** Created a real single-package overload using the reviewer service and graph, with a temporary SQLite database outside the repository. Verified the exact label `[SOURCE: DETERMINISTIC TEMPLATE - LLM NOT USED]` in the executive summary, `reasoning_result` event, `hitl_awaiting` event and pending review. Closed and reopened the service against the same database. The source and label survived the checkpoint reload and a separate SafetyBrief JSON round trip.
+
+Using FastAPI's HTTP test client against that service, both the queue and detail page displayed the template label. Neither displayed an offline or LLM-synthesis label for this brief. The template gets the ordinary provenance styling, while the LLM class remains reserved for synthesis. Submitted a rejection through the HTTP endpoint and confirmed the package left the pending queue and remained uncleared. Existing pair-based fallback and a stubbed successful LLM response retained their respective sources and tags.
+
+The Godot consumer was traced in source: it displays the event's provenance string directly for brief-ready and awaiting-review messages. Native Godot was not launched. No live model request was made. The separate pre-existing LLM recommendation issue disclosed by the builder remains outside these fixes.
+
+**Verification.** Ran `pip install -e ".[dev,retrieval,reviewer]"` followed by plain `pytest -v` on Python 3.12.14 in the existing isolated review environment. **364 passed in 1.54 seconds.** Ran `python -m eval.run_eval`: **14/14** documented conflict expectations match, **10/14** are domain-correct with the four existing known gaps, **7/7** retrieval cases pass, and the deterministic fallback health check passes. The baseline comparison passed.
+
+Also ran `reviews/review-01-recheck2-repro.py`. N06 and N07 report NOT REPRODUCED. Its R02 probe reports the intended input refusal as ERROR, as documented by the builder. The independent six-path assertions above establish the refusal and lack of iterator consumption. All additional probes were outside tracked source files. This commit contains this report update and the AGENTS-required PASSDOWN entry.

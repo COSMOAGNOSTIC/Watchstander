@@ -533,3 +533,7 @@ Reviewed `fix-review-01` at `e80640934e8ac9bc93a563721890d3acb9c0b48f` on `revie
 **Found by the builder during verification:** the first N06 fix mislabelled its brief "LLM OFFLINE"; it now uses the new source `deterministic-template`.
 **Raised for Session 8 (rule 7):** with the LLM on, `recommended_action` comes from the model. Proposal: always deterministic; the LLM may only rephrase the summary.
 **Next up:** Codex re-check 3 → Donnie's go → merge → Session 7.
+
+## Review 01 re-check 3
+
+Reviewed `fix-review-01` at `38e0616b6df88b8de36cd11b146171a2d4673855` on `review-01-recheck3`. R02, N06 and N07 are confirmed fixed, with no new regression identified in these changes. The new deterministic-template provenance survived the real graph, events, SQLite reload, HTTP queue/detail pages and a rejection. All 364 tests passed and eval matched the baseline. Details and limits are under **Reviewer re-check 3** in `reviews/review-01-sessions-02-05.md`. The review-01 findings are closed across the completed re-checks. Donnie's merge approval and required CI still apply.
