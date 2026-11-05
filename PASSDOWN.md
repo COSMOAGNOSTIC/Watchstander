@@ -493,3 +493,16 @@ Both reviewers independently confirmed the same reassuring floor: **nothing foun
 **Housekeeping:** `integrate-01-03` is still on GitHub. This session's proxy refuses branch deletion, so Donnie needs to delete it in the GitHub UI.
 
 **Next up:** Donnie answers D1/D2 → fix all 17 on this branch, test-first → Codex re-checks the fixes → merge chain Sessions 4–6 plus fixes → Session 7.
+
+## 26. Session Notes — 2026-11-05: review-01 fixes (R01–R17)
+
+**Branch:** `fix-review-01`. Not merged; waiting on Codex's re-check.
+**Status:** All 17 fixed in `08fe4a5`. Full suite 341 passed, installed and run as CI does. `eval/baseline.json` unchanged (D2 needed no approval).
+
+**Decisions:** D1 is the four-input AND gate. `package_status` and `rollup_project` require certificate, judgment, and schedule findings as arguments, refuse `None`, and add `HAS_FINDINGS`. D2: no baseline movement.
+
+**What changed:** new `agent_core/validation.py` (`NonBlankStr`; `instant()` for real-time comparison; `require_comparable()` refusing mixed naive/aware times; `fmt_time()` with seconds). It is applied across state, certificates, intervals, crews, deconfliction, and projects. Unknown permit and spatial keys are refused. Duplicate IDs are refused in conflict and judgment batches. New judgment rules: WS-JF-004 (no common coordinate) and WS-JF-005 (gas-free work missing from the hazard list). Gas-free signals now read the hazard list, the spatial flag, and permits. `fire_watch_overloads()` catches single-package overloads, and `deconfliction_node` routes them to review. All applicable rule IDs are returned. Flag IDs are collision-proof. Judgment catalogue and triggers must match exactly. The R15/R16 tests were rewritten and mutation-checked. Per-finding fix and test table is in `reviews/review-01-sessions-02-05.md`.
+
+**Known gaps opened by the fixes (for the re-check):** aware-time gap bounds now come back in UTC; the `deconfliction_result` event omits partner-less self-overloads; `extra="forbid"` affects every caller's intake.
+
+**Next up:** Codex re-checks `fix-review-01` → Donnie's go → merge Sessions 4–6 plus fixes to `main` (CI on each branch and on the merged result) → Session 7.

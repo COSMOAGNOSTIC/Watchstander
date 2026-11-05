@@ -75,6 +75,41 @@ None.
 - **D1 (R02), how status should account for findings.** Builder's proposal: `package_status()`/`rollup_project()` take the package's certificate, judgment, and schedule findings as a *required* argument and add a `HAS_FINDINGS` status ranked between `PENDING_REVIEW` and `UNSCHEDULED`, so a caller can't get `CLEARED` without having run the checks. The alternative, renaming `CLEARED` to something narrower, still lets a caller skip the checks.
 - **D2 (R09), detection change.** Reporting single-package fire-watch overloads changes inherited detection. If `eval/baseline.json` moves, the diff will be shown for approval, not regenerated silently.
 
+## Decisions taken
+
+- **D1:** Donnie chose the four-input AND gate (proposal above).
+- **D2:** Donnie approved showing any baseline change before regenerating it. None was needed: `eval/baseline.json` is unchanged and `tests/test_eval_harness.py` passes.
+
+## Fixes
+
+All in commit `08fe4a5` on `fix-review-01`. Regression tests are in `tests/test_review01_fixes.py`, named `test_rNN_*`. They were written first: 33 of 36 failed before the fix. The 3 that passed are deliberate over-flagging guards (`test_r07_comparable_pair_...`, `test_r08_consistent_labels_...`, `test_r09_at_the_limit_...`). After the fix, `reviews/review-01-repro.py` reproduces none of the 17.
+
+| ID | Fix | Regression test(s) |
+|---|---|---|
+| R01 | Review requirement read directly in `package_status` | `test_r01_review_required_after_construction_is_pending_not_cleared` |
+| R02 | Status takes certificate, judgment, and schedule findings as required arguments; `None` refused; new `HAS_FINDINGS` | `test_r02_*` (6 tests) |
+| R03 | `validation.instant()` (aware → UTC) used for every window, schedule, overlap, sweep, due-date, and shift comparison | `test_r03_*` (3 tests) |
+| R04 | `extra="forbid"` on `SafetyPermitsRequired` and `SpatialCoordinates` | `test_r04_*` (2 tests) |
+| R05 | `NonBlankStr` on package, certificate (both IDs), crew, shift, and project IDs | `test_r05_blank_ids_rejected_everywhere` |
+| R06 | `find_all_conflicts` and `judgment_flags` refuse duplicate IDs | `test_r06_duplicate_ids_raise_in_conflict_and_judgment_batches` |
+| R07 | Whitespace compartment becomes `None`; new `WS-JF-004` (no common coordinate) | `test_r07_*` (3 tests) |
+| R08 | Gas-free signals from hazard list, spatial flag, and permits; new `WS-JF-005` (missing from hazard list) | `test_r08_*` (4 tests) |
+| R09 | `fire_watch_overloads()` reports single-package overloads; `deconfliction_node` routes any package with a rationale to review | `test_r09_*` (2 tests) |
+| R10 | `conflict_rule_ids` returns every applicable rule ID; rationale text unchanged | `test_r10_hazard_pair_and_overhead_both_reported` |
+| R11 | `NonBlankStr` on roster `person_id`, `display_name`, `role` | `test_r11_blank_roster_fields_rejected` |
+| R12 | Flag ID JSON-encodes the package ID list | `test_r12_distinct_pairs_get_distinct_flag_ids` |
+| R13 | `require_comparable()` raises a ValueError naming the mixed fields | `test_r13_*` (2 tests) |
+| R14 | `validation.fmt_time()` shows seconds when non-zero | `test_r14_sub_minute_gap_is_readable` |
+| R15 | Agreement test rewritten with independent expected rule IDs per case; fails under the reviewer's always-`None` mutation | `test_rule_ids_and_rationale_match_independent_expectations` |
+| R16 | Contacts checked against an explicit role set and against roster names; fails under the reviewer's mutation | `test_contacts_are_roles_not_named_people`, `test_no_contact_role_is_a_roster_name` |
+| R17 | `judgment_flags` refuses to run unless the catalogue's judgment IDs equal `IMPLEMENTED_TRIGGERS` | `test_r17_*` (2 tests) |
+
+**Behaviour changes worth the reviewer's attention:**
+- For timezone-aware input, gap bounds in `uncovered` are now returned in UTC, not the input zone.
+- `deconfliction_node` now routes a package to review when it has a `conflict_rationale` even with no conflict partner. The `deconfliction_result` event still lists only packages with partners, so the visualizer doesn't show a self-overload yet.
+- Unknown keys under `spatial` or `permits_required` now fail validation for every caller, including reviewer intake.
+- The repro script's R17 probe now uses the unused ID `WS-JF-099`, because `WS-JF-004` became a real rule for R07.
+
 ## Reviewer re-check
 
-Pending, after fixes land on `fix-review-01`.
+Pending. Codex: please re-check each fix against `fix-review-01` at the SHA you test, and record per finding: confirmed fixed, or reopened with a scenario. Please also look for anything the fixes broke (AOSE.md, Round 3).
