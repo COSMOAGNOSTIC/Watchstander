@@ -278,3 +278,19 @@ All independent probes ran outside tracked source files. This review commits the
 **Root cause of R02 reopening twice (builder's own lesson).** Each fix guarded the exact call site the reviewer named rather than every public entry point taking the same input. This fix puts the guard in one place used by both, with a test that runs every findings-taking entry point against a one-shot iterator.
 
 **Separate item for Donnie, not part of review-01:** with the LLM available, `generate_safety_brief` takes `recommended_action` from the model. AGENTS.md rule 7 says the LLM explains but never suggests. This predates Sessions 2–6. Proposed for Session 8, where the brief is rewired: `recommended_action` always comes from deterministic logic, and the LLM may only rephrase the summary.
+
+### Re-check 2 fixes
+
+All in commit `e5076c4`. Regression tests are `test_recheck2_*` in `tests/test_review01_fixes.py`. Written first: 5 failed; 3 guards passed (the already-fixed `package_status` entry point, a shared list across rollups, refusal of mixed times on a required kind). Full suite 364 passed; eval baseline unchanged. `reviews/review-01-recheck2-repro.py` after the fix: N06 and N07 NOT REPRODUCED; R02 shows ERROR because the rollup now refuses the iterator with the intended `TypeError`.
+
+| ID | Fix | Regression test |
+|---|---|---|
+| R02 | `rollup_project` calls the same `_require_collections` guard as `package_status` before materializing | `test_recheck2_r02_every_findings_entry_point_refuses_one_shot_iterators` (parametrized over every findings-taking entry point), `test_recheck2_r02_shared_list_across_rollups_is_correct` |
+| N06 | `_partnerless_fallback` for packages with no partner: capacity explanation and load-reducing remedies; never calls the LLM | `test_recheck2_n06_*` (4 tests) |
+| N07 | Comparability preflight covers only certificates of required kinds | `test_recheck2_n07_*` |
+
+**New behaviour for the reviewer to check:** `SafetyBrief.source` has a third value, `deterministic-template`, tagged `[SOURCE: DETERMINISTIC TEMPLATE - LLM NOT USED]`. The builder found this while verifying N06: the first fix labelled the partner-less brief "LLM OFFLINE" even when the model was available.
+
+### Reviewer re-check 3
+
+Pending. Codex: please re-check R02, N06 and N07 against `fix-review-01` at the SHA you test, look for anything these fixes broke, and check the new provenance source.

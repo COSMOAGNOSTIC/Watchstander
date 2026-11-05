@@ -523,3 +523,13 @@ Re-checked `fix-review-01` at `c234f3bd07f0d2a4f740bbf21fd8e1ba2357c1dd` on `rev
 ## Review 01 re-check 2
 
 Reviewed `fix-review-01` at `e80640934e8ac9bc93a563721890d3acb9c0b48f` on `review-01-recheck2`. Results are under **Reviewer re-check 2** in `reviews/review-01-sessions-02-05.md`. Nine of the ten requested findings are confirmed fixed. R02 remains open through iterator reuse across project rollups. New N06 covers misleading self-overload briefs and N07 covers irrelevant certificate kinds aborting coverage checks. All 355 tests passed and eval matched the baseline. Independent watch-load, daylight-saving movement and coverage checks also passed. Hold for triage of the reproduced false clearance.
+
+## 28. Session Notes — 2026-11-05: review-01 re-check 2 triage and fixes
+
+**Branch:** `fix-review-01`. Not merged; waiting on Codex re-check 3.
+**Re-check 2 (Codex at `e806409`):** 9 confirmed fixed; R02 reopened via the rollup path; new N06 (self-overload brief invented a partner and suggested pair remedies) and N07 (an unrequired certificate kind aborted coverage).
+**Builder:** 3/3 independently reproduced (`reviews/review-01-recheck2-repro.py`); verdicts committed before fixing (`5ee5bd2`); fixed in `e5076c4`; 364 tests passed; eval baseline unchanged.
+**Lesson:** R02 reopened twice because each fix guarded only the call site the reviewer named. The guard is now shared, and a parametrized test runs every findings-taking entry point.
+**Found by the builder during verification:** the first N06 fix mislabelled its brief "LLM OFFLINE"; it now uses the new source `deterministic-template`.
+**Raised for Session 8 (rule 7):** with the LLM on, `recommended_action` comes from the model. Proposal: always deterministic; the LLM may only rephrase the summary.
+**Next up:** Codex re-check 3 → Donnie's go → merge → Session 7.
