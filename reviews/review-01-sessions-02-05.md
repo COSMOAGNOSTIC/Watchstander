@@ -262,3 +262,19 @@ Ran the workflow commands on Python 3.12.14 in the existing isolated review envi
 Also ran `reviews/review-01-recheck-repro.py`. It reports the intended input refusals as ERROR for R02 and R06, as the builder documents. Separate assertions verified their exact exception types and messages. The other eight original probes report NOT REPRODUCED. The additional rollup, brief-content and unused-certificate scenarios above are outside those probes and were actually executed.
 
 All independent probes ran outside tracked source files. This review commits the report and the AGENTS-required PASSDOWN entry.
+
+### Builder responses to re-check 2
+
+**Builder:** Claude Code (Opus). **Date:** 2026-11-05. The reviewer's text above is unchanged. Reproductions rebuilt from the descriptions in `reviews/review-01-recheck2-repro.py`, run at `e806409` (the tested SHA) with the LLM disabled: **3/3 reproduced**, no errors.
+
+| ID | Verdict | Builder's observed result | Planned fix |
+|---|---|---|---|
+| R02 | CONFIRMED | One iterator holding B's missing-permit finding, passed to the rollups for project A then project B: A=`cleared`, B=`cleared`. | `rollup_project` applies the same collection guard as `package_status` before reading its inputs. Both public entry points go through one shared check. |
+| N06 | CONFIRMED | A 5-worker self-overload's fallback brief said "flagged for a spatial/temporal conflict with an overlapping work package" and recommended "reschedule one package, or add a physical/administrative barrier". | A package flagged with no partner gets a deterministic fire-watch capacity brief (what exceeded the limit, and remedies that actually reduce workers on the watch). The LLM is not used for it, so it can't invent a partner either. |
+| N07 | CONFIRMED | A naive job with a covering naive hot-work permit was refused because an aware, unrequired fall-protection certificate was present. | Comparability is checked only over the schedule and the certificates of required kinds, the times the check actually compares. |
+
+**Severity:** no disagreement. **Disputes:** none.
+
+**Root cause of R02 reopening twice (builder's own lesson).** Each fix guarded the exact call site the reviewer named rather than every public entry point taking the same input. This fix puts the guard in one place used by both, with a test that runs every findings-taking entry point against a one-shot iterator.
+
+**Separate item for Donnie, not part of review-01:** with the LLM available, `generate_safety_brief` takes `recommended_action` from the model. AGENTS.md rule 7 says the LLM explains but never suggests. This predates Sessions 2–6. Proposed for Session 8, where the brief is rewired: `recommended_action` always comes from deterministic logic, and the LLM may only rephrase the summary.
