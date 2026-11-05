@@ -101,6 +101,11 @@ def check_certificates(
         seen.add(c.certificate_id)
 
     start, end = pkg.scheduled_start, pkg.scheduled_end
+    mine = [c for c in certs if c.work_package_id == pkg.work_package_id]
+    # Re-check R13: check every time this call could compare *before* any sort.
+    require_comparable([("scheduled_start", start), ("scheduled_end", end)]
+                       + [(f"{c.certificate_id}.valid_from", c.valid_from) for c in mine]
+                       + [(f"{c.certificate_id}.valid_until", c.valid_until) for c in mine])
     findings: list[CertificateFinding] = []
     for kind in CertificateKind:
         if not getattr(pkg.permits_required, kind.value):

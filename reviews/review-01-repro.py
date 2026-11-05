@@ -1,5 +1,7 @@
-"""Builder's independent reproduction of review-01 findings at 12d3873.
-Each probe prints REPRODUCED or NOT REPRODUCED with what was observed."""
+"""Builder's independent reproduction of review-01 findings.
+Originally run at 12d3873 with the old `package_status(p)` signature. Updated after the
+re-check so it runs against the current API (findings are required arguments); at
+12d3873 use the git history of this file. Each probe prints REPRODUCED or NOT REPRODUCED."""
 import importlib
 import sys
 from datetime import datetime as dt, timezone
@@ -13,6 +15,7 @@ from agent_core.projects import PackageStatus, package_status
 from agent_core.state import HazardCategory as H, SafetyPermitsRequired, SpatialCoordinates as SC, WorkPackageState as W
 
 T0, T1 = dt(2027, 1, 12, 7), dt(2027, 1, 12, 15)
+NOF = dict(certificate_findings=[], judgment_flags=[], schedule_findings=[])
 results = {}
 
 
@@ -28,11 +31,12 @@ def wp(pid="WP-1", hz=(), sp=None, start=T0, end=T1, **kw):
 
 # R01
 p = wp(); p.requires_hitl_review = True
-rec("R01", package_status(p) == PackageStatus.CLEARED, f"status after setting requires_hitl_review on live model = {package_status(p).value}")
+rec("R01", package_status(p, **NOF) == PackageStatus.CLEARED, f"status after setting requires_hitl_review on live model = {package_status(p, **NOF).value}")
 
 # R02
 p = wp(hz=[H.HOT_WORK], permits_required=SafetyPermitsRequired(hot_work_permit=True))
-c, j, s = check_certificates(p, []), judgment_flags([p]), package_status(p)
+c, j = check_certificates(p, []), judgment_flags([p])
+s = package_status(p, certificate_findings=c, judgment_flags=j, schedule_findings=[])
 rec("R02", s == PackageStatus.CLEARED and c and j, f"status={s.value}, cert={[f.issue.value for f in c]}, judgment={[f.rule_id for f in j]}")
 
 # R03
@@ -80,7 +84,7 @@ p = wp(hz=[H.HOT_WORK], fire_watch_id="FW-1", hot_worker_count=5)
 out = find_all_conflicts([p])
 peak, _ = deconfliction._fire_watch_peak_concurrency([p])
 rec("R09", peak > deconfliction.MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH and out[0].conflicts == [] and not out[0].conflict_rationale,
-    f"peak={peak} > limit={deconfliction.MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH}; conflicts={out[0].conflicts}, status={package_status(out[0]).value}")
+    f"peak={peak} > limit={deconfliction.MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH}; conflicts={out[0].conflicts}, status={package_status(out[0], **NOF).value}")
 
 # R10
 a = wp("A", [H.HOT_WORK], SC(frame_start=10, frame_end=12, is_aloft=True))
@@ -124,7 +128,7 @@ tnr = importlib.import_module("test_named_rules")
 orig = deconfliction._detect_conflict
 deconfliction._detect_conflict = lambda a, b: None
 try:
-    tnr.test_rule_ids_agree_with_check_conflict_on_every_case(); passed = True
+    tnr.test_rule_ids_and_rationale_match_independent_expectations(); passed = True
 except AssertionError:
     passed = False
 deconfliction._detect_conflict = orig

@@ -54,5 +54,19 @@ def require_comparable(named: Iterable[tuple[str, Optional[datetime]]]) -> None:
 
 
 def fmt_time(t: datetime) -> str:
-    """Minutes normally; seconds when non-zero, so a 20-second gap never reads '07:00 to 07:00'."""
-    return t.strftime("%Y-%m-%d %H:%M:%S" if t.second or t.microsecond else "%Y-%m-%d %H:%M")
+    """
+    Human-facing time. Minutes normally; seconds, then microseconds, when
+    non-zero (review-01 R14: a short gap must never read '07:00 to 07:00').
+    Aware times carry their UTC offset (re-check N04), so a reader can't
+    mistake 09:15 UTC for 09:15 local.
+    """
+    if t.microsecond:
+        s = t.strftime("%Y-%m-%d %H:%M:%S.%f")
+    elif t.second:
+        s = t.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        s = t.strftime("%Y-%m-%d %H:%M")
+    if t.tzinfo is not None:
+        z = t.strftime("%z")  # e.g. -0800
+        s += f" {z[:3]}:{z[3:]}"
+    return s

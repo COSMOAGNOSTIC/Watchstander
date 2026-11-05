@@ -206,7 +206,9 @@ def reasoning_node(state: dict) -> dict:
     flagged -- clean packages pass through untouched.
     """
     packages = state["work_packages"]
-    flagged = [wp for wp in packages if wp.conflicts]
+    # Re-check N01: a package flagged with no partner (fire-watch self-overload)
+    # still needs a brief for the reviewer.
+    flagged = [wp for wp in packages if wp.conflicts or wp.conflict_rationale]
     if flagged:
         events.emit(
             "reasoning_start",

@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from collections.abc import Collection
 from typing import Iterable, Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -113,6 +114,17 @@ def _require_inputs(**inputs) -> None:
         )
 
 
+def _require_collections(**inputs) -> None:
+    """Re-check R02: a one-shot iterator is exhausted by the first package that
+    reads it, and every later package would read it as "no findings"."""
+    bad = sorted(n for n, v in inputs.items() if not isinstance(v, Collection))
+    if bad:
+        raise TypeError(
+            f"{bad} must be a collection (list, tuple, set), not a one-shot iterator: "
+            "it is read once per package."
+        )
+
+
 def package_status(
     pkg: WorkPackageState,
     *,
@@ -132,6 +144,8 @@ def package_status(
     """
     _require_inputs(certificate_findings=certificate_findings,
                     judgment_flags=judgment_flags, schedule_findings=schedule_findings)
+    _require_collections(certificate_findings=certificate_findings,
+                         judgment_flags=judgment_flags, schedule_findings=schedule_findings)
     pid = pkg.work_package_id
     if pkg.hitl_disposition is not None and pkg.hitl_disposition != HitlDisposition.APPROVED:
         return PackageStatus.BLOCKED
@@ -179,8 +193,10 @@ def rollup_project(
     certificate_findings, judgment_flags, schedule_findings = (
         list(certificate_findings), list(judgment_flags), list(schedule_findings))
     members = [by_id[i] for i in project.work_package_ids]
-    require_comparable([("as_of", as_of), ("due_date", project.due_date)]
-                       + [(f"{p.work_package_id}.scheduled_end", p.scheduled_end) for p in members])
+    if project.due_date is not None:
+        # Re-check N05: only the times actually compared, and only when there's a due date.
+        require_comparable([("as_of", as_of), ("due_date", project.due_date)]
+                           + [(f"{p.work_package_id}.scheduled_end", p.scheduled_end) for p in members])
     ids_by_status: dict[PackageStatus, list[str]] = {s: [] for s in _SEVERITY}
     for p in members:
         ids_by_status[package_status(

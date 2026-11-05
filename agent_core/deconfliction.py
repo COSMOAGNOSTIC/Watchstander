@@ -129,7 +129,14 @@ def _detect_conflict(
     this module takes.
     """
     if a.work_package_id == b.work_package_id:
-        return None
+        if a is b:
+            return None  # a true self-comparison
+        # Re-check R06: two distinct records sharing an ID are corrupt input,
+        # never "no conflict".
+        raise ValueError(
+            f"two distinct records share work_package_id {a.work_package_id!r}; "
+            "IDs must be unique"
+        )
 
     if not _schedules_overlap(a, b):
         return None
@@ -358,38 +365,75 @@ def find_all_conflicts(packages: list[WorkPackageState]) -> list[WorkPackageStat
     for a, b, rationale in _fire_watch_capacity_conflicts(packages):
         _record_conflict(a, b.work_package_id, rationale)
         _record_conflict(b, a.work_package_id, rationale)
-    for watch_id, peak, peak_active in fire_watch_overloads(packages):
-        rationale = (
-            f"Fire watch '{watch_id}' peaks at {peak} concurrent hot workers, exceeding "
-            f"the limit of {MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH} "
-            f"({named_rules.rule_for_fire_watch_capacity().rule_id}, NAVSEA8010-4.4.3)."
-        )
-        for wp in peak_active:
+    for watch_id, peak, overloaded in fire_watch_overloads(packages):
+        for wp in overloaded:
             if not wp.conflict_rationale or f"Fire watch '{watch_id}'" not in wp.conflict_rationale:
-                _record_rationale(wp, rationale)
+                _record_rationale(wp, (
+                    f"Fire watch '{watch_id}' reaches {_package_loads([*_watch_group(packages, watch_id)])[id(wp)]} "
+                    f"concurrent hot workers while {wp.work_package_id} is active, exceeding the limit "
+                    f"of {MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH} "
+                    f"({named_rules.rule_for_fire_watch_capacity().rule_id}, NAVSEA8010-4.4.3)."
+                ))
     return packages
 
+
+def _watch_group(packages: list[WorkPackageState], watch_id: str) -> list[WorkPackageState]:
+    return [wp for wp in packages
+            if wp.fire_watch_id == watch_id and HazardCategory.HOT_WORK in wp.hazard_categories]
+
+
+def _package_loads(group: list[WorkPackageState]) -> dict[int, int]:
+    """
+    Re-check R09: for each package (keyed by id()), the highest number of
+    concurrent hot workers on its fire watch at any instant while that
+    package is active. Closed intervals, matching `_schedules_overlap`.
+    Unscheduled packages count as active everywhere (the same over-flagging
+    posture as `_fire_watch_peak_concurrency`), so an unscheduled package's
+    load is the watch's overall peak.
+    """
+    scheduled = [w for w in group if w.scheduled_start is not None and w.scheduled_end is not None]
+    sched_ids = {id(w) for w in scheduled}
+    baseline = sum(w.hot_worker_count for w in group if id(w) not in sched_ids)
+
+    def load_at(t) -> int:
+        return baseline + sum(w.hot_worker_count for w in scheduled
+                              if instant(w.scheduled_start) <= t <= instant(w.scheduled_end))
+
+    loads: dict[int, int] = {}
+    for w in scheduled:
+        s, e = instant(w.scheduled_start), instant(w.scheduled_end)
+        # The load only rises at a start, so the max inside [s, e] is at s or at
+        # some other package's start that falls inside [s, e].
+        points = [s] + [instant(o.scheduled_start) for o in scheduled
+                        if s <= instant(o.scheduled_start) <= e]
+        loads[id(w)] = max(load_at(t) for t in points)
+    overall = max(loads.values(), default=baseline)
+    for w in group:
+        if id(w) not in sched_ids:
+            loads[id(w)] = max(overall, baseline)
+    return loads
 
 def fire_watch_overloads(
     packages: list[WorkPackageState],
 ) -> list[tuple[str, int, list[WorkPackageState]]]:
     """
-    review-01 R09: every fire watch whose peak concurrent hot-worker count
-    exceeds the limit, with the packages active at that peak. Unlike
-    `_fire_watch_capacity_conflicts()`, which reports *pairs* of packages,
-    this also reports a single package that overloads its own fire watch
-    (five welders in one package) -- a pair-only check never sees it.
-    Sorted by watch ID.
+    review-01 R09 and re-check: every fire watch that ever exceeds the limit,
+    with *every* package whose own active interval sees the excess (not only
+    the packages at the single global peak, which missed a second overload
+    on another day). Unlike `_fire_watch_capacity_conflicts()`, which
+    reports pairs, this also reports a single package that overloads its
+    own fire watch. Sorted by watch ID, then package ID.
     """
-    by_watch: dict[str, list[WorkPackageState]] = defaultdict(list)
-    for wp in packages:
-        if wp.fire_watch_id and HazardCategory.HOT_WORK in wp.hazard_categories:
-            by_watch[wp.fire_watch_id].append(wp)
+    watch_ids = sorted({wp.fire_watch_id for wp in packages
+                        if wp.fire_watch_id and HazardCategory.HOT_WORK in wp.hazard_categories})
     out = []
-    for watch_id in sorted(by_watch):
-        peak, peak_active = _fire_watch_peak_concurrency(by_watch[watch_id])
-        if peak > MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH:
-            out.append((watch_id, peak, sorted(peak_active, key=lambda w: w.work_package_id)))
+    for watch_id in watch_ids:
+        group = _watch_group(packages, watch_id)
+        loads = _package_loads(group)
+        over = sorted((w for w in group if loads[id(w)] > MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH),
+                      key=lambda w: w.work_package_id)
+        if over:
+            out.append((watch_id, max(loads.values()), over))
     return out
 
 
@@ -461,7 +505,7 @@ def deconfliction_node(state: dict) -> dict:
                 "hazard_categories": list(wp.hazard_categories),
             }
             for wp in packages
-            if wp.conflicts
+            if _flagged(wp)  # re-check N01: a partner-less overload must not read "all clear"
         ],
     )
 

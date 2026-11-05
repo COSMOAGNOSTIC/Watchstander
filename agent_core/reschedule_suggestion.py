@@ -41,12 +41,16 @@ that today's single-package-shift problem doesn't need it yet.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Iterator, Optional
 
 from pydantic import BaseModel, Field
 
-from agent_core.deconfliction import _fire_watch_capacity_conflicts, check_conflict
+from agent_core.deconfliction import (
+    _fire_watch_capacity_conflicts,
+    check_conflict,
+    fire_watch_overloads,
+)
 from agent_core.state import WorkPackageState
 
 
@@ -82,12 +86,17 @@ def _shifted_copy(wp: WorkPackageState, shift: timedelta) -> WorkPackageState:
     trial candidate as the real, current state of the package.
     """
     assert wp.scheduled_start is not None and wp.scheduled_end is not None
-    return wp.model_copy(
-        update={
-            "scheduled_start": wp.scheduled_start + shift,
-            "scheduled_end": wp.scheduled_end + shift,
-        }
-    )
+
+    def moved(t: datetime) -> datetime:
+        # Re-check N03: shift in real time, then return to the original zone.
+        # Wall-clock addition across a daylight-saving change can invert a window.
+        if t.tzinfo is None:
+            return t + shift
+        return (t.astimezone(timezone.utc) + shift).astimezone(t.tzinfo)
+
+    data = wp.model_dump()
+    data.update(scheduled_start=moved(wp.scheduled_start), scheduled_end=moved(wp.scheduled_end))
+    return WorkPackageState.model_validate(data)  # validated, so an inverted window can't pass
 
 
 def _candidate_offsets(step: timedelta, max_shift: timedelta) -> Iterator[timedelta]:
@@ -175,6 +184,13 @@ def suggest_reschedule(
         if any(
             candidate.work_package_id in (a.work_package_id, b.work_package_id)
             for a, b, _ in violations
+        ):
+            continue
+        # Re-check N02: the pair check above can't see a single package that
+        # overloads its own fire watch, and moving it never fixes that.
+        if any(
+            candidate.work_package_id in [w.work_package_id for w in overloaded]
+            for _, _, overloaded in fire_watch_overloads(trial_group)
         ):
             continue
 

@@ -296,3 +296,136 @@ def test_r17_untriggered_catalogue_rule_refuses_to_run(monkeypatch):
     monkeypatch.setattr(named_rules, "RULES", named_rules.RULES + [extra])
     with pytest.raises(LookupError, match="WS-JF-099"):
         judgment_flags([wp()])
+
+
+# ===== review-01 re-check (reopened R02, R06, R09, R13, R14; new N01-N05) =====
+
+from datetime import timedelta  # noqa: E402
+
+from agent_core import events  # noqa: E402
+from agent_core.reasoning import reasoning_node  # noqa: E402
+from agent_core.reschedule_suggestion import suggest_reschedule  # noqa: E402
+
+
+def test_recheck_r02_one_shot_iterator_of_findings_is_refused():
+    b = wp("B", permits_required=SafetyPermitsRequired(hot_work_permit=True))
+    with pytest.raises(TypeError, match="collection"):
+        package_status(b, certificate_findings=iter(check_certificates(b, [])),
+                       judgment_flags=[], schedule_findings=[])
+
+
+def test_recheck_r02_reusing_the_same_list_for_every_package_is_correct():
+    a = wp("A")
+    b = wp("B", permits_required=SafetyPermitsRequired(hot_work_permit=True))
+    certs = check_certificates(b, [])
+    kw = dict(certificate_findings=certs, judgment_flags=[], schedule_findings=[])
+    assert package_status(a, **kw) == PackageStatus.CLEARED
+    assert package_status(b, **kw) == PackageStatus.HAS_FINDINGS
+
+
+def test_recheck_r06_distinct_records_sharing_an_id_raise_in_the_pair_api():
+    a, b = wp("X", [H.HOT_WORK]), wp("X", [H.CONFINED_SPACE])
+    with pytest.raises(ValueError, match="share work_package_id"):
+        check_conflict(a, b)
+
+
+def test_recheck_r06_true_self_comparison_is_still_no_conflict():
+    a = wp("X", [H.HOT_WORK])
+    assert check_conflict(a, a) is None
+
+
+def _two_day_overload():
+    return [wp("A", [H.HOT_WORK], fire_watch_id="F", hot_worker_count=5),
+            wp("B", [H.HOT_WORK], fire_watch_id="F", hot_worker_count=5,
+               start=dt(2027, 1, 13, 7), end=dt(2027, 1, 13, 15))]
+
+
+def test_recheck_r09_every_overloaded_package_on_a_watch_goes_to_review():
+    out = deconfliction_node({"work_packages": _two_day_overload()})["work_packages"]
+    for p in out:
+        assert p.requires_hitl_review and not p.cleared_for_execution, p.work_package_id
+
+
+def test_recheck_r09_package_never_concurrent_with_the_overload_is_not_flagged():
+    pkgs = [wp("A", [H.HOT_WORK], fire_watch_id="F", hot_worker_count=3),
+            wp("B", [H.HOT_WORK], fire_watch_id="F", hot_worker_count=2, start=dt(2027, 1, 12, 9), end=dt(2027, 1, 12, 11)),
+            wp("C", [H.HOT_WORK], fire_watch_id="F", hot_worker_count=1, start=dt(2027, 1, 14, 7), end=dt(2027, 1, 14, 9))]
+    find_all_conflicts(pkgs)
+    by = {p.work_package_id: p for p in pkgs}
+    assert by["A"].conflict_rationale and by["B"].conflict_rationale
+    assert not by["C"].conflict_rationale
+
+
+def test_recheck_r13_mixed_certificate_times_give_a_descriptive_error():
+    p = wp(permits_required=SafetyPermitsRequired(hot_work_permit=True))
+    cs = [Certificate(certificate_id="C1", work_package_id="WP-1", kind=K.HOT_WORK_PERMIT,
+                      valid_from=dt(2027, 1, 12, 7), valid_until=dt(2027, 1, 12, 11)),
+          Certificate(certificate_id="C2", work_package_id="WP-1", kind=K.HOT_WORK_PERMIT,
+                      valid_from=dt(2027, 1, 12, 11, tzinfo=timezone.utc),
+                      valid_until=dt(2027, 1, 12, 16, tzinfo=timezone.utc))]
+    with pytest.raises(ValueError, match="timezone"):
+        check_certificates(p, cs)
+
+
+def test_recheck_r14_microsecond_gap_is_readable():
+    p = wp(start=dt(2027, 1, 12, 9), end=dt(2027, 1, 12, 10), permits_required=SafetyPermitsRequired(hot_work_permit=True))
+    cs = [Certificate(certificate_id="C1", work_package_id="WP-1", kind=K.HOT_WORK_PERMIT,
+                      valid_from=dt(2027, 1, 12, 9), valid_until=dt(2027, 1, 12, 9, 15, 10, 2)),
+          Certificate(certificate_id="C2", work_package_id="WP-1", kind=K.HOT_WORK_PERMIT,
+                      valid_from=dt(2027, 1, 12, 9, 15, 10, 8), valid_until=dt(2027, 1, 12, 10))]
+    [f] = check_certificates(p, cs)
+    assert "09:15:10.000002 to 2027-01-12 09:15:10.000008" in f.message
+
+
+def test_recheck_n01_self_overload_is_in_the_event_and_gets_a_brief(monkeypatch):
+    seen = []
+    monkeypatch.setattr(events, "emit", lambda name, **kw: seen.append((name, kw)))
+    state = deconfliction_node({"work_packages": [wp(hz=[H.HOT_WORK], fire_watch_id="F", hot_worker_count=5)]})
+    state = reasoning_node(state)
+    [result] = [kw for n, kw in seen if n == "deconfliction_result"]
+    assert [c["work_package_id"] for c in result["conflicts"]] == ["WP-1"]
+    assert result["conflicts"][0]["conflicts_with"] == []
+    assert state["work_packages"][0].safety_brief is not None
+
+
+def test_recheck_n02_self_overload_gets_no_reschedule_suggestion():
+    p = wp(hz=[H.HOT_WORK], fire_watch_id="F", hot_worker_count=5)
+    assert suggest_reschedule([p], "WP-1", step=timedelta(hours=1), max_shift=timedelta(days=1)) is None
+
+
+def test_recheck_n02_suggestion_never_lands_in_an_overload_with_another_package():
+    other = wp("B", [H.HOT_WORK], fire_watch_id="F", hot_worker_count=3, start=dt(2027, 1, 12, 15), end=dt(2027, 1, 12, 23))
+    target = wp("A", [H.HOT_WORK], sp=SC(compartment_id="TANK-1"), fire_watch_id="F", hot_worker_count=3)
+    blocker = wp("C", [H.CONFINED_SPACE], sp=SC(compartment_id="TANK-1"))
+    s = suggest_reschedule([target, other, blocker], "A", step=timedelta(hours=1), max_shift=timedelta(hours=12))
+    if s is not None:
+        moved = target.model_copy(update={"scheduled_start": s.suggested_start, "scheduled_end": s.suggested_end})
+        assert not [o for o in deconfliction.fire_watch_overloads([moved, other])
+                    if "A" in [p.work_package_id for p in o[2]]]
+
+
+def test_recheck_n03_suggestion_across_the_repeated_hour_keeps_its_real_duration():
+    start, end = dt(2026, 11, 1, 1, 45, tzinfo=LA), dt(2026, 11, 1, 1, 15, fold=1, tzinfo=LA)
+    a, b = wp("A", [H.HOT_WORK], start=start, end=end), wp("B", [H.CONFINED_SPACE], start=start, end=end)
+    s = suggest_reschedule([a, b], "A", step=timedelta(hours=1), max_shift=timedelta(hours=3))
+    assert s is not None
+    real = lambda t: t.astimezone(timezone.utc)
+    assert real(s.suggested_end) - real(s.suggested_start) == timedelta(minutes=30)
+    assert s.suggested_start.tzinfo is LA
+
+
+def test_recheck_n04_aware_gap_is_reported_in_the_work_zone_with_offset():
+    s0, s1 = dt(2026, 11, 1, 1, 15, fold=1, tzinfo=LA), dt(2026, 11, 1, 1, 45, fold=1, tzinfo=LA)
+    p = wp(start=s0, end=s1, permits_required=SafetyPermitsRequired(hot_work_permit=True))
+    c = Certificate(certificate_id="C", work_package_id="WP-1", kind=K.HOT_WORK_PERMIT,
+                    valid_from=dt(2026, 11, 1, 1, 15, tzinfo=LA), valid_until=dt(2026, 11, 1, 1, 45, tzinfo=LA))
+    [f] = check_certificates(p, [c])
+    assert "01:15 -08:00" in f.message and "01:45 -08:00" in f.message
+    assert f.uncovered[0][0].utcoffset() == timedelta(hours=-8)
+
+
+def test_recheck_n05_rollup_without_due_date_does_not_compare_unrelated_times():
+    proj = Project(project_id="P", name="n", work_package_ids=["WP-1"])
+    aware = wp(start=dt(2027, 1, 12, 7, tzinfo=timezone.utc), end=dt(2027, 1, 12, 15, tzinfo=timezone.utc))
+    r = rollup_project(proj, [aware], as_of=dt(2027, 1, 10), **NONE)
+    assert r.past_due is False and r.late_package_ids == []

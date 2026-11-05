@@ -20,20 +20,22 @@ def uncovered(
 ) -> list[tuple[datetime, datetime]]:
     """
     Gaps in [start, end] not covered by any (from, until) window, in order.
-    Compares real time (aware datetimes in UTC, review-01 R03), so returned
-    gap bounds for aware input are UTC. Mixed naive/aware raises ValueError.
+    Compares real time (aware datetimes via UTC, review-01 R03); gap bounds
+    come back in the work window's own zone (re-check N04). Mixed
+    naive/aware raises ValueError.
     """
     windows = list(windows)
     require_comparable([("work window start", start), ("work window end", end)]
                        + [(f"window {i} from", f) for i, (f, _) in enumerate(windows)]
                        + [(f"window {i} until", u) for i, (_, u) in enumerate(windows)])
+    zone = start.tzinfo
     start, end = instant(start), instant(end)
     windows = [(instant(f), instant(u)) for f, u in windows]
     touching = sorted(
         (max(f, start), min(u, end)) for f, u in windows if u >= start and f <= end
     )
     if not touching:
-        return [(start, end)]
+        return _in_zone([(start, end)], zone)
     gaps, cursor = [], start
     for s, e in touching:
         if s > cursor:
@@ -41,4 +43,11 @@ def uncovered(
         cursor = max(cursor, e)
     if cursor < end:
         gaps.append((cursor, end))
-    return gaps
+    return _in_zone(gaps, zone)
+
+
+def _in_zone(gaps, zone):
+    """Re-check N04: report gaps in the work window's own zone, not UTC."""
+    if zone is None:
+        return gaps
+    return [(a.astimezone(zone), b.astimezone(zone)) for a, b in gaps]
