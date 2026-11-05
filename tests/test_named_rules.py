@@ -58,13 +58,26 @@ def test_every_rule_has_a_contact_role_and_at_least_one_citation_or_a_note():
         assert r.citations or (r.note and r.note.strip()), r.rule_id
 
 
+# review-01 R16: the old check only rejected digits and "@", so a person's name
+# ("Riley Example") passed. Contacts must come from this explicit role set.
+ALLOWED_ROLES = {
+    "Gas Free Engineer", "Safety Officer", "Fire Safety Coordinator", "Competent Person",
+    "Production Planner", "Ship Superintendent",
+}
+
+
 def test_contacts_are_roles_not_named_people():
-    # Notional-data rule: no personnel names. Roles are title-case job titles with no digits
-    # or contact details.
     for r in RULES:
         for role in (r.contact_role, r.escalation_role):
-            if role:
-                assert not re.search(r"\d|@", role), (r.rule_id, role)
+            if role is not None:
+                assert role in ALLOWED_ROLES, (r.rule_id, role)
+
+
+def test_no_contact_role_is_a_roster_name():
+    from agent_core.judgment import load_roster
+    names = {p.display_name for p in load_roster().people}
+    for r in RULES:
+        assert r.contact_role not in names and r.escalation_role not in names, r.rule_id
 
 
 def test_only_primary_source_checked_citations_are_marked_verified():
@@ -224,16 +237,18 @@ def test_no_conflict_means_no_rule_ids():
     assert conflict_rule_ids(a, b) == []
 
 
-def test_rule_ids_agree_with_check_conflict_on_every_case():
-    # Rule IDs and rationale come from one detection path, so they can never disagree.
+def test_rule_ids_and_rationale_match_independent_expectations():
+    # review-01 R15: the old version compared the two wrappers with each other,
+    # so a detector that never detects passed. Each case now has its own answer.
     cases = [
-        (_wp("A", [H.HOT_WORK]), _wp("B", [H.CONFINED_SPACE])),
-        (_wp("A", [], aloft=True), _wp("B", [])),
-        (_wp("A", [H.HOT_WORK]), _wp("B", [H.CONFINED_SPACE], frames=(90, 94))),
-        (_wp("A", [H.WORKING_ALOFT]), _wp("B", [H.FALL_PROTECTION])),
+        (_wp("A", [H.HOT_WORK]), _wp("B", [H.CONFINED_SPACE]), ["WS-HZ-001"]),
+        (_wp("A", [], aloft=True), _wp("B", []), ["WS-OH-001"]),
+        (_wp("A", [H.HOT_WORK]), _wp("B", [H.CONFINED_SPACE], frames=(90, 94)), []),
+        (_wp("A", [H.WORKING_ALOFT]), _wp("B", [H.FALL_PROTECTION]), ["WS-HZ-003"]),
     ]
-    for a, b in cases:
-        assert bool(conflict_rule_ids(a, b)) == (check_conflict(a, b) is not None)
+    for a, b, expected in cases:
+        assert conflict_rule_ids(a, b) == expected, (a.work_package_id, b.work_package_id)
+        assert (check_conflict(a, b) is not None) == bool(expected)
 
 
 def test_certificate_findings_carry_their_rule_id():

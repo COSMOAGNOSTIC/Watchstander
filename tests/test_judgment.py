@@ -175,7 +175,7 @@ def test_flags_are_deterministic_and_order_independent():
     ]
     first = judgment_flags(pkgs)
     assert [f.flag_id for f in first] == [f.flag_id for f in judgment_flags(list(reversed(pkgs)))]
-    assert [f.flag_id for f in first] == ["WS-JF-002:B+C", "WS-JF-003:A"]
+    assert [f.flag_id for f in first] == ['WS-JF-002:["B","C"]', 'WS-JF-003:["A"]']
 
 
 def test_flag_names_the_person_and_rule_in_its_message():

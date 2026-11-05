@@ -31,6 +31,7 @@ from pydantic import BaseModel, model_validator
 
 from agent_core import named_rules
 from agent_core.intervals import uncovered
+from agent_core.validation import NonBlankStr, fmt_time, instant, require_comparable
 from agent_core.state import WorkPackageState
 
 
@@ -51,15 +52,16 @@ class CertificateIssue(str, Enum):
 
 
 class Certificate(BaseModel):
-    certificate_id: str
-    work_package_id: str
+    certificate_id: NonBlankStr
+    work_package_id: NonBlankStr
     kind: CertificateKind
     valid_from: datetime
     valid_until: datetime
 
     @model_validator(mode="after")
     def _window_is_ordered(self) -> "Certificate":
-        if self.valid_from > self.valid_until:
+        require_comparable([("valid_from", self.valid_from), ("valid_until", self.valid_until)])
+        if instant(self.valid_from) > instant(self.valid_until):
             raise ValueError(
                 f"valid_from ({self.valid_from}) must be <= valid_until ({self.valid_until}) "
                 f"for certificate {self.certificate_id}"
@@ -78,7 +80,7 @@ class CertificateFinding(BaseModel):
 
 
 def _fmt(t: datetime) -> str:
-    return t.strftime("%Y-%m-%d %H:%M")
+    return fmt_time(t)  # review-01 R14: seconds shown when they matter
 
 
 def check_certificates(
@@ -105,7 +107,7 @@ def check_certificates(
             continue
         matching = sorted(
             (c for c in certs if c.work_package_id == pkg.work_package_id and c.kind == kind),
-            key=lambda c: (c.valid_from, c.certificate_id),
+            key=lambda c: (instant(c.valid_from), c.certificate_id),
         )
         ids = [c.certificate_id for c in matching]
         rule_id = named_rules.rule_for_certificate_kind(kind).rule_id

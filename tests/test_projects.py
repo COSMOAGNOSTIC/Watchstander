@@ -11,13 +11,26 @@ from agent_core.projects import (
     PackageStatus,
     Priority,
     Project,
-    package_status,
-    rollup_project,
+    package_status as _package_status,
+    rollup_project as _rollup_project,
     sort_projects,
 )
 from agent_core.state import HitlDisposition, RiskLevel, WorkPackageState
 
 AS_OF = datetime(2027, 1, 10, 8, 0)
+
+# These tests exercise the review/schedule half of the status gate, so every
+# other check is passed as "ran, found nothing". The findings half and the
+# missing-input refusal are tested in tests/test_review01_fixes.py (R01/R02).
+NO_FINDINGS = dict(certificate_findings=[], judgment_flags=[], schedule_findings=[])
+
+
+def package_status(p):
+    return _package_status(p, **NO_FINDINGS)
+
+
+def rollup_project(*args, **kwargs):
+    return _rollup_project(*args, **NO_FINDINGS, **kwargs)
 
 
 def _pkg(pid, start=datetime(2027, 1, 12, 7), end=datetime(2027, 1, 12, 15), **kw):
@@ -109,7 +122,7 @@ def test_rollup_all_cleared_is_cleared_and_counts_every_status():
     r = rollup_project(_project(["WP-1", "WP-2"]), [_pkg("WP-1"), _pkg("WP-2")], as_of=AS_OF)
     assert r.overall_status == PackageStatus.CLEARED
     assert r.status_counts == {
-        PackageStatus.BLOCKED: 0, PackageStatus.PENDING_REVIEW: 0,
+        PackageStatus.BLOCKED: 0, PackageStatus.PENDING_REVIEW: 0, PackageStatus.HAS_FINDINGS: 0,
         PackageStatus.UNSCHEDULED: 0, PackageStatus.CLEARED: 2,
     }
     assert r.package_count == 2

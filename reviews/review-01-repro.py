@@ -140,12 +140,12 @@ r0.contact_role = old
 rec("R16", passed, f"roles test passed with contact_role='Riley Example': {passed}")
 
 # R17: add a fourth judgment rule with no trigger
-extra = named_rules.NamedRule(rule_id="WS-JF-004", title="untriggered", category="judgment", applies_to=[],
+extra = named_rules.NamedRule(rule_id="WS-JF-099", title="untriggered", category="judgment", applies_to=[],
                               citations=[], contact_role="Gas Free Engineer", note="probe only")
 named_rules.RULES.append(extra)
 try:
     got = {f.rule_id for f in judgment_flags([wp(hz=[H.HOT_WORK])])}
-    rec("R17", got == {"WS-JF-003"}, f"catalogue has WS-JF-004, preflight accepted it, flags emitted={sorted(got)}")
+    rec("R17", got == {"WS-JF-003"}, f"catalogue has WS-JF-099, preflight accepted it, flags emitted={sorted(got)}")
 finally:
     named_rules.RULES.remove(extra)
 

@@ -273,6 +273,26 @@
       "contact_role": "Production Planner",
       "escalation_role": null,
       "note": "Planning constraint, not a safety regulation; uncited on purpose. Back-to-back packages (one ends when the next starts) are not double-booked."
+    },
+    {
+      "rule_id": "WS-JF-004",
+      "title": "Concurrent gas-free packages with no common location coordinate",
+      "category": "judgment",
+      "applies_to": [],
+      "citations": [],
+      "contact_role": "Gas Free Engineer",
+      "escalation_role": "Safety Officer",
+      "note": "Judgment flag, not a violation (review-01 R07). One package is located only by compartment and the other only by frames, so neither detection nor WS-JF-001 can tell whether they are near each other. Data-completeness prompt; no citation."
+    },
+    {
+      "rule_id": "WS-JF-005",
+      "title": "Gas-free work identified by spatial flag or permit but missing from the hazard list",
+      "category": "judgment",
+      "applies_to": [],
+      "citations": [],
+      "contact_role": "Gas Free Engineer",
+      "escalation_role": "Safety Officer",
+      "note": "Judgment flag, not a violation (review-01 R08). Detection reads only hazard_categories, so a confined-space entry marked by is_enclosed_or_confined or an entry permit, or hot work marked only by a hot-work permit, is invisible to WS-HZ rules. Routed so a person can correct the classification. No citation."
     }
   ]
 }

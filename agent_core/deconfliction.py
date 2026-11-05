@@ -17,6 +17,7 @@ from itertools import combinations
 from agent_core import events, named_rules
 from agent_core.rules_config import load_hazard_rules
 from agent_core.state import HazardCategory, WorkPackageState
+from agent_core.validation import instant, require_comparable
 
 # ADR-030: hazard-pair rules and the fire-watch capacity limit used to be
 # hand-typed constants here. They're now sourced from
@@ -74,7 +75,12 @@ def _schedules_overlap(a: WorkPackageState, b: WorkPackageState) -> bool:
     b_start, b_end = b.scheduled_start, b.scheduled_end
     if None in (a_start, a_end, b_start, b_end):
         return True
-    return a_start <= b_end and b_start <= a_end
+    # review-01 R03/R13: real time, and never a silent naive/aware comparison.
+    require_comparable([(f"{a.work_package_id}.scheduled_start", a_start),
+                        (f"{a.work_package_id}.scheduled_end", a_end),
+                        (f"{b.work_package_id}.scheduled_start", b_start),
+                        (f"{b.work_package_id}.scheduled_end", b_end)])
+    return instant(a_start) <= instant(b_end) and instant(b_start) <= instant(a_end)
 
 
 def _vertically_stacked(a: WorkPackageState, b: WorkPackageState) -> bool:
@@ -138,15 +144,23 @@ def _detect_conflict(
 
     spatially_linked = _same_compartment(a, b) or _frame_ranges_overlap(a, b)
 
+    # review-01 R10: the rationale stays first-match (unchanged text), but the
+    # rule-ID list names every rule that applies, so every contact is reached.
+    rule_ids: set[str] = set()
+    if hazard_overlap and spatially_linked:
+        rule_ids |= {named_rules.rule_for_hazard_pair(p).rule_id for p in hazard_overlap}
+    stacked = _vertically_stacked(a, b)
+    if stacked:
+        rule_ids.add(named_rules.rule_for_overhead_work().rule_id)
+
     if hazard_overlap and spatially_linked:
         pair_desc = ", ".join(sorted(h.value for p in hazard_overlap for h in p))
-        rule_ids = sorted(named_rules.rule_for_hazard_pair(p).rule_id for p in hazard_overlap)
-        return rule_ids, (
+        return sorted(rule_ids), (
             f"Incompatible hazard categories ({pair_desc}) detected in overlapping "
             f"spatial envelope between {a.work_package_id} and {b.work_package_id}."
         )
 
-    if _vertically_stacked(a, b):
+    if stacked:
         # _vertically_stacked only confirms a and b differ on overhead status,
         # not which one is actually overhead -- an independent code review
         # found this rationale unconditionally named `a` as "Overhead work"
@@ -156,7 +170,7 @@ def _detect_conflict(
         # the actual overhead party explicitly instead of assuming positionally.
         a_overhead = a.spatial.is_aloft or a.spatial.is_over_side
         overhead, underlying = (a, b) if a_overhead else (b, a)
-        return [named_rules.rule_for_overhead_work().rule_id], (
+        return sorted(rule_ids), (
             f"Overhead work ({overhead.work_package_id}) and underlying work "
             f"({underlying.work_package_id}) share an overlapping frame range with "
             f"no vertical deconfliction confirmed."
@@ -223,8 +237,8 @@ def _fire_watch_peak_concurrency(
     # closed, touching-counts-as-overlapping intervals.
     sweep_events = sorted(
         (
-            *((wp.scheduled_start, 0, wp) for wp in scheduled),
-            *((wp.scheduled_end, 1, wp) for wp in scheduled),
+            *((instant(wp.scheduled_start), 0, wp) for wp in scheduled),
+            *((instant(wp.scheduled_end), 1, wp) for wp in scheduled),
         ),
         key=lambda event: (event[0], event[1]),
     )
@@ -329,6 +343,13 @@ def find_all_conflicts(packages: list[WorkPackageState]) -> list[WorkPackageStat
     `check_conflict()` loop, not as an alternative to it -- see
     `_fire_watch_capacity_conflicts` for why it's inherently N-way.
     """
+    ids = [wp.work_package_id for wp in packages]
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        # review-01 R06: check_conflict() skips equal IDs as a self-comparison,
+        # so two different records sharing an ID were never compared.
+        raise ValueError(f"duplicate work_package_id in batch: {dupes}")
+
     for a, b in combinations(packages, 2):
         rationale = check_conflict(a, b)
         if rationale:
@@ -337,7 +358,47 @@ def find_all_conflicts(packages: list[WorkPackageState]) -> list[WorkPackageStat
     for a, b, rationale in _fire_watch_capacity_conflicts(packages):
         _record_conflict(a, b.work_package_id, rationale)
         _record_conflict(b, a.work_package_id, rationale)
+    for watch_id, peak, peak_active in fire_watch_overloads(packages):
+        rationale = (
+            f"Fire watch '{watch_id}' peaks at {peak} concurrent hot workers, exceeding "
+            f"the limit of {MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH} "
+            f"({named_rules.rule_for_fire_watch_capacity().rule_id}, NAVSEA8010-4.4.3)."
+        )
+        for wp in peak_active:
+            if not wp.conflict_rationale or f"Fire watch '{watch_id}'" not in wp.conflict_rationale:
+                _record_rationale(wp, rationale)
     return packages
+
+
+def fire_watch_overloads(
+    packages: list[WorkPackageState],
+) -> list[tuple[str, int, list[WorkPackageState]]]:
+    """
+    review-01 R09: every fire watch whose peak concurrent hot-worker count
+    exceeds the limit, with the packages active at that peak. Unlike
+    `_fire_watch_capacity_conflicts()`, which reports *pairs* of packages,
+    this also reports a single package that overloads its own fire watch
+    (five welders in one package) -- a pair-only check never sees it.
+    Sorted by watch ID.
+    """
+    by_watch: dict[str, list[WorkPackageState]] = defaultdict(list)
+    for wp in packages:
+        if wp.fire_watch_id and HazardCategory.HOT_WORK in wp.hazard_categories:
+            by_watch[wp.fire_watch_id].append(wp)
+    out = []
+    for watch_id in sorted(by_watch):
+        peak, peak_active = _fire_watch_peak_concurrency(by_watch[watch_id])
+        if peak > MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH:
+            out.append((watch_id, peak, sorted(peak_active, key=lambda w: w.work_package_id)))
+    return out
+
+
+def _record_rationale(wp: WorkPackageState, rationale: str) -> None:
+    """Append a rationale with no partner package (e.g. a self-overload)."""
+    if not wp.conflict_rationale:
+        wp.conflict_rationale = rationale
+    elif rationale not in wp.conflict_rationale:
+        wp.conflict_rationale = f"{wp.conflict_rationale} | {rationale}"
 
 
 def deconfliction_node(state: dict) -> dict:
@@ -372,9 +433,14 @@ def deconfliction_node(state: dict) -> dict:
     )
     find_all_conflicts(packages)
 
-    any_conflicts = any(wp.conflicts for wp in packages)
+    # review-01 R09: a package can be flagged with no partner (it overloads its
+    # own fire watch), so a rationale alone is enough to route it to review.
+    def _flagged(wp: WorkPackageState) -> bool:
+        return bool(wp.conflicts or wp.conflict_rationale)
+
+    any_conflicts = any(_flagged(wp) for wp in packages)
     for wp in packages:
-        if wp.conflicts:
+        if _flagged(wp):
             wp.requires_hitl_review = True
             # Fail closed the moment a conflict is flagged, not just once the
             # HITL gate finishes. `cleared_for_execution` otherwise defaults

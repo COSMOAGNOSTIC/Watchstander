@@ -12,6 +12,19 @@ package schema has no completion field, and inventing one here would
 let a rollup report work as finished that nothing ever recorded as
 finished.
 
+Status is an AND gate (review-01 R01/R02, decision D1). A package is
+CLEARED only when all four inputs are clean: its review state, and the
+certificate, judgment, and schedule findings for it. All four are
+required arguments; passing None for any of them is an error, because a
+check that wasn't run must never read as a clean one.
+
+    review not pending/rejected --+
+    no certificate findings ------+
+    no judgment flags ------------+--[AND]--> CLEARED
+    no schedule findings ---------+
+    any input false   -> worst status present
+    any input missing -> error, no status
+
 Every function is a pure function of its arguments. "Now" is always
 passed in as `as_of`, never read from the clock, so the same inputs
 always give the same rollup.
@@ -26,6 +39,7 @@ from typing import Iterable, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from agent_core.state import HitlDisposition, RiskLevel, WorkPackageState
+from agent_core.validation import NonBlankStr, instant, require_comparable
 
 
 class Priority(str, Enum):
@@ -43,15 +57,16 @@ class PackageStatus(str, Enum):
 
     BLOCKED = "blocked"  # reviewed and not approved, or not cleared for an unknown reason
     PENDING_REVIEW = "pending_review"  # needs a HITL decision that hasn't been made
+    HAS_FINDINGS = "has_findings"  # open certificate, judgment, or schedule findings
     UNSCHEDULED = "unscheduled"  # cleared, but missing a start or end time
-    CLEARED = "cleared"  # cleared for execution and fully scheduled
+    CLEARED = "cleared"  # every check clean and fully scheduled
 
 
 _SEVERITY = list(PackageStatus)  # worst first
 
 
 class Project(BaseModel):
-    project_id: str
+    project_id: NonBlankStr
     name: str
     priority: Priority = Priority.ROUTINE
     due_date: Optional[datetime] = None
@@ -82,26 +97,66 @@ class ProjectRollup(BaseModel):
     past_due: bool = Field(description="True when as_of is after the project due date.")
 
 
-def package_status(pkg: WorkPackageState) -> PackageStatus:
+def _ids_of(finding) -> list[str]:
+    ids = getattr(finding, "work_package_ids", None)
+    if ids is None:
+        ids = [finding.work_package_id]
+    return list(ids)
+
+
+def _require_inputs(**inputs) -> None:
+    missing = sorted(name for name, v in inputs.items() if v is None)
+    if missing:
+        raise ValueError(
+            f"status needs every check's result; got None for {missing}. "
+            "Pass [] only when the check ran and found nothing."
+        )
+
+
+def package_status(
+    pkg: WorkPackageState,
+    *,
+    certificate_findings: Iterable,
+    judgment_flags: Iterable,
+    schedule_findings: Iterable,
+) -> PackageStatus:
     """
-    Derive one package's status from fields already on it. Fails closed:
-    a package with `cleared_for_execution=False` is never reported CLEARED
-    or UNSCHEDULED, even when no other field explains why.
+    One package's status through the AND gate. The three findings lists
+    may cover other packages too; only findings naming `pkg` count.
+
+    Order (worst first): BLOCKED (reviewed and not approved) >
+    PENDING_REVIEW (review required, no disposition -- read directly, not
+    through the cached `cleared_for_execution` bit, review-01 R01) >
+    BLOCKED (not cleared for an unexplained reason) > HAS_FINDINGS >
+    UNSCHEDULED > CLEARED.
     """
+    _require_inputs(certificate_findings=certificate_findings,
+                    judgment_flags=judgment_flags, schedule_findings=schedule_findings)
+    pid = pkg.work_package_id
     if pkg.hitl_disposition is not None and pkg.hitl_disposition != HitlDisposition.APPROVED:
         return PackageStatus.BLOCKED
+    if pkg.hitl_disposition is None and (
+        pkg.requires_hitl_review or pkg.risk_level == RiskLevel.CRITICAL
+    ):
+        return PackageStatus.PENDING_REVIEW
     if not pkg.cleared_for_execution:
-        awaiting_review = pkg.hitl_disposition is None and (
-            pkg.requires_hitl_review or pkg.risk_level == RiskLevel.CRITICAL
-        )
-        return PackageStatus.PENDING_REVIEW if awaiting_review else PackageStatus.BLOCKED
+        return PackageStatus.BLOCKED
+    for group in (certificate_findings, judgment_flags, schedule_findings):
+        if any(pid in _ids_of(f) for f in group):
+            return PackageStatus.HAS_FINDINGS
     if pkg.scheduled_start is None or pkg.scheduled_end is None:
         return PackageStatus.UNSCHEDULED
     return PackageStatus.CLEARED
 
 
 def rollup_project(
-    project: Project, packages: Iterable[WorkPackageState], as_of: datetime
+    project: Project,
+    packages: Iterable[WorkPackageState],
+    as_of: datetime,
+    *,
+    certificate_findings: Iterable,
+    judgment_flags: Iterable,
+    schedule_findings: Iterable,
 ) -> ProjectRollup:
     """
     Roll up the project's packages. `packages` may contain packages from
@@ -119,10 +174,19 @@ def rollup_project(
     if missing:
         raise ValueError(f"project {project.project_id} references unknown work packages: {missing}")
 
+    _require_inputs(certificate_findings=certificate_findings,
+                    judgment_flags=judgment_flags, schedule_findings=schedule_findings)
+    certificate_findings, judgment_flags, schedule_findings = (
+        list(certificate_findings), list(judgment_flags), list(schedule_findings))
     members = [by_id[i] for i in project.work_package_ids]
+    require_comparable([("as_of", as_of), ("due_date", project.due_date)]
+                       + [(f"{p.work_package_id}.scheduled_end", p.scheduled_end) for p in members])
     ids_by_status: dict[PackageStatus, list[str]] = {s: [] for s in _SEVERITY}
     for p in members:
-        ids_by_status[package_status(p)].append(p.work_package_id)
+        ids_by_status[package_status(
+            p, certificate_findings=certificate_findings,
+            judgment_flags=judgment_flags, schedule_findings=schedule_findings,
+        )].append(p.work_package_id)
 
     if members:
         overall = next(s for s in _SEVERITY if ids_by_status[s])
@@ -131,7 +195,7 @@ def rollup_project(
 
     due = project.due_date
     late = (
-        [p.work_package_id for p in members if p.scheduled_end is not None and p.scheduled_end > due]
+        [p.work_package_id for p in members if p.scheduled_end is not None and instant(p.scheduled_end) > instant(due)]
         if due is not None
         else []
     )
@@ -146,18 +210,20 @@ def rollup_project(
         status_counts={s: len(ids_by_status[s]) for s in _SEVERITY},
         package_ids_by_status=ids_by_status,
         late_package_ids=late,
-        past_due=due is not None and as_of > due,
+        past_due=due is not None and instant(as_of) > instant(due),
     )
 
 
 def sort_projects(projects: Iterable[Project]) -> list[Project]:
     """Priority first, then earliest due date (none last), then project_id."""
+    projects = list(projects)
+    require_comparable([(p.project_id, p.due_date) for p in projects])
     return sorted(
         projects,
         key=lambda p: (
             _PRIORITY_RANK[p.priority],
             p.due_date is None,
-            p.due_date or datetime.min,
+            instant(p.due_date) if p.due_date else datetime.min,
             p.project_id,
         ),
     )

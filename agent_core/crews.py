@@ -37,6 +37,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from agent_core import named_rules
 from agent_core.intervals import uncovered
+from agent_core.validation import NonBlankStr, fmt_time, instant, require_comparable
 from agent_core.state import WorkPackageState
 
 
@@ -46,20 +47,22 @@ class Window(BaseModel):
 
     @model_validator(mode="after")
     def _ordered(self) -> "Window":
-        if self.start > self.end:
+        require_comparable([("start", self.start), ("end", self.end)])
+        if instant(self.start) > instant(self.end):
             raise ValueError(f"window start ({self.start}) must be <= end ({self.end})")
         return self
 
 
 class Shift(BaseModel):
-    shift_id: str
+    shift_id: NonBlankStr
     name: str
     start: datetime
     end: datetime
 
     @model_validator(mode="after")
     def _has_length(self) -> "Shift":
-        if self.start >= self.end:
+        require_comparable([("start", self.start), ("end", self.end)])
+        if instant(self.start) >= instant(self.end):
             raise ValueError(f"shift {self.shift_id}: start must be before end")
         return self
 
@@ -73,9 +76,10 @@ class ShiftCalendar(BaseModel):
         dupes = sorted({i for i in ids if ids.count(i) > 1})
         if dupes:
             raise ValueError(f"duplicate shift_id: {dupes}")
-        self.shifts = sorted(self.shifts, key=lambda s: (s.start, s.shift_id))
+        require_comparable([(s.shift_id, s.start) for s in self.shifts])
+        self.shifts = sorted(self.shifts, key=lambda s: (instant(s.start), s.shift_id))
         for prev, cur in zip(self.shifts, self.shifts[1:]):
-            if prev.end > cur.start:
+            if instant(prev.end) > instant(cur.start):
                 raise ValueError(f"shifts {prev.shift_id} and {cur.shift_id} overlap")
         return self
 
@@ -93,15 +97,15 @@ class ShiftCalendar(BaseModel):
         return cls(shifts=shifts)
 
     def shift_at(self, t: datetime) -> Optional[Shift]:
-        return next((s for s in self.shifts if s.start <= t < s.end), None)
+        return next((s for s in self.shifts if instant(s.start) <= instant(t) < instant(s.end)), None)
 
     def next_shift(self, after: datetime) -> Optional[Shift]:
         """First shift starting at or after `after`."""
-        return next((s for s in self.shifts if s.start >= after), None)
+        return next((s for s in self.shifts if instant(s.start) >= instant(after)), None)
 
 
 class Crew(BaseModel):
-    crew_id: str
+    crew_id: NonBlankStr
     name: str
     is_contractor: bool = False
     contractor_windows: list[Window] = Field(default_factory=list)
@@ -136,7 +140,7 @@ class ScheduleFinding(BaseModel):
 
 
 def _fmt(t: datetime) -> str:
-    return t.strftime("%Y-%m-%d %H:%M")
+    return fmt_time(t)
 
 
 def _spans(gaps: list[tuple[datetime, datetime]]) -> str:
@@ -198,7 +202,7 @@ def check_schedule_constraints(
             continue
         if None in (a.scheduled_start, a.scheduled_end, b.scheduled_start, b.scheduled_end):
             continue
-        if a.scheduled_start < b.scheduled_end and b.scheduled_start < a.scheduled_end:
+        if instant(a.scheduled_start) < instant(b.scheduled_end) and instant(b.scheduled_start) < instant(a.scheduled_end):
             out.append(_finding("WS-SC-004", ScheduleIssue.CREW_DOUBLE_BOOKED,
                                 [a.work_package_id, b.work_package_id], a.crew_id,
                                 f"crew {a.crew_id} is on both at once."))

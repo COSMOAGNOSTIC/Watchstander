@@ -13,7 +13,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from agent_core.validation import NonBlankStr, instant, require_comparable
 
 
 class HazardCategory(str, Enum):
@@ -77,6 +79,9 @@ class SpatialCoordinates(BaseModel):
     overlaps without needing full 3D geometry.
     """
 
+    # review-01 R04: a misspelled flag (e.g. `is_alof`) must fail, not vanish.
+    model_config = ConfigDict(extra="forbid")
+
     compartment_id: Optional[str] = Field(
         default=None, description="Compartment or space designator, e.g. 'FR-88-2-A'"
     )
@@ -98,6 +103,15 @@ class SpatialCoordinates(BaseModel):
     is_enclosed_or_confined: bool = Field(
         default=False, description="Work performed in a confined/enclosed space per 1915 Subpart B"
     )
+
+    @field_validator("compartment_id")
+    @classmethod
+    def _blank_compartment_is_none(cls, v: Optional[str]) -> Optional[str]:
+        """review-01 R07: a whitespace-only compartment is no location, not a location."""
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
 
     @model_validator(mode="after")
     def _frame_range_is_ordered(self) -> "SpatialCoordinates":
@@ -126,6 +140,10 @@ class SpatialCoordinates(BaseModel):
 
 
 class SafetyPermitsRequired(BaseModel):
+    # review-01 R04: `{"hot_work_permti": true}` used to load with every flag
+    # false, so a required permit went silently unchecked.
+    model_config = ConfigDict(extra="forbid")
+
     hot_work_permit: bool = False
     confined_space_entry_permit: bool = False
     fall_protection_plan: bool = False
@@ -165,7 +183,7 @@ class WorkPackageState(BaseModel):
     Agent evaluates for overlap.
     """
 
-    work_package_id: str
+    work_package_id: NonBlankStr
     description: str
     hazard_categories: list[HazardCategory] = Field(default_factory=list)
     spatial: SpatialCoordinates = Field(default_factory=SpatialCoordinates)
@@ -317,10 +335,12 @@ class WorkPackageState(BaseModel):
         construction time, same as the frame-range half of this defect in
         SpatialCoordinates._frame_range_is_ordered.
         """
+        require_comparable([("scheduled_start", self.scheduled_start),
+                            ("scheduled_end", self.scheduled_end)])
         if (
             self.scheduled_start is not None
             and self.scheduled_end is not None
-            and self.scheduled_start > self.scheduled_end
+            and instant(self.scheduled_start) > instant(self.scheduled_end)
         ):
             raise ValueError(
                 f"scheduled_start ({self.scheduled_start}) must be <= "
