@@ -634,3 +634,7 @@ Reviewed the current `session-07-shift-suggester` tip `4432f5771e662451f84c6e6bd
 **Environment note:** this session's machine was replaced mid-session (worker restart). The rebuilt venv uses `--system-site-packages` plus its own pytest, so plain `pytest` resolves to the venv.
 
 **Next up:** Codex review of Session 8 (8a + 8b) → triage → merge → Session 9 (decision log).
+
+## Review 03 · Session 8
+
+Reviewed `session-08-brief-apply` at `2f94ed570302cc106062c36731592f68fb7553a3` against `main` at `91405be784bc32889c725012d50c45865f5bfc26`, on `review-03`. Included the documentation-only branch update received during review. Findings are in `reviews/review-03-session-08.md`. Four reproduced high-severity issues cover concurrent successor runs, interrupted Apply leaving old reviews open, inherited approval on moved packages, and WS-JF-006 missing the normal graph review gate. A medium finding covers hidden rejection evidence, with a related low-severity test observation. Hold for triage. All 431 tests passed and eval matched its baseline. Sequential Apply/reload/exact-match checks and deterministic recommendation isolation passed within the reported limits.
