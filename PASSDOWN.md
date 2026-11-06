@@ -591,3 +591,20 @@ Reviewed `session-07-shift-suggester` at `f7634875572dce340d1008ce64ba2d0addb047
 ## Review 02 re-check 2
 
 Reviewed the current `session-07-shift-suggester` tip `4432f5771e662451f84c6e6bd14db65592ad374a` on `review-02-recheck2`. S07-03 is confirmed fixed, with no new regression identified. Independent checks covered 96 overhead signal/orientation/frame/time combinations, later-shift recovery, DST separation, purity, ordering and JSON serialization. All 404 tests passed and eval matched the baseline. Review-02 findings are closed for the suggester. The inherited detector/judgment debt remains separately documented. Details are under **Reviewer re-check 2** in `reviews/review-02-session-07.md`. Donnie's merge approval and required CI still apply.
+
+## 32. Session Notes — 2026-11-06: Upgrade Session 8a of 16 -- overhead detection, WS-JF-006, deterministic recommendation
+
+**Branch:** `session-08-brief-apply`, from `main` @ `91405be` (Session 7 and review-02 merged). Not merged. Session 8 is split: **8a** (this entry) changes detection and the brief; **8b** wires suggestions into the brief and reviewer with an Apply that re-checks.
+**Status:** 8a done. 418/418 tests passing (404 → 418); eval 14/14, baseline unchanged.
+
+**Pre-build search:** `_vertically_stacked` read only the spatial flags. `shift_suggester` had its own broader `_is_overhead`. With the LLM on, `generate_safety_brief` took `recommended_action` from the model (rule 7 violation). Nothing called either suggester, and the graph state carries no crews, calendar, or certificates.
+
+**What was built** (commit `3945e39`):
+- `deconfliction.is_overhead()` is the one shared definition (flag OR `working_aloft` / `over_the_side` label), used by detection, its rationale, and the shift suggester.
+- WS-JF-006 (judgment) covers overhead work with no frame range and routes to the **Safety Officer**. It's the first judgment rule not routed to the GFE.
+- Rule 7: the LLM prompt no longer asks for a recommendation; `recommended_action` is always the deterministic text; the LLM may still phrase the summary and precedent.
+- Three older tests updated for the approved change, each with a comment.
+
+**Decisions recorded:** Donnie, 2026-11-06, yes to both detection questions (treat hazard-labelled overhead as overhead; WS-JF-006 to the Safety Officer). Rule-7 decision from 2026-11-05 implemented.
+
+**Next up (8b):** carry crews, calendar, and certificates in graph state; put the crew-shift suggestion in the brief's deterministic recommendation; show it in the reviewer; Apply re-checks against current state before changing anything. Then a Codex review of 8a and 8b together before merge.
