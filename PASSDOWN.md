@@ -579,3 +579,11 @@ Reviewed `session-07-shift-suggester` at `5dfdcbc00786ce28b531e27e1e912c8ff0a1fd
 ## Review 02 re-check
 
 Reviewed `session-07-shift-suggester` at `f7634875572dce340d1008ce64ba2d0addb0475d` on `review-02-recheck`. S07-01, S07-02, S07-04 and S07-05 are confirmed fixed. S07-03 remains open: hazard-only overhead classification with complete overlapping frames bypasses the missing-data guard and the spatial-flag-only detector. Reproduced for moved and fixed overhead jobs. New rejection-reason serialization, mixed reasons/rule IDs, whole-crew refusal, time boundaries and purity checks passed. All 399 tests passed and eval matched the baseline. Details are under **Reviewer re-check** in `reviews/review-02-session-07.md`. Hold for triage of S07-03.
+
+## 31. Session Notes — 2026-11-06: review-02 re-check triage and fix
+
+**Re-check (Codex at `f763487`):** 4 confirmed fixed; S07-03 reopened. Hazard-labelled overhead work with complete frames and the spatial flag unset still got a suggestion directly over other work, because `WS-OH-001` reads the flag only.
+**Builder:** 3/3 variants reproduced; verdict first (`d5f05b6`); fixed in `e5d5794`. The broad overhead signal now drives separation as well as completeness. 404 tests passed; eval baseline unchanged.
+**Lesson (second time, after review-01 R02):** a signal accepted by one check must drive every check it bears on.
+**Open for Donnie:** make detection see hazard-labelled overhead and add `WS-JF-006` (unlocated overhead → Safety Officer)? Both change inherited detection and judgment routing.
+**Next up:** Codex re-check 2 → merge Session 7 → Session 8.

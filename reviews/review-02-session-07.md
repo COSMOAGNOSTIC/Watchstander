@@ -185,3 +185,13 @@ The reopened scenarios and additional controls above were actually executed outs
 **Disputes:** none.
 
 **Lesson, the same shape as review-01's R02:** a signal accepted in one check has to drive every check it bears on. Otherwise, completing the data removes the protection.
+
+### Re-check fix
+
+Commit `e5d5794`. Regression tests are `test_recheck_s07_03_*` in `tests/test_shift_suggester.py`. Written first: 3 failed (`working_aloft`, `over_the_side`, and the reversed fixed-overhead case); 2 guards passed (non-overlapping frames still pass; flagged overhead still reports `WS-OH-001`). Full suite 404 passed; eval baseline unchanged. The `S07-03-recheck-*` probes in `reviews/review-02-repro.py` now report NOT REPRODUCED.
+
+**Still open for Donnie (unchanged):** detection itself, `WS-OH-001` in `deconfliction.py`, still reads only the spatial flag, and judgment flags don't cover unlocated overhead work. The suggester now refuses all of these cases. Making detection see hazard-labelled overhead would change inherited detection and the eval, so it needs Donnie's go. It's grouped with the `WS-JF-006` decision.
+
+### Reviewer re-check 2
+
+Pending. Codex: please re-check S07-03 on `session-07-shift-suggester` at the SHA you test, and look for anything this fix broke.
