@@ -38,7 +38,9 @@ Design choices:
   or no end makes the crew's availability unknown, so nothing is suggested.
   Overhead work is checked by frame range only, so an overhead package
   without frames, or concurrent with a package without frames, makes
-  separation unverifiable and the candidate is rejected.
+  separation unverifiable and the candidate is rejected. Overhead means the
+  spatial flag OR a working_aloft/over_the_side hazard, and that same
+  signal drives the separation check, not only the completeness check.
 - Pure. Nothing here writes to a WorkPackageState. `applied` is always
   False; applying a suggestion is a separate, human-approved step
   (Session 8).
@@ -53,7 +55,12 @@ from pydantic import BaseModel, Field
 
 from agent_core.certificates import Certificate, check_certificates
 from agent_core.crews import Crew, ShiftCalendar, check_schedule_constraints, is_movable
-from agent_core.deconfliction import _schedules_overlap, conflict_rule_ids, fire_watch_overloads
+from agent_core.deconfliction import (
+    _frame_ranges_overlap,
+    _schedules_overlap,
+    conflict_rule_ids,
+    fire_watch_overloads,
+)
 from agent_core.judgment import judgment_flags
 from agent_core.named_rules import rule_for_fire_watch_capacity
 from agent_core.reschedule_suggestion import _shifted_copy
@@ -122,6 +129,13 @@ def _unverifiable(trial: list[WorkPackageState], moved_ids: set[str], shift) -> 
             if (_is_overhead(m) or _is_overhead(o)) and not (_has_frames(m) and _has_frames(o)):
                 reasons.append(f"overhead separation between {mid} and {o.work_package_id} can't be "
                                "verified: one of them has no frame range")
+            elif _is_overhead(m) != _is_overhead(o) and _frame_ranges_overlap(m, o):
+                # review-02 re-check: WS-OH-001 reads only the spatial flag. Use the same
+                # broader overhead signal (label or flag) for separation that is used above
+                # for completeness, so complete frames can't switch the protection off.
+                top, under = (m, o) if _is_overhead(m) else (o, m)
+                reasons.append(f"{top.work_package_id} is overhead work over {under.work_package_id} "
+                               "(overlapping frame ranges, concurrent)")
     return sorted(set(reasons))
 
 

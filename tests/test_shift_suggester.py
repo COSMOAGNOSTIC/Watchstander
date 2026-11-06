@@ -298,3 +298,42 @@ def test_s07_03_moving_under_a_fixed_unlocated_overhead_job_is_unverifiable():
                     spatial=SC(is_aloft=True), scheduled_start=day(15, 30), scheduled_end=day(17), crew_id="CR-TANK")
     out = run([mover, fixed_aloft], max_shifts=1)
     assert out.suggestion is None and any("ALOFT-FIXED" in x for x in out.rejected[0].reasons)
+
+
+# ===== review-02 re-check: S07-03 reopened =====
+
+
+def _framed(pid, hz, crew, start, end, aloft=False):
+    return W(work_package_id=pid, description="n", hazard_categories=hz,
+             spatial=SC(frame_start=40, frame_end=44, is_aloft=aloft), scheduled_start=start, scheduled_end=end, crew_id=crew)
+
+
+@pytest.mark.parametrize("hz", [H.WORKING_ALOFT, H.OVER_THE_SIDE])
+def test_recheck_s07_03_hazard_labelled_overhead_over_framed_work_is_rejected(hz):
+    a = _framed("ALOFT", [hz], "CR-WELD", day(7), day(8))
+    b = _framed("BELOW", [], "CR-TANK", day(15, 30), day(17))
+    out = run([a, b], target="ALOFT", max_shifts=1)
+    assert out.suggestion is None
+    assert any("ALOFT is overhead work over BELOW" in x for x in out.rejected[0].reasons)
+
+
+def test_recheck_s07_03_moving_under_a_fixed_hazard_labelled_overhead_job_is_rejected():
+    mover = _framed("MOVER", [], "CR-WELD", day(7), day(8))
+    fixed = _framed("ALOFT-FIXED", [H.WORKING_ALOFT], "CR-TANK", day(15, 30), day(17))
+    out = run([mover, fixed], target="MOVER", max_shifts=1)
+    assert out.suggestion is None
+    assert any("ALOFT-FIXED is overhead work over MOVER" in x for x in out.rejected[0].reasons)
+
+
+def test_recheck_s07_03_labelled_overhead_with_non_overlapping_frames_passes():
+    a = _framed("ALOFT", [H.WORKING_ALOFT], "CR-WELD", day(7), day(8))
+    b = W(work_package_id="BELOW", description="n", spatial=SC(frame_start=90, frame_end=95),
+          scheduled_start=day(15, 30), scheduled_end=day(17), crew_id="CR-TANK")
+    assert run([a, b], target="ALOFT").suggestion is not None
+
+
+def test_recheck_s07_03_flagged_overhead_still_reports_the_catalogue_rule():
+    a = _framed("ALOFT", [H.WORKING_ALOFT], "CR-WELD", day(7), day(8), aloft=True)
+    b = _framed("BELOW", [], "CR-TANK", day(15, 30), day(17))
+    out = run([a, b], target="ALOFT", max_shifts=1)
+    assert "WS-OH-001" in out.rejected[0].rule_ids
