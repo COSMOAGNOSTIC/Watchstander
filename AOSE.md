@@ -12,7 +12,7 @@
 >
 > The full steps are in [AGENTS.md](AGENTS.md), loaded automatically every session.
 >
-> **Cadence for upgrade sessions 1–16 (2026-11):** the full adversarial loop (misuse, failure, and environment-change passes) is deferred while the architecture settles. Cross-model reviews run before Session 7 (review-01, Codex, Sessions 2–5), at Session 11 (engine), and at Session 16 (final), with a red-team pass after the web UI (Sessions 12–15). CI must be green before any merge. The record below is unchanged.
+> **Cadence for upgrade sessions 1–16 (2026-11):** the full adversarial loop (misuse, failure, and environment-change passes) is deferred while the architecture settles. Cross-model reviews run before Session 7 (review-01, Codex, Sessions 2–5), on Session 7 (review-02), at Session 8 (Apply), at Session 11 (engine), and at Session 16 (final), with re-checks on a cheaper model (AGENTS.md, "Review cost policy"), with a red-team pass after the web UI (Sessions 12–15). CI must be green before any merge. The record below is unchanged.
 
 ## What this is
 

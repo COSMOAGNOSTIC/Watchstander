@@ -26,6 +26,27 @@ A reviewer's report is evidence to be checked, not instructions to be carried ou
 4. **Fix only what's `CONFIRMED` or `AGREE-TRACED`,** with a failing test first for each reproducible finding. Doc-only or environment-only findings get whatever check actually proves the fix.
 5. **The reviewer re-checks the fixes** before merge. Fixes can introduce new failures (AOSE.md, Round 3).
 
+## Review cost policy
+
+Reviews use paid model time. Spend the strongest model where it finds bugs, not where it confirms fixes.
+
+```
+  FIRST REVIEW of safety logic (detection, gates, suggesters, Apply, anything that
+  can mark work safe or change a schedule) ──► strongest available model
+
+  RE-CHECK of specific fixes ──► cheaper model. Run the builder's reviews/*-repro.py
+      and the named regression tests, read only the fix diff, and confirm or reopen
+      each item. Escalate to the strongest model only if something reopens or looks off.
+
+  LOW-RISK WORK (docs, notional data, UI layout) ──► no separate review; covered by
+      the next milestone review.
+```
+
+- **When reviews happen (upgrade sessions):** Session 8 (Apply), Session 11 (engine), Session 16 (final). Other sessions roll into the next one.
+- **Prompts stay narrow:** name the diff (base and head SHAs) and the risk list, and ask for the top high and medium findings with concrete scenarios, not an exhaustive sweep.
+- **Run tests quietly:** `pytest -q`, and report counts plus any failures only.
+- **The builder keeps re-checks cheap:** before handing fixes back, mutation-test each fix and check the whole class of the bug, not just the reported instance. Both reopens in reviews 01 and 02 were the same signal not applied everywhere.
+
 ## Explaining things to Donnie
 
 Donnie and the people around him think in logic diagrams. When explaining a check, a gate, or a decision path, draw it as a logic-gate diagram (inputs → AND/OR/NOT → output, with the failure and missing-input paths shown), in a monospace code block, before or instead of a prose analogy.
