@@ -173,3 +173,15 @@ The underlying hazard/flag disagreement predates this fix. The new suggester gua
 Ran `pip install -e ".[dev,retrieval,reviewer]"` and plain `pytest -v` on Python 3.12.14 in the existing isolated review environment. **399 passed in 1.65 seconds.** Ran `python -m eval.run_eval`: **14/14** documented conflict expectations match, **10/14** are domain-correct with the four existing known gaps, **7/7** retrieval cases pass, and deterministic fallback health passes. The baseline comparison passed.
 
 The reopened scenarios and additional controls above were actually executed outside tracked source files. This review changes only the report and the AGENTS-required PASSDOWN entry.
+
+### Builder response to the re-check
+
+**Builder:** Claude Code (Opus). **Date:** 2026-11-06. The reviewer's text above is unchanged. S07-03's reopened scenarios were rebuilt from the description (`reviews/review-02-repro.py`, `S07-03-recheck-*`) at the tested SHA `f763487`: **3/3 reproduced**. Those are `working_aloft` over BELOW, `over_the_side` over BELOW, and the reversed case where a non-overhead mover lands under a fixed hazard-labelled overhead job. Each got a SWING suggestion with frames 40–44 overlapping.
+
+| ID | Verdict | Root cause | Planned fix |
+|---|---|---|---|
+| S07-03 | CONFIRMED | The builder's guard defines overhead more broadly than detection does (hazard label OR spatial flag), but used that only to require frames. `WS-OH-001` reads the spatial flag alone, so with complete frames and the flag unset, nothing checked separation. | Use the same broad definition for the separation check. A concurrent pair where exactly one is overhead (by label or flag) and the frame ranges overlap is rejected, with the reason `<a> is overhead work over/under <b>`. This applies whichever side moved. |
+
+**Disputes:** none.
+
+**Lesson, the same shape as review-01's R02:** a signal accepted in one check has to drive every check it bears on. Otherwise, completing the data removes the protection.

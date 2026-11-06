@@ -97,3 +97,29 @@ def _():
 print(f"\nreproduced: {sorted(k for k, v in results.items() if v)}")
 print(f"not reproduced: {sorted(k for k, v in results.items() if v is False)}")
 print(f"errors: {sorted(k for k, v in results.items() if v is None)}")
+
+
+# ---- re-check: S07-03 reopened (hazard-labelled overhead, spatial flag unset, frames complete) ----
+def _labelled(pid, hz, crew, start, end):
+    return W(work_package_id=pid, description="notional", hazard_categories=hz,
+             spatial=SC(frame_start=40, frame_end=44), scheduled_start=start, scheduled_end=end, crew_id=crew)
+
+
+for label, hz in (("working_aloft", [H.WORKING_ALOFT]), ("over_the_side", [H.OVER_THE_SIDE])):
+    @probe(f"S07-03-recheck-{label}")
+    def _(hz=hz):
+        a = _labelled("ALOFT", hz, "CR-WELD", d(7), d(8))
+        b = _labelled("BELOW", [], "CR-TANK", d(15, 30), d(17))
+        s = suggest_crew_shift([a, b], "ALOFT", crews=CREWS, calendar=CAL, certificates=[], max_shifts=1).suggestion
+        return s is not None, f"suggestion={None if s is None else s.to_shift_id} directly over BELOW at frames 40-44"
+
+
+@probe("S07-03-recheck-reversed")
+def _():
+    mover = _labelled("MOVER", [], "CR-WELD", d(7), d(8))
+    fixed = _labelled("ALOFT-FIXED", [H.WORKING_ALOFT], "CR-TANK", d(15, 30), d(17))
+    s = suggest_crew_shift([mover, fixed], "MOVER", crews=CREWS, calendar=CAL, certificates=[], max_shifts=1).suggestion
+    return s is not None, f"suggestion={None if s is None else s.to_shift_id} directly under fixed ALOFT-FIXED"
+
+
+print(f"\nafter re-check probes -- reproduced: {sorted(k for k, v in results.items() if v)}")
