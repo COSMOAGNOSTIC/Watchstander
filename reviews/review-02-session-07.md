@@ -194,4 +194,34 @@ Commit `e5d5794`. Regression tests are `test_recheck_s07_03_*` in `tests/test_sh
 
 ### Reviewer re-check 2
 
-Pending. Codex: please re-check S07-03 on `session-07-shift-suggester` at the SHA you test, and look for anything this fix broke.
+Tested the current branch tip **`4432f5771e662451f84c6e6bd14db65592ad374a`** on `session-07-shift-suggester`. The remote still referenced that SHA after testing.
+
+**S07-03 — confirmed fixed.** The original hazard-only overhead job at frames 40–44 can no longer be suggested over concurrent work at those frames. Reproduced the original setup for both `working_aloft` and `over_the_side`, then reversed the arrangement so the fixed package was overhead. Each candidate is refused with a reason naming the overhead and underlying package. The builder's three `S07-03-recheck-*` probes also report NOT REPRODUCED.
+
+No new regression was identified in this change. Together with the previous re-check's four confirmed fixes, the review-02 findings are closed for the crew shift suggester. The builder's documented inherited detector/judgment limitations remain separate, and merge still requires Donnie's approval and the repository's CI checks.
+
+The separation decision now uses the same overhead signal as the completeness guard.
+
+```text
+overhead hazard label OR spatial overhead flag
+                       |
+     exactly one overhead + concurrent schedules
+                       |
+              complete frame ranges
+                 /             \
+             overlap          disjoint
+                |                |
+       reject with reason    continue other checks
+```
+
+**Additional checks actually run:**
+
+- Exercised 96 combinations of overhead hazard, spatial flag presence, moved/fixed orientation, overlapping/touching/disjoint frames, and overlapping/touching/disjoint/unknown schedules. All matched the expected candidate acceptance or rejection. Touching frame and schedule endpoints remain conflicts under the existing closed-interval convention.
+- Verified that each rejected pair names the correct overhead package, including the fixed-overhead case. Spatially flagged overhead continues to include `WS-OH-001` in `rule_ids`, alongside the new explanatory reason.
+- Verified a clean later shift remains selectable after the first shift is rejected for overhead separation. Rejection evidence is retained for the attempted shift.
+- Exercised the repeated daylight-saving hour with overlapping local clock readings representing distinct UTC intervals. The candidate is allowed when the actual work windows are separated.
+- Every matrix case preserved the supplied packages, produced the same outcome with reversed input order, and round-tripped through JSON. Successful suggestions remained `applied=False`.
+
+**Verification.** Ran `pip install -e ".[dev,retrieval,reviewer]"` followed by plain `pytest -v` on Python 3.12.14 in the existing isolated review environment. **404 passed in 1.62 seconds.** Ran `python -m eval.run_eval`: **14/14** documented conflict expectations match, **10/14** are domain-correct with the four existing known gaps, **7/7** retrieval cases pass, and deterministic fallback health passes. The baseline comparison passed.
+
+The historical reproduction script still labels S07-02 and S07-04 as ERROR for the previously documented probe dereference/input-refusal reasons. Their regression tests pass in the full suite. All additional probes were outside tracked source files. This commit contains this review update and the AGENTS-required PASSDOWN entry.

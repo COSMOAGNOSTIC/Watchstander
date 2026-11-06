@@ -587,3 +587,7 @@ Reviewed `session-07-shift-suggester` at `f7634875572dce340d1008ce64ba2d0addb047
 **Lesson (second time, after review-01 R02):** a signal accepted by one check must drive every check it bears on.
 **Open for Donnie:** make detection see hazard-labelled overhead and add `WS-JF-006` (unlocated overhead → Safety Officer)? Both change inherited detection and judgment routing.
 **Next up:** Codex re-check 2 → merge Session 7 → Session 8.
+
+## Review 02 re-check 2
+
+Reviewed the current `session-07-shift-suggester` tip `4432f5771e662451f84c6e6bd14db65592ad374a` on `review-02-recheck2`. S07-03 is confirmed fixed, with no new regression identified. Independent checks covered 96 overhead signal/orientation/frame/time combinations, later-shift recovery, DST separation, purity, ordering and JSON serialization. All 404 tests passed and eval matched the baseline. Review-02 findings are closed for the suggester. The inherited detector/judgment debt remains separately documented. Details are under **Reviewer re-check 2** in `reviews/review-02-session-07.md`. Donnie's merge approval and required CI still apply.
