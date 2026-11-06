@@ -25,6 +25,8 @@ from __future__ import annotations
 import html
 import uuid
 
+from urllib.parse import quote
+
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -68,7 +70,7 @@ def _provenance_class(provenance: str | None) -> str:
 
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard() -> str:
+def dashboard(msg: str = "") -> str:
     pending = service.list_pending_reviews()
     decided = service.list_decided()
 
@@ -92,7 +94,9 @@ def dashboard() -> str:
         decided_rows = "\n".join(
             f'<div class="decided">{html.escape(d["work_package_id"])} '
             f'&mdash; {html.escape(str(d["disposition"]))} '
-            f'(cleared_for_execution={d["cleared_for_execution"]})</div>'
+            f'(cleared_for_execution={d["cleared_for_execution"]})'
+            + (f' &mdash; superseded by run {html.escape(d["superseded_by"])}' if d.get("superseded_by") else "")
+            + '</div>'
             for d in decided
         )
     else:
@@ -101,6 +105,7 @@ def dashboard() -> str:
     return f"""<!doctype html><html><head><title>Watchstander HITL Reviewer</title>{_PAGE_STYLE}</head>
     <body>
         <h1>Watchstander &mdash; Safety Review Queue</h1>
+        {f'<div class="card"><p>{html.escape(msg)}</p></div>' if msg else ''}
         <form method="post" action="/seed-demo">
             <button type="submit">Seed a real ACUSHNET demo run</button>
         </form>
@@ -137,6 +142,14 @@ def review_detail(thread_id: str, interrupt_id: str) -> HTMLResponse:
             <p><strong>Precedent context:</strong> {html.escape(b.get('precedent_context', ''))}</p>
             <p><strong>Recommended action:</strong> {html.escape(b.get('recommended_action', ''))}</p>
         """
+        if (b.get("shift_outcome") or {}).get("suggestion"):
+            brief_html += f"""
+            <form method="post" action="/review/{html.escape(thread_id)}/{html.escape(interrupt_id)}/apply">
+                <p>Apply re-checks every rule against this run first. If the move still holds,
+                it starts a new run with the moved times, supersedes this run's open reviews,
+                and every moved package still needs a human decision. Apply never approves.</p>
+                <button type="submit">Apply schedule change (re-checks first)</button>
+            </form>"""
 
     return f"""<!doctype html><html><head><title>Review {html.escape(review.work_package_id)}</title>
     {_PAGE_STYLE}</head><body>
@@ -160,6 +173,12 @@ def review_detail(thread_id: str, interrupt_id: str) -> HTMLResponse:
             <button class="reject" type="submit" name="decision" value="reject">Reject</button>
         </form>
     </body></html>"""
+
+
+@app.post("/review/{thread_id}/{interrupt_id}/apply")
+def apply_review(thread_id: str, interrupt_id: str) -> RedirectResponse:
+    result = service.apply_shift_suggestion(thread_id, interrupt_id)
+    return RedirectResponse(url=f"/?msg={quote(result.message)}", status_code=303)
 
 
 @app.post("/review/{thread_id}/{interrupt_id}")

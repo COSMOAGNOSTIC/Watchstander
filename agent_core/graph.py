@@ -35,6 +35,11 @@ class GraphState(TypedDict):
     work_packages: list[WorkPackageState]
     reviewed_packages: Annotated[list[WorkPackageState], operator.add]
     requires_hitl_review: bool
+    # Session 8b: an untouched copy of what the run was seeded with (packages before
+    # any node annotated them, plus crews, shift calendar, certificates), as plain
+    # dicts. No node writes to it; reasoning reads it for crew-shift suggestions and
+    # the reviewer's Apply re-checks against it. Optional: absent means no crew data.
+    run_inputs: dict
 
 
 def build_graph(checkpointer: SqliteSaver | None = None):

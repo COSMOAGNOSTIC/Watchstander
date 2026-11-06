@@ -170,6 +170,12 @@ class SafetyBrief(BaseModel):
     recommended_action: str = Field(
         description="Concrete deconfliction step, e.g. reschedule, add a barrier, verify permit"
     )
+    shift_outcome: Optional[dict] = Field(
+        default=None,
+        description="Session 8b: the deterministic crew-shift suggester's outcome for this "
+        "package (agent_core/shift_suggester.py, CrewShiftOutcome dumped), or None when the "
+        "run carried no crew/shift calendar data. Never applied by the brief.",
+    )
     source: str = Field(
         description="How this brief was generated: 'llm', 'deterministic-fallback' (LLM "
         "unavailable), or 'deterministic-template' (LLM deliberately not used)"

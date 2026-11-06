@@ -22,11 +22,23 @@ from pathlib import Path
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
+from agent_core.certificates import Certificate
+from agent_core.crews import Crew, ShiftCalendar
 from agent_core.demo_fixtures import acushnet_demo_work_packages
 from agent_core.graph import build_graph
+from agent_core.shift_suggester import suggest_crew_shift
+from agent_core.state import WorkPackageState
 from reviewer import registry
 
 DEFAULT_DB_PATH = str(Path(__file__).parent / "reviewer_state.db")
+
+
+@dataclass(frozen=True)
+class ApplyResult:
+    """Outcome of the reviewer's Apply. `applied` False means nothing changed."""
+    applied: bool
+    message: str
+    new_thread_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -65,18 +77,95 @@ class ReviewerService:
     def close(self) -> None:
         self._conn.close()
 
+    def seed_run(self, thread_id: str, packages: list[WorkPackageState], *, crews=None,
+                 calendar=None, certificates=None, label: str = "run") -> None:
+        """
+        Session 8b: run `packages` through the real graph, keeping an untouched copy of
+        the inputs in state (`run_inputs`) so reasoning can suggest crew-shift moves and
+        Apply can re-check against exactly what this run was seeded with.
+        """
+        run_inputs = {
+            "packages": [p.model_dump() for p in packages],
+            "crews": [c.model_dump() for c in crews] if crews else [],
+            "calendar": calendar.model_dump() if calendar else None,
+            "certificates": [c.model_dump() for c in certificates] if certificates else [],
+        }
+        config = {"configurable": {"thread_id": thread_id}}
+        self._graph.invoke(
+            {"work_packages": [p.model_copy(deep=True) for p in packages], "reviewed_packages": [],
+             "run_inputs": run_inputs},
+            config=config,
+        )
+        registry.register_thread(self.db_path, thread_id, label=label)
+
+    def run_inputs(self, thread_id: str) -> dict | None:
+        state = self._graph.get_state({"configurable": {"thread_id": thread_id}})
+        return state.values.get("run_inputs")
+
+    def apply_shift_suggestion(self, thread_id: str, interrupt_id: str) -> ApplyResult:
+        """
+        Session 8b. Re-run the crew-shift suggester against this run's inputs. Only if
+        it returns exactly the move the brief showed:
+          - start a NEW run with the moved times, every moved package marked
+            requires_hitl_review (Apply never approves; the move gets a human decision);
+          - close every still-pending review in the OLD run as rejected, noting it was
+            superseded (those judgments were made against a schedule that no longer
+            exists), and record the supersession.
+        Otherwise nothing changes and the result says why.
+        """
+        review = self.get_pending_review(thread_id, interrupt_id)
+        if review is None:
+            return ApplyResult(False, "Not applied: no pending review found for that package.")
+        shown = (review.safety_brief or {}).get("shift_outcome") or {}
+        if not shown.get("suggestion"):
+            return ApplyResult(False, f"Not applied: the brief for {review.work_package_id} has no suggestion to apply.")
+        inputs = self.run_inputs(thread_id)
+        if not inputs or not inputs.get("crews") or not inputs.get("calendar"):
+            return ApplyResult(False, "Not applied: this run has no crew or shift calendar data.")
+
+        packages = [WorkPackageState.model_validate(p) for p in inputs["packages"]]
+        crews = [Crew.model_validate(c) for c in inputs["crews"]]
+        calendar = ShiftCalendar.model_validate(inputs["calendar"])
+        certificates = [Certificate.model_validate(c) for c in inputs.get("certificates") or []]
+        fresh = suggest_crew_shift(packages, review.work_package_id, crews=crews,
+                                   calendar=calendar, certificates=certificates)
+        if fresh.suggestion is None or fresh.suggestion.model_dump() != shown["suggestion"]:
+            why = fresh.reason or "the re-check produced a different move"
+            return ApplyResult(False, f"Not applied: the suggestion no longer holds ({why}). Nothing was changed.")
+
+        moved = {m.work_package_id: m for m in fresh.suggestion.moves}
+        new_packages = []
+        for p in packages:
+            if p.work_package_id in moved:
+                m = moved[p.work_package_id]
+                data = p.model_dump()
+                data.update(scheduled_start=m.suggested_start, scheduled_end=m.suggested_end,
+                            requires_hitl_review=True)
+                p = WorkPackageState.model_validate(data)
+            new_packages.append(p)
+
+        new_thread = f"{thread_id}-applied-{interrupt_id[:8]}"
+        self.seed_run(new_thread, new_packages, crews=crews, calendar=calendar, certificates=certificates,
+                      label=f"schedule change applied from {thread_id}")
+        for pending in [r for r in self.list_pending_reviews() if r.thread_id == thread_id]:
+            self.submit_decision(thread_id, pending.interrupt_id, "reject",
+                                 f"superseded: schedule change applied in run {new_thread}")
+        registry.mark_superseded(self.db_path, thread_id, new_thread)
+        return ApplyResult(
+            True,
+            f"Schedule change applied in run {new_thread}: crew {fresh.suggestion.crew_id} moved to "
+            f"{fresh.suggestion.to_shift_id}. Every moved package still needs review; "
+            f"the reviews in run {thread_id} were superseded.",
+            new_thread,
+        )
+
     def seed_demo(self, thread_id: str) -> None:
         """Runs the real ACUSHNET demo work packages through the REAL
         graph -- real deconfliction, real reasoning (deterministic
         fallback unless ANTHROPIC_API_KEY is set), a real interrupt()
         for every flagged package. Not the scripted event replay
         visualizer/demo_broadcaster.py uses."""
-        config = {"configurable": {"thread_id": thread_id}}
-        self._graph.invoke(
-            {"work_packages": acushnet_demo_work_packages(), "reviewed_packages": []},
-            config=config,
-        )
-        registry.register_thread(self.db_path, thread_id, label="ACUSHNET demo run")
+        self.seed_run(thread_id, acushnet_demo_work_packages(), label="ACUSHNET demo run")
 
     def list_pending_reviews(self) -> list[PendingReview]:
         pending: list[PendingReview] = []
@@ -135,6 +224,7 @@ class ReviewerService:
                             "work_package_id": wp.work_package_id,
                             "disposition": wp.hitl_disposition,
                             "cleared_for_execution": wp.cleared_for_execution,
+                            "superseded_by": registry.superseded_by(self.db_path, thread_id),
                         }
                     )
         return decided

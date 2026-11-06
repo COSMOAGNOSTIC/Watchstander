@@ -32,6 +32,7 @@ from agent_core.deconfliction import MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH
 from agent_core.procedural_lookup import cite_governing_procedure
 from agent_core.retrieval import cite_best_matching_case
 from agent_core.state import SafetyBrief, WorkPackageState
+from agent_core.validation import fmt_time
 
 _SYSTEM_PROMPT = (
     "You are a shipyard safety synthesis assistant. You are given a "
@@ -220,8 +221,33 @@ def _partnerless_fallback(context: dict) -> dict:
     }
 
 
-def generate_safety_brief(wp: WorkPackageState) -> SafetyBrief:
+def describe_shift_outcome(outcome) -> str:
+    """
+    Session 8b: the deterministic sentence the brief adds about a crew-shift move
+    (rule 7: never model-generated). `outcome` is a CrewShiftOutcome, or None when
+    the run carried no crew/shift calendar data.
+    """
+    if outcome is None:
+        return "No crew-shift suggestion: this run has no crew or shift calendar data."
+    s = outcome.suggestion
+    if s is None:
+        tried = f" ({len(outcome.rejected)} later shift(s) checked and rejected)" if outcome.rejected else ""
+        return f"No crew-shift suggestion: {outcome.reason}{tried}"
+    moves = "; ".join(
+        f"{m.work_package_id} {fmt_time(m.original_start)} -> {fmt_time(m.suggested_start)}"
+        for m in s.moves
+    )
+    return (
+        f"Suggested, not applied: move crew {s.crew_id}'s block from {s.from_shift_id} to "
+        f"{s.to_shift_id} ({moves}). Apply re-checks every rule first, and every moved "
+        f"package still needs a human decision."
+    )
+
+
+def generate_safety_brief(wp: WorkPackageState, shift_outcome=None) -> SafetyBrief:
     context = _grounding_context(wp)
+    shift_text = describe_shift_outcome(shift_outcome)
+    shift_dump = shift_outcome.model_dump() if shift_outcome is not None else None
 
     if not wp.conflicts:
         # Partner-less flag: deterministic only, so no model can invent a partner.
@@ -230,7 +256,8 @@ def generate_safety_brief(wp: WorkPackageState) -> SafetyBrief:
         return SafetyBrief(
             executive_summary=tagged_summary,
             precedent_context=fields["precedent_context"],
-            recommended_action=fields["recommended_action"],
+            recommended_action=f"{fields['recommended_action']} {shift_text}",
+            shift_outcome=shift_dump,
             source=source,
         )
 
@@ -241,15 +268,38 @@ def generate_safety_brief(wp: WorkPackageState) -> SafetyBrief:
     else:
         fields, source = dict(deterministic), "deterministic-fallback"
     # Rule 7: the recommendation is always the deterministic one, whatever the model returned.
-    fields["recommended_action"] = deterministic["recommended_action"]
+    fields["recommended_action"] = f"{deterministic['recommended_action']} {shift_text}"
 
     tagged_summary = f"{provenance_tag(source)} {fields['executive_summary']}"
     return SafetyBrief(
         executive_summary=tagged_summary,
         precedent_context=fields["precedent_context"],
         recommended_action=fields["recommended_action"],
+        shift_outcome=shift_dump,
         source=source,
     )
+
+
+def _shift_outcomes(packages, flagged, run_inputs) -> dict:
+    """
+    Session 8b: run the deterministic crew-shift suggester for each flagged package,
+    if the run was seeded with crews and a shift calendar. Returns {} otherwise, which
+    the brief reports as "no crew or shift calendar data". Never applies anything.
+    """
+    if not run_inputs or not run_inputs.get("crews") or not run_inputs.get("calendar"):
+        return {}
+    from agent_core.certificates import Certificate
+    from agent_core.crews import Crew, ShiftCalendar
+    from agent_core.shift_suggester import suggest_crew_shift
+
+    crews = [Crew.model_validate(c) for c in run_inputs["crews"]]
+    calendar = ShiftCalendar.model_validate(run_inputs["calendar"])
+    certificates = [Certificate.model_validate(c) for c in run_inputs.get("certificates") or []]
+    return {
+        wp.work_package_id: suggest_crew_shift(packages, wp.work_package_id, crews=crews,
+                                               calendar=calendar, certificates=certificates)
+        for wp in flagged
+    }
 
 
 def reasoning_node(state: dict) -> dict:
@@ -267,8 +317,9 @@ def reasoning_node(state: dict) -> dict:
             "reasoning_start",
             work_package_ids=[wp.work_package_id for wp in flagged],
         )
+    outcomes = _shift_outcomes(packages, flagged, state.get("run_inputs"))
     for wp in flagged:
-        wp.safety_brief = generate_safety_brief(wp)
+        wp.safety_brief = generate_safety_brief(wp, outcomes.get(wp.work_package_id))
     if flagged:
         events.emit(
             "reasoning_result",

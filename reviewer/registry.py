@@ -28,8 +28,34 @@ def _connect(db_path: str) -> sqlite3.Connection:
         "created_at TEXT DEFAULT CURRENT_TIMESTAMP"
         ")"
     )
+    # Session 8b: a run whose reviews were replaced by an applied schedule change.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS superseded ("
+        "thread_id TEXT PRIMARY KEY, "
+        "superseded_by TEXT NOT NULL"
+        ")"
+    )
     conn.commit()
     return conn
+
+
+def mark_superseded(db_path: str, thread_id: str, superseded_by: str) -> None:
+    conn = _connect(db_path)
+    try:
+        conn.execute("INSERT OR REPLACE INTO superseded (thread_id, superseded_by) VALUES (?, ?)",
+                     (thread_id, superseded_by))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def superseded_by(db_path: str, thread_id: str) -> str | None:
+    conn = _connect(db_path)
+    try:
+        row = conn.execute("SELECT superseded_by FROM superseded WHERE thread_id = ?", (thread_id,)).fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
 
 
 def register_thread(db_path: str, thread_id: str, label: str) -> None:

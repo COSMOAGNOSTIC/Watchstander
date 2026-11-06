@@ -100,7 +100,9 @@ def test_llm_recommendation_is_never_used(monkeypatch):
     b = generate_safety_brief(_flagged_pair())
     assert b.source == "llm"
     assert "MODEL SAYS" not in b.recommended_action
-    assert b.recommended_action == reasoning._deterministic_fallback(reasoning._grounding_context(_flagged_pair()))["recommended_action"]
+    # Session 8b appends the deterministic crew-shift sentence; the whole text stays deterministic.
+    expected = reasoning._deterministic_fallback(reasoning._grounding_context(_flagged_pair()))["recommended_action"]
+    assert b.recommended_action == f"{expected} {reasoning.describe_shift_outcome(None)}"
 
 
 def test_llm_may_still_phrase_the_summary(monkeypatch):
