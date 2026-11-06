@@ -608,3 +608,29 @@ Reviewed the current `session-07-shift-suggester` tip `4432f5771e662451f84c6e6bd
 **Decisions recorded:** Donnie, 2026-11-06, yes to both detection questions (treat hazard-labelled overhead as overhead; WS-JF-006 to the Safety Officer). Rule-7 decision from 2026-11-05 implemented.
 
 **Next up (8b):** carry crews, calendar, and certificates in graph state; put the crew-shift suggestion in the brief's deterministic recommendation; show it in the reviewer; Apply re-checks against current state before changing anything. Then a Codex review of 8a and 8b together before merge.
+
+## 33. Session Notes — 2026-11-06: Upgrade Session 8b of 16 -- suggestion in the brief and reviewer, Apply that re-checks
+
+**Branch:** `session-08-brief-apply` (8a + 8b). Not merged; a Codex review of 8a and 8b together comes first.
+**Status:** 8b done. 431/431 tests passing (418 → 431); eval 14/14, baseline unchanged.
+
+**Pre-build search:** each flagged package gets its own `interrupt()`, resumed by the reviewer's approve/reject. A run's packages are fixed at seed time. Nothing carried crews, calendar, or certificates into a run, and nothing called either suggester.
+
+**What was built** (commit `b3bf591`):
+- `GraphState.run_inputs`: an untouched copy of the seeded inputs (plain dicts).
+- `reasoning_node` calls `suggest_crew_shift` per flagged package when crew data exists. `SafetyBrief.shift_outcome` holds the outcome, and `recommended_action` gains a deterministic sentence (suggested-not-applied / no suggestion and why / no crew data).
+- `ReviewerService.seed_run`, `run_inputs`, and `apply_shift_suggestion`. Apply re-runs the suggester on the run's inputs and proceeds only on an exact match with the brief. It then: starts a new run with the moved times, with moved packages `requires_hitl_review` (never approves); rejects the old run's pending reviews as superseded; and records that in `registry`. Otherwise nothing changes.
+- Reviewer UI: the suggestion in the brief, an Apply form that explains the re-check, the outcome on the dashboard, and superseded runs labelled.
+- Mutation-checked on the three safety properties.
+
+**Design choice, for the review:** Apply supersedes the *whole* old run, including already-approved packages in it. Their approvals were made against a schedule that no longer exists, so the new run re-reviews everything that is flagged.
+
+**Known gaps (for the review / Session 11):**
+- The demo fixture has no crews or calendar, so the ACUSHNET demo never shows a suggestion; Session 10's notional dataset fixes that.
+- Apply re-checks against the run's own inputs. There is no live "current yard state" outside a run yet.
+- `run_inputs` adds more types to the checkpoint; the existing msgpack "unregistered type" warning debt still applies.
+- The new-run ID is derived (`<thread>-applied-<interrupt prefix>`). A second Apply on the same review is impossible because the old review is closed, but this hasn't been stress-tested.
+
+**Environment note:** this session's machine was replaced mid-session (worker restart). The rebuilt venv uses `--system-site-packages` plus its own pytest, so plain `pytest` resolves to the venv.
+
+**Next up:** Codex review of Session 8 (8a + 8b) → triage → merge → Session 9 (decision log).
