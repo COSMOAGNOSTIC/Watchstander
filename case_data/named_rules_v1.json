@@ -293,6 +293,16 @@
       "contact_role": "Gas Free Engineer",
       "escalation_role": "Safety Officer",
       "note": "Judgment flag, not a violation (review-01 R08). Detection reads only hazard_categories, so a confined-space entry marked by is_enclosed_or_confined or an entry permit, or hot work marked only by a hot-work permit, is invisible to WS-HZ rules. Routed so a person can correct the classification. No citation."
+    },
+    {
+      "rule_id": "WS-JF-006",
+      "title": "Overhead work with no frame range",
+      "category": "judgment",
+      "applies_to": [],
+      "citations": [],
+      "contact_role": "Safety Officer",
+      "escalation_role": null,
+      "note": "Judgment flag, not a violation (Session 8a, after review-02). Overhead work (aloft/over-side flag or working_aloft/over_the_side hazard) is checked against other work by frame range only (WS-OH-001), so without a complete frame range nothing below it can be detected. Routed to the Safety Officer, not the Gas Free Engineer: fall and dropped-object risk, not atmosphere. Donnie's decision, 2026-11-06. No citation: data-completeness prompt."
     }
   ]
 }

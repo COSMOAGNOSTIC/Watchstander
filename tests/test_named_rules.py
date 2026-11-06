@@ -219,9 +219,11 @@ def test_hazard_pair_conflict_reports_its_rule_id():
 def test_multiple_matching_pairs_report_every_rule_id_sorted():
     a = _wp("WP-A", [H.HOT_WORK])
     b = _wp("WP-B", [H.CONFINED_SPACE, H.WORKING_ALOFT])
+    # Session 8a: B's working_aloft label now makes it overhead, so the overhead rule applies too.
     expected = sorted({
         rule_for_hazard_pair(frozenset({H.HOT_WORK, H.CONFINED_SPACE})).rule_id,
         rule_for_hazard_pair(frozenset({H.HOT_WORK, H.WORKING_ALOFT})).rule_id,
+        rule_for_overhead_work().rule_id,
     })
     assert conflict_rule_ids(a, b) == expected
 
@@ -244,7 +246,8 @@ def test_rule_ids_and_rationale_match_independent_expectations():
         (_wp("A", [H.HOT_WORK]), _wp("B", [H.CONFINED_SPACE]), ["WS-HZ-001"]),
         (_wp("A", [], aloft=True), _wp("B", []), ["WS-OH-001"]),
         (_wp("A", [H.HOT_WORK]), _wp("B", [H.CONFINED_SPACE], frames=(90, 94)), []),
-        (_wp("A", [H.WORKING_ALOFT]), _wp("B", [H.FALL_PROTECTION]), ["WS-HZ-003"]),
+        # Session 8a: labelled aloft work over fall-protection work in the same frames is overhead too.
+        (_wp("A", [H.WORKING_ALOFT]), _wp("B", [H.FALL_PROTECTION]), ["WS-HZ-003", "WS-OH-001"]),
     ]
     for a, b, expected in cases:
         assert conflict_rule_ids(a, b) == expected, (a.work_package_id, b.work_package_id)

@@ -19,6 +19,8 @@ to the Gas Free Engineer:
              (one has only a compartment, the other only frames).
 - WS-JF-005  gas-free work signalled by a spatial flag or permit but missing
              from the hazard list, which detection reads exclusively.
+- WS-JF-006  overhead work (deconfliction.is_overhead) with no complete frame
+             range. Routed to the Safety Officer, not the GFE (Session 8a).
 
 "Gas-free" signals (review-01 R08) come from all three places the data can
 say it: the hazard list, `spatial.is_enclosed_or_confined`, and the
@@ -48,6 +50,7 @@ from pydantic import BaseModel, model_validator
 
 from agent_core import named_rules
 from agent_core.deconfliction import (
+    is_overhead,
     _frame_ranges_overlap,
     _same_compartment,
     _schedules_overlap,
@@ -64,7 +67,7 @@ ROSTER_SCHEMA_VERSION = 1
 # the nearer ends of two non-overlapping ranges (110 and 112 -> 2).
 JUDGMENT_ADJACENCY_FRAMES = 3
 
-IMPLEMENTED_TRIGGERS = frozenset({"WS-JF-001", "WS-JF-002", "WS-JF-003", "WS-JF-004", "WS-JF-005"})
+IMPLEMENTED_TRIGGERS = frozenset({"WS-JF-001", "WS-JF-002", "WS-JF-003", "WS-JF-004", "WS-JF-005", "WS-JF-006"})
 
 
 class RosterPerson(BaseModel):
@@ -238,6 +241,10 @@ def judgment_flags(
             flags.append(_flag(rule["WS-JF-003"], [p.work_package_id],
                                "no compartment and no complete frame range, so it cannot be "
                                "spatially deconflicted.", roster))
+        if is_overhead(p) and not _has_frames(p):
+            flags.append(_flag(rule["WS-JF-006"], [p.work_package_id],
+                               "overhead work with no complete frame range, so work below it "
+                               "can't be detected.", roster))
         missing = []
         if _is_hot_work(p) and HazardCategory.HOT_WORK not in _hazards(p):
             missing.append("hot_work")

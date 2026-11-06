@@ -56,6 +56,7 @@ from pydantic import BaseModel, Field
 from agent_core.certificates import Certificate, check_certificates
 from agent_core.crews import Crew, ShiftCalendar, check_schedule_constraints, is_movable
 from agent_core.deconfliction import (
+    is_overhead,
     _frame_ranges_overlap,
     _schedules_overlap,
     conflict_rule_ids,
@@ -101,12 +102,7 @@ class CrewShiftOutcome(BaseModel):
     reason: Optional[str] = None
 
 
-_OVERHEAD_HAZARDS = {HazardCategory.WORKING_ALOFT, HazardCategory.OVER_THE_SIDE}
-
-
-def _is_overhead(p: WorkPackageState) -> bool:
-    return (p.spatial.is_aloft or p.spatial.is_over_side
-            or bool(_OVERHEAD_HAZARDS & {HazardCategory(h) for h in p.hazard_categories}))
+_is_overhead = is_overhead  # one shared definition (deconfliction.is_overhead), Session 8a
 
 
 def _has_frames(p: WorkPackageState) -> bool:

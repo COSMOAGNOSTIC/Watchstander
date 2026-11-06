@@ -161,7 +161,11 @@ def test_package_with_compartment_only_is_located():
 
 
 def test_unlocated_non_gas_free_hazard_is_not_a_gfe_flag():
-    assert judgment_flags([_wp("A", [H.WORKING_ALOFT])]) == []
+    # Session 8a: unlocated overhead work now raises WS-JF-006, routed to the Safety
+    # Officer. It must still never become a Gas Free Engineer flag.
+    flags = judgment_flags([_wp("A", [H.WORKING_ALOFT])])
+    assert [f.rule_id for f in flags] == ["WS-JF-006"]
+    assert all(f.routed_to.role != "Gas Free Engineer" for f in flags)
 
 
 # --- determinism, routing, purity ---------------------------------------

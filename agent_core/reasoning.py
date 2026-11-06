@@ -48,15 +48,16 @@ _SYSTEM_PROMPT = (
     "language, for a Safety Officer), precedent_context (plain-language "
     "summary of what happened in the cited case, and separately what the "
     "governing procedure requires if one was given -- if no case is given, "
-    "say so explicitly, do not invent one), and recommended_action (a "
-    "concrete deconfliction step, e.g. reschedule / add a barrier / verify "
-    "permit). Use ONLY the facts given below. Do not invent case IDs, "
+    "say so explicitly, do not invent one). Do not recommend actions: the "
+    "recommended action is produced separately by deterministic code. Use ONLY the facts given below. Do not invent case IDs, "
     "shipyards, dates, or outcomes that are not present in the input. Do "
     "not invent a governing procedure or installation that is not present "
     "in the input either."
 )
 
-_REQUIRED_LLM_KEYS = ("executive_summary", "precedent_context", "recommended_action")
+# Rule 7 (AGENTS.md; Donnie, 2026-11-05): the LLM explains, never suggests.
+# recommended_action always comes from deterministic code, never the model.
+_REQUIRED_LLM_KEYS = ("executive_summary", "precedent_context")
 
 # Explicit provenance tags (per architecture review, PASSDOWN.md Section 3):
 # a Safety Officer reading a brief -- whether in the HITL payload, a log,
@@ -233,11 +234,14 @@ def generate_safety_brief(wp: WorkPackageState) -> SafetyBrief:
             source=source,
         )
 
+    deterministic = _deterministic_fallback(context)
     llm_result = _call_llm(context)
     if llm_result is not None:
-        fields, source = llm_result, "llm"
+        fields, source = dict(llm_result), "llm"
     else:
-        fields, source = _deterministic_fallback(context), "deterministic-fallback"
+        fields, source = dict(deterministic), "deterministic-fallback"
+    # Rule 7: the recommendation is always the deterministic one, whatever the model returned.
+    fields["recommended_action"] = deterministic["recommended_action"]
 
     tagged_summary = f"{provenance_tag(source)} {fields['executive_summary']}"
     return SafetyBrief(

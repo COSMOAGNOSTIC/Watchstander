@@ -83,14 +83,28 @@ def _schedules_overlap(a: WorkPackageState, b: WorkPackageState) -> bool:
     return instant(a_start) <= instant(b_end) and instant(b_start) <= instant(a_end)
 
 
+_OVERHEAD_HAZARDS = {HazardCategory.WORKING_ALOFT, HazardCategory.OVER_THE_SIDE}
+
+
+def is_overhead(wp: WorkPackageState) -> bool:
+    """
+    The single definition of "overhead work" (Session 8a, Donnie's decision after
+    review-02): the spatial aloft/over-side flag OR a working_aloft / over_the_side
+    hazard label. Detection used the flag alone, so hazard-labelled overhead work
+    was invisible to WS-OH-001. The shift suggester uses this same function.
+    """
+    return (wp.spatial.is_aloft or wp.spatial.is_over_side
+            or bool(_OVERHEAD_HAZARDS & {HazardCategory(h) for h in wp.hazard_categories}))
+
+
 def _vertically_stacked(a: WorkPackageState, b: WorkPackageState) -> bool:
     """
     Flags the classic 'hot work directly below aloft staging' case:
     one package is aloft/over-the-side while the other occupies an
     overlapping frame range on a lower or unspecified deck level.
     """
-    a_overhead = a.spatial.is_aloft or a.spatial.is_over_side
-    b_overhead = b.spatial.is_aloft or b.spatial.is_over_side
+    a_overhead = is_overhead(a)
+    b_overhead = is_overhead(b)
     if a_overhead == b_overhead:
         return False
     return _frame_ranges_overlap(a, b)
@@ -175,8 +189,7 @@ def _detect_conflict(
         # which is wrong whenever the non-overhead package happens to be `a`
         # (e.g. because of iteration order in find_all_conflicts). Determine
         # the actual overhead party explicitly instead of assuming positionally.
-        a_overhead = a.spatial.is_aloft or a.spatial.is_over_side
-        overhead, underlying = (a, b) if a_overhead else (b, a)
+        overhead, underlying = (a, b) if is_overhead(a) else (b, a)
         return sorted(rule_ids), (
             f"Overhead work ({overhead.work_package_id}) and underlying work "
             f"({underlying.work_package_id}) share an overlapping frame range with "
