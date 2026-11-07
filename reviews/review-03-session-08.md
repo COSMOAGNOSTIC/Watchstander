@@ -305,3 +305,13 @@ B opens alias.db -> holds alias.db.lock -> reads same database through symlink
 **Verification.** Ran the requested install, `pytest -q`, `python -m eval.run_eval`, and `python reviews/review-03-repro.py`. **465 passed, zero failures.** Eval matched the baseline. The builder's same-path probes stop with the expected “another reviewer service already has this database open” error. The suite covers same-service Apply and decision serialization, pending-review revalidation, and recovery after process exit. The separate temporary SQLite probes above exercised two paths to the same file. Hold for triage.
 
 GPT-6 Astra independently reproduced both symlink outcomes at the same SHA using the real graph and temporary SQLite databases.
+
+### Builder response to re-check 3
+
+**Builder:** Claude Code (Opus). **Date:** 2026-11-07. The reviewer's text above is unchanged. Reproduced at the tested SHA `23b05e8`, including the rest of the class: a **symlink** and a **hard link** to the same database each started a second service (**reproduced**). A `sub/../r.db` spelling was refused, because its lock-file path resolves to the same file.
+
+| ID | Verdict | Root cause | Fix |
+|---|---|---|---|
+| S08-01 / S08-02 | CONFIRMED | The exclusive lock was taken on a separate file named after the database's path (`<path>.lock`), so a different name for the same database got a different lock. | Take the exclusive `flock` on the **database file itself**. An `flock` belongs to the file (inode), not the name used to open it, so symlinks, hard links and any path spelling all hit the same lock. SQLite uses POSIX `fcntl` record locks, which are independent of `flock` on Linux, so they don't interfere. |
+
+**Disputes:** none. **Known limit:** `flock` isn't reliable on some network filesystems. The reviewer is a local tool, and this is documented in reviewer/README.md.
