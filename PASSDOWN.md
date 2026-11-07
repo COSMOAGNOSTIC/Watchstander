@@ -685,3 +685,10 @@ Tested `session-08-brief-apply` at `23b05e8abe810cc90444bec1ff8408c125882e31` on
 ## Review 03 re-check 4
 
 Tested `session-08-brief-apply` at `103488af71b4f82761ef3aa55f65dc0b2b571df5` on `review-03-recheck4`. Symlink, hard-link and path-spelling exclusion passed in the common lock directory. S08-01 and S08-02 reopened because differing temp directories give two services different locks on the identical local database. Reproduced two successors and old-schedule approval during live Apply across processes. High impact with low likelihood in a normal single-reviewer launch. All 469 tests passed and eval matched the baseline. See **Reviewer re-check 4** in `reviews/review-03-session-08.md`. Hold for triage.
+
+## 38. Session Notes — 2026-11-07: review-03 re-check 4; lock class closed
+
+**Re-check 4 (Codex at `103488a`, medium):** two processes with different `TMPDIR` locked the same database separately.
+**Builder:** confirmed with two real processes (a first in-process probe gave a false "refused" through RecursionError and was discarded). Fixed in `a9c0672`: the lock sits beside the database's real file, independent of the environment. 470 tests passed; eval baseline unchanged.
+**Donnie's decision:** option 1. Fix this, then close the class. Remaining aliasing paths (cross-directory hard links, network filesystems, bind mounts) are in ARCHITECTURE.md Known Debt and reviewer/README.md as unsupported.
+**Next up:** a narrow cheaper-model re-check 5 → merge Session 8 → Session 9 (decision log).

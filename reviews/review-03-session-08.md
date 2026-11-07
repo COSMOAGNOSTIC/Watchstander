@@ -360,3 +360,13 @@ GPT-6 Astra independently reproduced S08-01 using two subprocesses with distinct
 **Root cause:** the lock directory came from the environment (`tempfile.gettempdir()`), so a different environment meant a different lock.
 
 **Proposed fix (Donnie to choose, given this is the fifth round):** put the lock file in the database's *real* directory (`realpath`), still keyed by device and inode. Nothing from the environment is used, so symlinks resolve to the same place. A hard link from a *different* directory would still differ. SQLite itself documents multiple names for one database file as unsafe (journal and WAL files are path-based), so that case would be documented as unsupported rather than chased.
+
+### Re-check 4 fix (Donnie: option 1, fix and close the class)
+
+Commit `a9c0672`. The service lock is a hidden file next to the database's **real** file (`realpath`), named by device and inode. Nothing comes from the environment. Test: `test_recheck4_two_processes_with_different_tmpdir_cannot_share_a_database` (two real processes; failed first). Mutation, putting the lock back under TMPDIR, makes it fail. A manual two-process run is refused. Full suite **470 passed**; eval baseline unchanged.
+
+**Class closed as Known Debt (Donnie's decision, 2026-11-07):** further ways to give one database several identities to the OS (a hard link in another directory, network filesystems where `flock` is unreliable, bind mounts across namespaces) are documented in reviewer/README.md as unsupported, not chased. SQLite itself documents multiple names for one database file as unsafe. Defense in depth stays in place: a superseded run never reports cleared.
+
+### Reviewer re-check 5
+
+Pending, and narrow: a cheaper model runs the named test and the full suite, and confirms the diff only.
