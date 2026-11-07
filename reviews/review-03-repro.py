@@ -213,3 +213,58 @@ def _():
 
 
 print(f"\nafter re-check probes -- reproduced: {sorted(k for k, v in results.items() if v and 'recheck' in k)}")
+
+
+# ---- re-check 2: lease expiry on a LIVE owner; stale pending read ----
+@probe("S08-01-recheck2-expired-live-owner")
+def _():
+    import time as _time
+    s = svc()
+    s.seed_run("T1", pair(), crews=CREWS, calendar=CAL, certificates=[])
+    pend = {r.work_package_id: r for r in s.list_pending_reviews()}
+    real, real_time = graph_driver.suggest_crew_shift, _time.time
+    inside, release = threading.Event(), threading.Event()
+
+    def paused(*a, **k):
+        out = real(*a, **k)
+        if threading.current_thread().name == "A":
+            inside.set(); release.wait(timeout=10)
+        return out
+
+    graph_driver.suggest_crew_shift = paused
+    res = {}
+    try:
+        t = threading.Thread(name="A", target=lambda: res.__setitem__("A", s.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)))
+        t.start(); inside.wait(timeout=10)
+        graph_driver.time.time = lambda: real_time() + 601  # A is still live, just slow
+        b = ReviewerService(s.db_path)
+        res["B"] = b.apply_shift_suggestion("T1", pend["TANK-ENTRY"].interrupt_id)
+        release.set(); t.join(timeout=20)
+    finally:
+        graph_driver.suggest_crew_shift = real
+        graph_driver.time.time = real_time
+    return res["A"].applied and res["B"].applied, f"A applied={res['A'].applied}, B applied={res['B'].applied}"
+
+
+@probe("S08-02-recheck2-stale-pending-read")
+def _():
+    s = svc()
+    s.seed_run("T1", pair(), crews=CREWS, calendar=CAL, certificates=[])
+    pend = {r.work_package_id: r for r in s.list_pending_reviews()}
+    b = ReviewerService(s.db_path)
+    real = ReviewerService.get_pending_review
+    state = {"done": False}
+
+    def read_then_someone_decides(self, *a, **k):
+        out = real(self, *a, **k)
+        if self is s and not state["done"]:
+            state["done"] = True
+            b.submit_decision("T1", pend["WELD-1"].interrupt_id, "approve")
+        return out
+
+    ReviewerService.get_pending_review = read_then_someone_decides
+    try:
+        r = s.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)
+    finally:
+        ReviewerService.get_pending_review = real
+    return r.applied, f"Apply on a review approved after it was read: applied={r.applied}"

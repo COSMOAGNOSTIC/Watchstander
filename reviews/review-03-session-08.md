@@ -241,3 +241,23 @@ The probes used the real services, graph, and suggester with temporary SQLite da
 **Verification.** Ran the requested install, `pytest -q`, `python -m eval.run_eval`, and `python reviews/review-03-repro.py`. **462 passed, zero failures.** Eval matched its baseline. Both `S08-0x-recheck` probes reported NOT REPRODUCED. The historical S08-01 probe still emits its documented worker `BrokenBarrierError`. The named regressions pass for startup within the lease, a decision holding its lock when Apply tries to acquire it, and clearance masking after supersession. The reproduced interleavings above exercise different boundaries. Hold for triage.
 
 The conditional escalation to GPT-6 Astra independently reproduced the two-successor failure and the stale pending read at the same SHA. The stale-read scenario creates a successor requiring a new human review. The expired-owner approval scenario above separately demonstrates old-schedule clearance while Apply is active.
+
+### Builder response to re-check 2
+
+**Builder:** Claude Code (Opus). **Date:** 2026-11-07. The reviewer's text above is unchanged. Both scenarios were rebuilt at the tested SHA `557f3f6` (`reviews/review-03-repro.py`, `*-recheck2-*`): **2/2 reproduced**. A live Apply whose lease had expired (clock advanced 601 s) lost its lock to a newly started service, and both Applies succeeded. An Apply that read the review before another service approved it went on to apply the stale review.
+
+| ID | Verdict |
+|---|---|
+| S08-01 | CONFIRMED |
+| S08-02 | CONFIRMED |
+
+**Why this is the third round, and the change of approach.** Rounds 1 and 2 each closed one interleaving with per-run claims, then leases. A lease can't prove its owner is dead (it may be stalled, suspended, or slow), so cross-process recovery based on time will always have another race. The reviewer app is documented as a local, single-reviewer tool (ARCHITECTURE.md §8.5). The provable design makes that explicit:
+
+1. **One service per database.** `ReviewerService` holds an exclusive OS file lock (`flock` on `<db>.lock`) for its whole lifetime. A second service on the same database refuses to start. The OS releases the lock when the owning process exits for any reason, including a crash or kill.
+2. **Recovery only with exclusive ownership.** Startup cleanup runs after the file lock is held, so no other live owner can exist. Every leftover Apply marker is therefore from a dead owner, and is finished (successor exists) or released (no successor). No clock, no lease.
+3. **In-service serialization.** One re-entrant lock covers `apply_shift_suggestion` and `submit_decision` end to end. Apply re-reads the pending review inside the lock and refuses if it was decided meanwhile.
+4. **Kept from round 2:** superseded runs never report cleared. Apply also releases its own marker if it fails before creating a successor.
+
+**Trade-off for Donnie:** two reviewer app instances can't share one database at the same time. The second gets a clear error. Multi-user review would need a real database server and a proper transaction design, which is out of scope for Sessions 12–15 unless you want it.
+
+**Disputes:** none.
