@@ -369,8 +369,6 @@ Commit `a9c0672`. The service lock is a hidden file next to the database's **rea
 
 ### Reviewer re-check 5
 
-Pending, and narrow: a cheaper model runs the named test and the full suite, and confirms the diff only.
-
 Tested **`4b14cc19e8af755b553c3e81d053dfeadca99733`**, the current `session-08-brief-apply` tip. Code inspection was limited to `git diff bb25f0f..HEAD -- reviewer tests`.
 
 | ID | Verdict | Evidence |
