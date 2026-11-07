@@ -1,4 +1,7 @@
 """Builder's independent reproduction of review-03 (Session 8) findings S08-01..06.
+After re-check 2 fixes, probes that open a second ReviewerService on the same database report
+ERROR with "another reviewer service already has this database open": that refusal IS the fix
+(one service per database), asserted by tests/test_review03_fixes.py::test_recheck2_*.
 Rebuilt from the reviewer's descriptions. Each probe is isolated and uses its own temp
 database; an exception is reported as ERROR, never as fixed. Run from the repo root.
 """
@@ -66,9 +69,9 @@ def _():
         return out
 
     graph_driver.suggest_crew_shift = slow
-    s2 = ReviewerService(s.db_path)
     res = {}
     try:
+        s2 = ReviewerService(s.db_path)  # after re-check 2 this is refused (one service per database)
         ts = [threading.Thread(target=lambda key, sv: res.__setitem__(key, sv.apply_shift_suggestion("T1", pend[key].interrupt_id)),
                                args=(k, sv)) for k, sv in (("WELD-1", s), ("TANK-ENTRY", s2))]
         [t.start() for t in ts]

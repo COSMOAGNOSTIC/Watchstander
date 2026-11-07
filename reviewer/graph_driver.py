@@ -15,7 +15,9 @@ reviewer/README.md for why that gap mattered.
 
 from __future__ import annotations
 
+import fcntl
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -68,14 +70,24 @@ class ReviewerService:
     request threadpool for this app's traffic level (a single local
     reviewer, not concurrent production load)."""
 
-    # review-03 re-check: how long a run lock must sit untouched before startup recovery
-    # treats its owner as crashed. Far longer than an Apply takes; within it, an interrupted
-    # run simply stays closed (fails safe).
-    DEFAULT_LEASE_SECONDS = 600
-
-    def __init__(self, db_path: str = DEFAULT_DB_PATH, lease_seconds: float | None = None) -> None:
+    def __init__(self, db_path: str = DEFAULT_DB_PATH) -> None:
         self.db_path = db_path
-        self.lease_seconds = self.DEFAULT_LEASE_SECONDS if lease_seconds is None else lease_seconds
+        # review-03 re-check 2: ONE service per database. An exclusive OS file lock, held
+        # for this service's lifetime, makes a second service on the same database refuse
+        # to start. The OS releases it when this process exits for any reason (crash,
+        # kill), so the next service to get it knows no other live owner exists.
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self._lock_file = open(f"{db_path}.lock", "w")
+        try:
+            fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            self._lock_file.close()
+            raise RuntimeError(
+                f"another reviewer service already has this database open ({db_path}); "
+                "run one reviewer service per database"
+            ) from None
+        # Inside the one service: Apply and decisions run one at a time, end to end.
+        self._op_lock = threading.RLock()
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._checkpointer = SqliteSaver(self._conn)
@@ -83,7 +95,12 @@ class ReviewerService:
         self._recover_applies()
 
     def close(self) -> None:
+        """Idempotent: releases the database lock so another service may open it."""
+        if self._lock_file.closed:
+            return
         self._conn.close()
+        fcntl.flock(self._lock_file, fcntl.LOCK_UN)
+        self._lock_file.close()
 
     def seed_run(self, thread_id: str, packages: list[WorkPackageState], *, crews=None,
                  calendar=None, certificates=None, label: str = "run") -> None:
@@ -111,6 +128,10 @@ class ReviewerService:
         return state.values.get("run_inputs")
 
     def apply_shift_suggestion(self, thread_id: str, interrupt_id: str) -> ApplyResult:
+        with self._op_lock:  # review-03 re-check 2: one operation at a time, end to end
+            return self._apply_locked(thread_id, interrupt_id)
+
+    def _apply_locked(self, thread_id: str, interrupt_id: str) -> ApplyResult:
         """
         Session 8b. Re-run the crew-shift suggester against this run's inputs. Only if
         it returns exactly the move the brief showed:
@@ -135,12 +156,15 @@ class ReviewerService:
         new_thread = f"{thread_id}-applied-{interrupt_id[:8]}"
         # review-03 S08-01: claim the run before anything else. From here on the old run
         # takes no decisions (S08-02), and no other Apply, in any process, can proceed.
+        # review-03 re-check 2: re-read inside the lock. The review may have been decided
+        # after it was first read.
+        if not any(r.interrupt_id == interrupt_id for r in self._pending_for(thread_id)) \
+                or self._closed_to_decisions(thread_id):
+            return ApplyResult(False, f"Not applied: {review.work_package_id}'s review was decided, or its run "
+                                      "superseded, while Apply was starting. Nothing was changed.")
+        # The marker records an Apply in progress, for crash recovery and to close the run.
         if not registry.acquire_lock(self.db_path, thread_id, "apply", time.time(), successor=new_thread):
-            return ApplyResult(False, f"Not applied: another Apply or a decision on run {thread_id} is "
-                                      "already in progress, or the run was already superseded.")
-        if registry.superseded_by(self.db_path, thread_id) is not None:
-            registry.release_lock(self.db_path, thread_id)
-            return ApplyResult(False, f"Not applied: run {thread_id} was already superseded.")
+            return ApplyResult(False, f"Not applied: an Apply on run {thread_id} is already in progress.")
 
         packages = [WorkPackageState.model_validate(p) for p in inputs["packages"]]
         crews = [Crew.model_validate(c) for c in inputs["crews"]]
@@ -168,8 +192,14 @@ class ReviewerService:
                             cleared_for_execution=False)
             new_packages.append(WorkPackageState.model_validate(data))
 
-        self.seed_run(new_thread, new_packages, crews=crews, calendar=calendar, certificates=certificates,
-                      label=f"schedule change applied from {thread_id}")
+        try:
+            self.seed_run(new_thread, new_packages, crews=crews, calendar=calendar, certificates=certificates,
+                          label=f"schedule change applied from {thread_id}")
+        except Exception:
+            # Nothing has changed yet, so reopen the old run rather than leave it closed.
+            if not self.run_inputs(new_thread):
+                registry.release_lock(self.db_path, thread_id)
+            raise
         registry.set_lock_status(self.db_path, thread_id, "seeded")
         self._close_superseded_reviews(thread_id, new_thread)
         return ApplyResult(
@@ -191,14 +221,13 @@ class ReviewerService:
 
     def _recover_applies(self) -> None:
         """
-        review-03 S08-02 and its re-check: finish or roll back work whose owner crashed.
-        Only locks older than the lease count as abandoned; a young lock belongs to a live
-        owner (possibly another process mid-Apply) and is left alone. For an expired Apply
-        lock: if its successor run exists, finish superseding the old run; if not, nothing
-        changed yet, so release it and the old run is reviewable again. An expired decision
-        lock is simply released (the resume either happened or it didn't).
+        review-03 S08-02 and its re-checks: finish or roll back an Apply whose owner died.
+        This runs only after this service holds the database's exclusive file lock, so no
+        other live owner can exist and every leftover Apply marker is from a dead process.
+        If its successor run exists, finish superseding the old run; if not, nothing
+        changed yet, so release it and the old run is reviewable again. No clock, no lease.
         """
-        for thread_id, kind, successor in registry.expired_locks(self.db_path, time.time() - self.lease_seconds):
+        for thread_id, kind, successor in registry.expired_locks(self.db_path, float("inf")):
             if kind == "apply" and successor and self.run_inputs(successor):
                 self._close_superseded_reviews(thread_id, successor)
             else:
@@ -294,20 +323,15 @@ class ReviewerService:
     def submit_decision(
         self, thread_id: str, interrupt_id: str, decision: str, note: str | None = None
     ) -> None:
-        # review-03 re-check: hold the run's lock across check-then-resume, so an Apply in
-        # any process can't claim the run between the check and the write.
-        if not registry.acquire_lock(self.db_path, thread_id, "decision", time.time()):
-            raise ValueError(f"run {thread_id} is busy: an Apply or another decision is in progress, "
-                             "or it is being applied; try again or review its successor run")
-        try:
+        # review-03 re-check 2: the check and the write happen under the service's one
+        # operation lock, so no Apply can start in between.
+        with self._op_lock:
             if self._closed_to_decisions(thread_id):
                 # review-03 S08-02: never act on a schedule that an Apply has replaced.
                 raise ValueError(
                     f"run {thread_id} is superseded or being applied; review the packages in its successor run"
                 )
             self._resume(thread_id, interrupt_id, decision, note)
-        finally:
-            registry.release_lock(self.db_path, thread_id)
 
     def _resume(self, thread_id: str, interrupt_id: str, decision: str, note: str | None) -> None:
         """Resumes only this one interrupt -- every other package still

@@ -51,34 +51,6 @@ def seed(s, pkgs=None, certs=()):
 # --- S08-01: one Apply per run, across processes -------------------------
 
 
-def test_s08_01_two_applies_that_both_pass_the_pending_check_yield_one_successor(svc, monkeypatch):
-    # Codex's ordering: both requests get past the pending-review check before either
-    # claims the run. Only the atomic claim can stop the second one.
-    pend = seed(svc)
-    other = ReviewerService(svc.db_path)  # a second process sharing the database
-    barrier = threading.Barrier(2, timeout=10)
-    real = ReviewerService.get_pending_review
-
-    def both_past_the_check(self, *a, **k):
-        out = real(self, *a, **k)
-        barrier.wait()
-        return out
-
-    monkeypatch.setattr(ReviewerService, "get_pending_review", both_past_the_check)
-    res = {}
-    threads = [threading.Thread(target=lambda key, sv: res.__setitem__(key, sv.apply_shift_suggestion("T1", pend[key].interrupt_id)),
-                                args=(k, sv)) for k, sv in (("WELD-1", svc), ("TANK-ENTRY", other))]
-    [t.start() for t in threads]
-    [t.join(timeout=30) for t in threads]
-    applied = [k for k, r in res.items() if r.applied]
-    assert len(applied) == 1, res
-    loser = next(r for r in res.values() if not r.applied)
-    assert "already in progress" in loser.message
-    successors = [tid for tid in registry.list_thread_ids(svc.db_path) if tid != "T1"]
-    assert successors == [res[applied[0]].new_thread_id]
-    other.close()
-
-
 def test_s08_01_apply_on_a_superseded_run_is_refused(svc):
     pend = seed(svc)
     assert svc.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id).applied
@@ -118,7 +90,7 @@ def test_s08_02_restart_finishes_an_apply_whose_successor_exists(svc, monkeypatc
         svc.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)
     monkeypatch.setattr(ReviewerService, "_close_superseded_reviews", real)
     svc.close()
-    s2 = ReviewerService(svc.db_path, lease_seconds=0)  # restart after the lease has expired
+    s2 = ReviewerService(svc.db_path)  # restart: the first service is closed
     successor = registry.superseded_by(s2.db_path, "T1")
     assert successor and s2.run_inputs(successor)
     old = [x for x in s2.list_decided() if x["thread_id"] == "T1"]
@@ -134,7 +106,7 @@ def test_s08_02_restart_releases_an_apply_that_never_created_a_successor(svc, mo
         svc.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)
     monkeypatch.undo()
     svc.close()
-    s2 = ReviewerService(svc.db_path, lease_seconds=0)  # restart after the lease has expired
+    s2 = ReviewerService(svc.db_path)  # restart: the first service is closed
     assert {r.work_package_id for r in s2.list_pending_reviews() if r.thread_id == "T1"} == {"WELD-1", "TANK-ENTRY"}
     assert registry.superseded_by(s2.db_path, "T1") is None
     s2.close()
@@ -247,64 +219,6 @@ def _pause_apply_after_lock(monkeypatch, svc, pend, key="WELD-1"):
     return t, release, res
 
 
-def test_recheck_s08_01_service_starting_during_a_live_apply_cannot_apply_too(svc, monkeypatch):
-    pend = seed(svc)
-    t, release, res = _pause_apply_after_lock(monkeypatch, svc, pend)
-    b = ReviewerService(svc.db_path)  # startup recovery runs here, with the default lease
-    second = b.apply_shift_suggestion("T1", pend["TANK-ENTRY"].interrupt_id)
-    release.set()
-    t.join(timeout=20)
-    assert res["A"].applied and not second.applied
-    assert [tid for tid in registry.list_thread_ids(svc.db_path) if tid != "T1"] == [res["A"].new_thread_id]
-    b.close()
-
-
-def test_recheck_s08_02_service_starting_during_a_live_apply_cannot_decide_old_reviews(svc, monkeypatch):
-    pend = seed(svc)
-    t, release, res = _pause_apply_after_lock(monkeypatch, svc, pend)
-    b = ReviewerService(svc.db_path)
-    with pytest.raises(ValueError, match="busy|superseded|being applied"):
-        b.submit_decision("T1", pend["WELD-1"].interrupt_id, "approve")
-    release.set()
-    t.join(timeout=20)
-    assert res["A"].applied
-    assert not [x for x in svc.list_decided() if x["thread_id"] == "T1" and x["cleared_for_execution"]]
-    b.close()
-
-
-def test_recheck_s08_02_apply_is_refused_while_a_decision_is_being_recorded(svc, monkeypatch):
-    # Builder-found same-class race: check-then-resume in submit_decision.
-    pend = seed(svc)
-    inside, release = threading.Event(), threading.Event()
-    real = ReviewerService._resume
-
-    def slow_resume(self, *a, **k):
-        if threading.current_thread().name == "D":
-            inside.set()
-            release.wait(timeout=10)
-        return real(self, *a, **k)
-
-    monkeypatch.setattr(ReviewerService, "_resume", slow_resume)
-    t = threading.Thread(name="D", target=lambda: svc.submit_decision("T1", pend["TANK-ENTRY"].interrupt_id, "approve"))
-    t.start()
-    assert inside.wait(timeout=10)
-    blocked = ReviewerService(svc.db_path).apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)
-    release.set()
-    t.join(timeout=20)
-    assert not blocked.applied and "in progress" in blocked.message
-
-
-def test_recheck_s08_02_recovery_leaves_a_young_lock_alone(svc, monkeypatch):
-    pend = seed(svc)
-    monkeypatch.setattr(ReviewerService, "seed_run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("crash before successor")))
-    with pytest.raises(RuntimeError):
-        svc.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)
-    monkeypatch.undo()
-    s2 = ReviewerService(svc.db_path)  # default lease: the lock is young, so the run stays closed (fails safe)
-    assert not [r for r in s2.list_pending_reviews() if r.thread_id == "T1"]
-    s2.close()
-
-
 def test_recheck_superseded_run_never_reports_cleared(svc):
     pend = seed(svc)
     svc.submit_decision("T1", pend["TANK-ENTRY"].interrupt_id, "approve")  # approved on the old schedule
@@ -312,3 +226,156 @@ def test_recheck_superseded_run_never_reports_cleared(svc):
     assert res.applied
     old_entry = next(x for x in svc.list_decided() if x["thread_id"] == "T1" and x["work_package_id"] == "TANK-ENTRY")
     assert old_entry["superseded_by"] == res.new_thread_id and old_entry["cleared_for_execution"] is False
+
+
+# ===== review-03 re-check 2: one service per database; serialized operations =====
+
+import os  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+import textwrap  # noqa: E402
+
+
+def test_recheck2_a_second_service_on_the_same_database_refuses_to_start(svc):
+    with pytest.raises(RuntimeError, match="already has this database open"):
+        ReviewerService(svc.db_path)
+
+
+def test_recheck2_closing_a_service_lets_another_open_the_database(svc):
+    svc.close()
+    ReviewerService(svc.db_path).close()
+
+
+def _pause_in_suggester(monkeypatch, thread_name="A"):
+    real = graph_driver.suggest_crew_shift
+    inside, release = threading.Event(), threading.Event()
+
+    def paused(*a, **k):
+        out = real(*a, **k)
+        if threading.current_thread().name == thread_name:
+            inside.set()
+            release.wait(timeout=10)
+        return out
+
+    monkeypatch.setattr(graph_driver, "suggest_crew_shift", paused)
+    return inside, release
+
+
+def test_recheck2_concurrent_applies_in_one_service_yield_one_successor(svc, monkeypatch):
+    pend = seed(svc)
+    inside, release = _pause_in_suggester(monkeypatch)
+    res = {}
+    a = threading.Thread(name="A", target=lambda: res.__setitem__("A", svc.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)))
+    a.start()
+    assert inside.wait(timeout=10)
+    b = threading.Thread(name="B", target=lambda: res.__setitem__("B", svc.apply_shift_suggestion("T1", pend["TANK-ENTRY"].interrupt_id)))
+    b.start()
+    release.set()
+    a.join(timeout=20)
+    b.join(timeout=20)
+    assert res["A"].applied and not res["B"].applied
+    assert [tid for tid in registry.list_thread_ids(svc.db_path) if tid != "T1"] == [res["A"].new_thread_id]
+
+
+def test_recheck2_decision_during_a_live_apply_is_refused_once_apply_finishes(svc, monkeypatch):
+    pend = seed(svc)
+    inside, release = _pause_in_suggester(monkeypatch)
+    res, errors = {}, {}
+    a = threading.Thread(name="A", target=lambda: res.__setitem__("A", svc.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)))
+    a.start()
+    assert inside.wait(timeout=10)
+
+    def decide():
+        try:
+            svc.submit_decision("T1", pend["WELD-1"].interrupt_id, "approve")
+        except ValueError as e:
+            errors["D"] = str(e)
+
+    d = threading.Thread(name="D", target=decide)
+    d.start()
+    release.set()
+    a.join(timeout=20)
+    d.join(timeout=20)
+    assert res["A"].applied and "superseded" in errors["D"]
+    assert not [x for x in svc.list_decided() if x["thread_id"] == "T1" and x["cleared_for_execution"]]
+
+
+def test_recheck2_apply_rereads_the_review_and_refuses_one_decided_meanwhile(svc, monkeypatch):
+    # The reviewer's stale-read ordering: Apply read the review, then it was approved.
+    pend = seed(svc)
+    real = ReviewerService.get_pending_review
+    state = {"done": False}
+
+    def read_then_decided(self, *a, **k):
+        out = real(self, *a, **k)
+        if not state["done"]:
+            state["done"] = True
+            self.submit_decision("T1", pend["WELD-1"].interrupt_id, "approve")
+        return out
+
+    monkeypatch.setattr(ReviewerService, "get_pending_review", read_then_decided)
+    r = svc.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)
+    assert not r.applied and "decided" in r.message
+    assert registry.superseded_by(svc.db_path, "T1") is None
+
+
+def test_recheck2_failure_before_a_successor_reopens_the_run_immediately(svc, monkeypatch):
+    pend = seed(svc)
+    monkeypatch.setattr(ReviewerService, "seed_run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("fail before successor")))
+    with pytest.raises(RuntimeError):
+        svc.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)
+    monkeypatch.undo()
+    assert {r.work_package_id for r in svc.list_pending_reviews() if r.thread_id == "T1"} == {"WELD-1", "TANK-ENTRY"}
+
+
+def test_recheck2_a_process_killed_mid_apply_is_recovered_by_the_next_service(tmp_path):
+    # A real crash: a separate process dies (os._exit) after creating the successor
+    # but before closing the old reviews. The OS releases its database lock.
+    db = str(tmp_path / "crash.db")
+    script = textwrap.dedent(f"""
+        import os, sys
+        sys.path.insert(0, {os.getcwd()!r}); sys.path.insert(0, {os.path.join(os.getcwd(), "tests")!r})
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        from test_review03_fixes import seed
+        from reviewer.graph_driver import ReviewerService
+        s = ReviewerService({db!r})
+        pend = seed(s)
+        ReviewerService._close_superseded_reviews = lambda *a, **k: os._exit(7)
+        s.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)
+    """)
+    proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 7, proc.stderr[-2000:]
+    s2 = ReviewerService(db)  # gets the lock the dead process held; recovery finishes its Apply
+    successor = registry.superseded_by(db, "T1")
+    assert successor and s2.run_inputs(successor)
+    assert not [r for r in s2.list_pending_reviews() if r.thread_id == "T1"]
+    assert not [x for x in s2.list_decided() if x["thread_id"] == "T1" and x["cleared_for_execution"]]
+    s2.close()
+
+
+def test_recheck2_a_decision_in_progress_holds_off_apply_until_it_finishes(svc, monkeypatch):
+    # Direct proof of serialization: while a decision is mid-write, Apply must not start.
+    pend = seed(svc)
+    d_inside, d_release = threading.Event(), threading.Event()
+    real_resume = ReviewerService._resume
+
+    def slow_resume(self, *a, **k):
+        if threading.current_thread().name == "D":
+            d_inside.set()
+            d_release.wait(timeout=10)
+        return real_resume(self, *a, **k)
+
+    monkeypatch.setattr(ReviewerService, "_resume", slow_resume)
+    a_started = threading.Event()
+    real_suggest = graph_driver.suggest_crew_shift
+    monkeypatch.setattr(graph_driver, "suggest_crew_shift", lambda *a, **k: (a_started.set(), real_suggest(*a, **k))[1])
+    d = threading.Thread(name="D", target=lambda: svc.submit_decision("T1", pend["TANK-ENTRY"].interrupt_id, "approve"))
+    d.start()
+    assert d_inside.wait(timeout=10)
+    a = threading.Thread(name="A", target=lambda: svc.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id))
+    a.start()
+    assert not a_started.wait(timeout=0.5), "Apply started while a decision was mid-write"
+    d_release.set()
+    d.join(timeout=20)
+    a.join(timeout=20)
+    assert a_started.is_set()
