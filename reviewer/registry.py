@@ -35,8 +35,66 @@ def _connect(db_path: str) -> sqlite3.Connection:
         "superseded_by TEXT NOT NULL"
         ")"
     )
+    # review-03 S08-01/S08-02: one Apply per run. The primary key makes the claim
+    # atomic across processes sharing this database; `status` drives crash recovery.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS apply_claims ("
+        "thread_id TEXT PRIMARY KEY, "
+        "successor TEXT NOT NULL, "
+        "status TEXT NOT NULL"  # claimed -> seeded -> done
+        ")"
+    )
     conn.commit()
     return conn
+
+
+def claim_apply(db_path: str, thread_id: str, successor: str) -> bool:
+    """True if this caller now owns the run's one Apply; False if anyone else already does."""
+    conn = _connect(db_path)
+    try:
+        conn.execute("INSERT INTO apply_claims (thread_id, successor, status) VALUES (?, ?, 'claimed')",
+                     (thread_id, successor))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+
+def set_claim_status(db_path: str, thread_id: str, status: str) -> None:
+    conn = _connect(db_path)
+    try:
+        conn.execute("UPDATE apply_claims SET status = ? WHERE thread_id = ?", (status, thread_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def release_claim(db_path: str, thread_id: str) -> None:
+    conn = _connect(db_path)
+    try:
+        conn.execute("DELETE FROM apply_claims WHERE thread_id = ?", (thread_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_claim(db_path: str, thread_id: str) -> tuple[str, str] | None:
+    conn = _connect(db_path)
+    try:
+        row = conn.execute("SELECT successor, status FROM apply_claims WHERE thread_id = ?", (thread_id,)).fetchone()
+        return (row[0], row[1]) if row else None
+    finally:
+        conn.close()
+
+
+def open_claims(db_path: str) -> list[tuple[str, str, str]]:
+    conn = _connect(db_path)
+    try:
+        return conn.execute("SELECT thread_id, successor, status FROM apply_claims WHERE status != 'done'").fetchall()
+    finally:
+        conn.close()
 
 
 def mark_superseded(db_path: str, thread_id: str, superseded_by: str) -> None:

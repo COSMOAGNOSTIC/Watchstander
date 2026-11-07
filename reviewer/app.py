@@ -142,6 +142,15 @@ def review_detail(thread_id: str, interrupt_id: str) -> HTMLResponse:
             <p><strong>Precedent context:</strong> {html.escape(b.get('precedent_context', ''))}</p>
             <p><strong>Recommended action:</strong> {html.escape(b.get('recommended_action', ''))}</p>
         """
+        rejected = (b.get("shift_outcome") or {}).get("rejected") or []
+        if rejected:
+            # review-03 S08-05: show the evidence, not just a count.
+            items = "".join(
+                f"<li>{html.escape(r['shift_id'])}: "
+                f"{html.escape(', '.join(list(r.get('rule_ids') or []) + list(r.get('reasons') or [])) or 'no reason recorded')}</li>"
+                for r in rejected
+            )
+            brief_html += f"<p><strong>Shifts checked and rejected:</strong></p><ul>{items}</ul>"
         if (b.get("shift_outcome") or {}).get("suggestion"):
             brief_html += f"""
             <form method="post" action="/review/{html.escape(thread_id)}/{html.escape(interrupt_id)}/apply">
@@ -186,5 +195,8 @@ def submit_review(thread_id: str, interrupt_id: str, decision: str = Form(...), 
     # decision and note travel to the graph as separate fields -- never
     # concatenated into one string. See ReviewerService.submit_decision's
     # docstring for the bug this avoids.
-    service.submit_decision(thread_id, interrupt_id, decision, note.strip() or None)
+    try:
+        service.submit_decision(thread_id, interrupt_id, decision, note.strip() or None)
+    except ValueError as e:  # review-03 S08-02: superseded or being-applied run
+        return RedirectResponse(url=f"/?msg={quote(f'Decision not recorded: {e}')}", status_code=303)
     return RedirectResponse(url="/", status_code=303)

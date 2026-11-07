@@ -65,10 +65,20 @@ def test_brief_carries_the_crew_shift_suggestion_and_says_not_applied(svc):
 
 
 def test_brief_explains_when_there_is_no_suggestion(svc):
-    entry = _seed(svc)["TANK-ENTRY"]
-    # The tank crew's only shift-mates conflict too; whatever the outcome, it's stated, never silent.
-    ra = entry.safety_brief["recommended_action"]
-    assert ("Suggested, not applied" in ra) or ("No crew-shift suggestion" in ra)
+    # review-03 S08-06: a fixture that guarantees no suggestion (the only permit covers
+    # just the original window), with assertions on the outcome and the visible reason.
+    from agent_core.certificates import Certificate, CertificateKind
+    from agent_core.state import SafetyPermitsRequired
+    pkgs = packages()
+    pkgs[0] = pkgs[0].model_copy(update={"permits_required": SafetyPermitsRequired(hot_work_permit=True)})
+    cert = Certificate(certificate_id="HW-1", work_package_id="WELD-1", kind=CertificateKind.HOT_WORK_PERMIT,
+                       valid_from=d(7), valid_until=d(11))
+    svc.seed_run("T1", pkgs, crews=CREWS, calendar=CAL, certificates=[cert], label="notional run")
+    weld = next(r for r in svc.list_pending_reviews() if r.work_package_id == "WELD-1")
+    assert weld.safety_brief["shift_outcome"]["suggestion"] is None
+    ra = weld.safety_brief["recommended_action"]
+    assert "No crew-shift suggestion" in ra and "Suggested, not applied" not in ra
+    assert "WS-CT-001" in ra
 
 
 def test_run_without_crew_data_says_so_in_the_brief():

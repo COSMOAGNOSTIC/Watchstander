@@ -256,3 +256,32 @@ def judgment_flags(
                                "list omits it, so conflict detection cannot see it.", roster))
 
     return sorted(flags, key=lambda f: f.flag_id)
+
+
+def judgment_node(state: dict) -> dict:
+    """
+    review-03 S08-04: graph step between detection and reasoning. Every package named
+    by a judgment flag (any WS-JF rule) is routed to human review, with the rule, the
+    reason, and the person it routes to recorded in its rationale, so it reaches the
+    HITL gate and gets a brief. Before this, judgment flags were only computed inside
+    the shift suggester, so a standalone flag (e.g. unlocated overhead work) reached
+    nobody. Fails closed: a flagged package is never left cleared.
+    """
+    packages = state["work_packages"]
+    flags = judgment_flags(packages)
+    by_id = {p.work_package_id: p for p in packages}
+    for f in flags:
+        note = (f"Judgment flag {f.rule_id}: {f.reason} Route to {f.routed_to.role} "
+                f"{f.routed_to.display_name} ({f.routed_to.person_id}).")
+        for pid in f.work_package_ids:
+            wp = by_id[pid]
+            wp.requires_hitl_review = True
+            wp.cleared_for_execution = False
+            if not wp.conflict_rationale:
+                wp.conflict_rationale = note
+            elif note not in wp.conflict_rationale:
+                wp.conflict_rationale = f"{wp.conflict_rationale} | {note}"
+    return {
+        "work_packages": packages,
+        "requires_hitl_review": bool(state.get("requires_hitl_review")) or bool(flags),
+    }

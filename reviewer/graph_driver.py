@@ -73,6 +73,7 @@ class ReviewerService:
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._checkpointer = SqliteSaver(self._conn)
         self._graph = build_graph(checkpointer=self._checkpointer)
+        self._recover_applies()
 
     def close(self) -> None:
         self._conn.close()
@@ -115,13 +116,21 @@ class ReviewerService:
         """
         review = self.get_pending_review(thread_id, interrupt_id)
         if review is None:
-            return ApplyResult(False, "Not applied: no pending review found for that package.")
+            return ApplyResult(False, "Not applied: no pending review found for that package "
+                                      "(it may already be decided, or its run already superseded).")
         shown = (review.safety_brief or {}).get("shift_outcome") or {}
         if not shown.get("suggestion"):
             return ApplyResult(False, f"Not applied: the brief for {review.work_package_id} has no suggestion to apply.")
         inputs = self.run_inputs(thread_id)
         if not inputs or not inputs.get("crews") or not inputs.get("calendar"):
             return ApplyResult(False, "Not applied: this run has no crew or shift calendar data.")
+
+        new_thread = f"{thread_id}-applied-{interrupt_id[:8]}"
+        # review-03 S08-01: claim the run before anything else. From here on the old run
+        # takes no decisions (S08-02), and no other Apply, in any process, can proceed.
+        if not registry.claim_apply(self.db_path, thread_id, new_thread):
+            return ApplyResult(False, f"Not applied: another Apply on run {thread_id} is already in "
+                                      "progress, or the run was already superseded.")
 
         packages = [WorkPackageState.model_validate(p) for p in inputs["packages"]]
         crews = [Crew.model_validate(c) for c in inputs["crews"]]
@@ -130,27 +139,29 @@ class ReviewerService:
         fresh = suggest_crew_shift(packages, review.work_package_id, crews=crews,
                                    calendar=calendar, certificates=certificates)
         if fresh.suggestion is None or fresh.suggestion.model_dump() != shown["suggestion"]:
+            registry.release_claim(self.db_path, thread_id)
             why = fresh.reason or "the re-check produced a different move"
             return ApplyResult(False, f"Not applied: the suggestion no longer holds ({why}). Nothing was changed.")
 
         moved = {m.work_package_id: m for m in fresh.suggestion.moves}
         new_packages = []
         for p in packages:
+            data = p.model_dump()
+            # The successor recomputes these; stale ones must not carry over (S08-03).
+            data.update(conflicts=[], conflict_rationale=None, safety_brief=None)
             if p.work_package_id in moved:
                 m = moved[p.work_package_id]
-                data = p.model_dump()
+                # review-03 S08-03: a moved package always needs a fresh human decision.
+                # Any approval or clearance it carried was for the old schedule.
                 data.update(scheduled_start=m.suggested_start, scheduled_end=m.suggested_end,
-                            requires_hitl_review=True)
-                p = WorkPackageState.model_validate(data)
-            new_packages.append(p)
+                            requires_hitl_review=True, hitl_disposition=None,
+                            cleared_for_execution=False)
+            new_packages.append(WorkPackageState.model_validate(data))
 
-        new_thread = f"{thread_id}-applied-{interrupt_id[:8]}"
         self.seed_run(new_thread, new_packages, crews=crews, calendar=calendar, certificates=certificates,
                       label=f"schedule change applied from {thread_id}")
-        for pending in [r for r in self.list_pending_reviews() if r.thread_id == thread_id]:
-            self.submit_decision(thread_id, pending.interrupt_id, "reject",
-                                 f"superseded: schedule change applied in run {new_thread}")
-        registry.mark_superseded(self.db_path, thread_id, new_thread)
+        registry.set_claim_status(self.db_path, thread_id, "seeded")
+        self._close_superseded_reviews(thread_id, new_thread)
         return ApplyResult(
             True,
             f"Schedule change applied in run {new_thread}: crew {fresh.suggestion.crew_id} moved to "
@@ -158,6 +169,27 @@ class ReviewerService:
             f"the reviews in run {thread_id} were superseded.",
             new_thread,
         )
+
+    def _close_superseded_reviews(self, thread_id: str, successor: str) -> None:
+        """Reject every still-pending review in the old run, record the supersession,
+        and finish the claim. Idempotent, so crash recovery can call it again."""
+        for pending in self._pending_for(thread_id):
+            self._resume(thread_id, pending.interrupt_id, "reject",
+                         f"superseded: schedule change applied in run {successor}")
+        registry.mark_superseded(self.db_path, thread_id, successor)
+        registry.set_claim_status(self.db_path, thread_id, "done")
+
+    def _recover_applies(self) -> None:
+        """
+        review-03 S08-02: finish or roll back any Apply interrupted mid-way. If its
+        successor run exists, finish superseding the old run. If not, nothing changed
+        yet, so release the claim and the old run is reviewable again.
+        """
+        for thread_id, successor, _status in registry.open_claims(self.db_path):
+            if self.run_inputs(successor):
+                self._close_superseded_reviews(thread_id, successor)
+            else:
+                registry.release_claim(self.db_path, thread_id)
 
     def seed_demo(self, thread_id: str) -> None:
         """Runs the real ACUSHNET demo work packages through the REAL
@@ -167,9 +199,23 @@ class ReviewerService:
         visualizer/demo_broadcaster.py uses."""
         self.seed_run(thread_id, acushnet_demo_work_packages(), label="ACUSHNET demo run")
 
+    def _closed_to_decisions(self, thread_id: str) -> bool:
+        """review-03 S08-02: a run being applied, or already superseded, takes no decisions."""
+        return (registry.get_claim(self.db_path, thread_id) is not None
+                or registry.superseded_by(self.db_path, thread_id) is not None)
+
     def list_pending_reviews(self) -> list[PendingReview]:
         pending: list[PendingReview] = []
         for thread_id in registry.list_thread_ids(self.db_path):
+            if self._closed_to_decisions(thread_id):
+                continue
+            pending.extend(self._pending_for(thread_id))
+        return pending
+
+    def _pending_for(self, thread_id: str) -> list[PendingReview]:
+        """Pending interrupts for one run, whether or not it is open to decisions."""
+        pending: list[PendingReview] = []
+        for thread_id in [thread_id]:
             config = {"configurable": {"thread_id": thread_id}}
             state = self._graph.get_state(config)
             for task in state.tasks:
@@ -232,6 +278,14 @@ class ReviewerService:
     def submit_decision(
         self, thread_id: str, interrupt_id: str, decision: str, note: str | None = None
     ) -> None:
+        if self._closed_to_decisions(thread_id):
+            # review-03 S08-02: never act on a schedule that an Apply has replaced.
+            raise ValueError(
+                f"run {thread_id} is superseded or being applied; review the packages in its successor run"
+            )
+        self._resume(thread_id, interrupt_id, decision, note)
+
+    def _resume(self, thread_id: str, interrupt_id: str, decision: str, note: str | None) -> None:
         """Resumes only this one interrupt -- every other package still
         pending on this or any other thread is left untouched and stays
         reviewable independently (verified directly: see

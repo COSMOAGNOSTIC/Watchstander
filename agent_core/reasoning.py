@@ -230,16 +230,22 @@ def describe_shift_outcome(outcome) -> str:
     if outcome is None:
         return "No crew-shift suggestion: this run has no crew or shift calendar data."
     s = outcome.suggestion
+    # review-03 S08-05: say why each shift failed, not just how many did.
+    rejected = "; ".join(
+        f"{r.shift_id} ({', '.join(list(r.rule_ids) + list(r.reasons)) or 'no reason recorded'})"
+        for r in outcome.rejected
+    )
     if s is None:
-        tried = f" ({len(outcome.rejected)} later shift(s) checked and rejected)" if outcome.rejected else ""
+        tried = f" Shifts checked and rejected: {rejected}." if rejected else ""
         return f"No crew-shift suggestion: {outcome.reason}{tried}"
     moves = "; ".join(
         f"{m.work_package_id} {fmt_time(m.original_start)} -> {fmt_time(m.suggested_start)}"
         for m in s.moves
     )
+    earlier = f" Earlier shifts rejected: {rejected}." if rejected else ""
     return (
         f"Suggested, not applied: move crew {s.crew_id}'s block from {s.from_shift_id} to "
-        f"{s.to_shift_id} ({moves}). Apply re-checks every rule first, and every moved "
+        f"{s.to_shift_id} ({moves}).{earlier} Apply re-checks every rule first, and every moved "
         f"package still needs a human decision."
     )
 
