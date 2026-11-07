@@ -160,3 +160,56 @@ def _():
 print(f"\nreproduced: {sorted(k for k, v in results.items() if v)}")
 print(f"not reproduced: {sorted(k for k, v in results.items() if v is False)}")
 print(f"errors: {sorted(k for k, v in results.items() if v is None)}")
+
+
+# ---- re-check: S08-01 / S08-02 reopened (startup recovery deletes a LIVE Apply's claim) ----
+def _live_apply_with_startup_during_pause(action):
+    s = svc()
+    s.seed_run("T1", pair(), crews=CREWS, calendar=CAL, certificates=[])
+    pend = {r.work_package_id: r for r in s.list_pending_reviews()}
+    real = graph_driver.suggest_crew_shift
+    inside, release = threading.Event(), threading.Event()
+
+    def paused(*a, **k):
+        out = real(*a, **k)
+        if threading.current_thread().name == "A":
+            inside.set()
+            release.wait(timeout=10)
+        return out
+
+    graph_driver.suggest_crew_shift = paused
+    res = {}
+    try:
+        t = threading.Thread(name="A", target=lambda: res.__setitem__("A", s.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)))
+        t.start()
+        inside.wait(timeout=10)
+        b = ReviewerService(s.db_path)  # a service starting while A is live
+        res["B"] = action(b, pend)
+        release.set()
+        t.join(timeout=20)
+    finally:
+        graph_driver.suggest_crew_shift = real
+    return s, res
+
+
+@probe("S08-01-recheck")
+def _():
+    s, res = _live_apply_with_startup_during_pause(lambda b, pend: b.apply_shift_suggestion("T1", pend["TANK-ENTRY"].interrupt_id))
+    both = res["A"].applied and res["B"].applied
+    return both, f"A applied={res['A'].applied}, B applied={res['B'].applied}"
+
+
+@probe("S08-02-recheck")
+def _():
+    def approve(b, pend):
+        try:
+            b.submit_decision("T1", pend["WELD-1"].interrupt_id, "approve")
+            return "accepted"
+        except ValueError as e:
+            return f"refused: {e}"
+    s, res = _live_apply_with_startup_during_pause(approve)
+    cleared = [x for x in s.list_decided() if x["thread_id"] == "T1" and x["work_package_id"] == "WELD-1" and x["cleared_for_execution"]]
+    return res["B"] == "accepted" and bool(cleared), f"old approval during live Apply: {res['B']}; old WELD-1 still cleared={bool(cleared)}; A applied={res['A'].applied}"
+
+
+print(f"\nafter re-check probes -- reproduced: {sorted(k for k, v in results.items() if v and 'recheck' in k)}")

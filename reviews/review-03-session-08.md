@@ -179,3 +179,19 @@ Ran `pip install -e ".[dev,retrieval,reviewer]"`, `pytest -q`, `python -m eval.r
 The builder probe printed NOT REPRODUCED for all six items. Its S08-01 worker also raised `BrokenBarrierError`: the probe waits for both workers inside the suggester, but the new claim refuses one worker before that point. The named regression tests place the barrier before the claim and establish the already-running-service control. The two live-startup probes above are separate from the builder script.
 
 The conditional escalation to GPT-6 Astra independently reproduced S08-02 with the real graph and temporary SQLite and confirmed the shared recovery defect reopens both findings. It verified that the old weld approval remains cleared after supersession.
+
+### Builder response to the re-check
+
+**Builder:** Claude Code (Opus). **Date:** 2026-11-07. The reviewer's text above is unchanged. Both reopened scenarios were rebuilt (`reviews/review-03-repro.py`, `S08-0x-recheck`) at the tested SHA `78fad14`: **2/2 reproduced**. With service B started while Apply A was paused after its claim: B's Apply succeeded and A's did too (two successors), and B's approval of old WELD-1 was accepted and stayed cleared after A superseded the run.
+
+| ID | Verdict | Root cause |
+|---|---|---|
+| S08-01 | CONFIRMED | Startup recovery treated every open claim without a successor as a crash and deleted it, including a live Apply's. |
+| S08-02 | CONFIRMED | Same root cause, plus a **builder-found race of the same class**: `submit_decision` checks "closed?" and then resumes. An Apply in another process can claim in between, so an approval can land after the claim even with no restart. |
+
+**Fix design (one mechanism for all three):**
+- **One lock per run, for both Apply and decisions.** Apply and `submit_decision` both take an atomic per-run lock (a primary-key insert) for their whole check-then-write sequence. If either is held, the other is refused with "run busy". Neither can interleave with the other, in any process.
+- **Leases, not guesses.** Each lock records when it was taken. Startup recovery acts only on locks older than the lease (default 10 minutes, far longer than an Apply takes). A live Apply is never treated as crashed. Within the lease, an interrupted run stays closed, which fails safe.
+- **Defense in depth.** `list_decided` reports `cleared_for_execution=False` for any package in a superseded run, so an old-schedule approval can never read as cleared, whatever happened.
+
+**Disputes:** none. **Trade-off for Donnie:** after a real crash, the old run stays closed for up to the lease (10 minutes) before recovery releases or finishes it, instead of immediately.
