@@ -214,3 +214,11 @@ def test_s08_05_reason_only_rejections_are_shown_too(svc):
     o = CrewShiftOutcome(rejected=[RejectedShift(shift_id="S1", rule_ids=[], reasons=["WELD-1 does not start in S1"])],
                          reason="no shift passes")
     assert "WELD-1 does not start in S1" in describe_shift_outcome(o)
+
+
+def test_s08_04_judgment_node_itself_leaves_no_flagged_package_cleared():
+    from agent_core.judgment import judgment_node
+    p = W(work_package_id="ALOFT", description="n", hazard_categories=[H.WORKING_ALOFT], spatial=SC(),
+          scheduled_start=d(7), scheduled_end=d(11))
+    out = judgment_node({"work_packages": [p]})
+    assert out["work_packages"][0].cleared_for_execution is False and out["requires_hitl_review"] is True

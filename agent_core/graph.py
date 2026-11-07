@@ -1,7 +1,7 @@
 """
 Watchstander agent graph assembly.
 
-    entry -> deconfliction_node -> judgment_node -> reasoning_node -> hitl_prepare
+    entry -> deconfliction_node -> judgment_node -> findings_node -> reasoning_node -> hitl_prepare
              -> [hitl_gate_single x N, fanned out via Send()] -> END
 
 Phase change (see agent_core/hitl.py docstring): the HITL gate used to be
@@ -27,6 +27,7 @@ from langgraph.graph import END, StateGraph
 
 from agent_core.deconfliction import deconfliction_node
 from agent_core.hitl import hitl_gate_single_node, hitl_prepare_node, hitl_route
+from agent_core.findings_gate import findings_node
 from agent_core.judgment import judgment_node
 from agent_core.reasoning import reasoning_node
 from agent_core.state import WorkPackageState
@@ -48,13 +49,15 @@ def build_graph(checkpointer: SqliteSaver | None = None):
 
     graph.add_node("deconfliction", deconfliction_node)
     graph.add_node("judgment", judgment_node)  # review-03 S08-04
+    graph.add_node("findings", findings_node)  # certificates + schedule rules reach review
     graph.add_node("reasoning", reasoning_node)
     graph.add_node("hitl_prepare", hitl_prepare_node)
     graph.add_node("hitl_gate_single", hitl_gate_single_node)
 
     graph.set_entry_point("deconfliction")
     graph.add_edge("deconfliction", "judgment")
-    graph.add_edge("judgment", "reasoning")
+    graph.add_edge("judgment", "findings")
+    graph.add_edge("findings", "reasoning")
     graph.add_edge("reasoning", "hitl_prepare")
     graph.add_conditional_edges(
         "hitl_prepare",
