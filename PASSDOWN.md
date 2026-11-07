@@ -652,3 +652,10 @@ Reviewed `session-08-brief-apply` at `2f94ed570302cc106062c36731592f68fb7553a3` 
 ## Review 03 re-check
 
 Tested `session-08-brief-apply` at `78fad145f2dbcb41920d85d5afa43029a8253763` on `review-03-recheck`. S08-03 through S08-06 and the findings gate are confirmed fixed. S08-01 and S08-02 reopened: startup recovery can delete a live Apply claim before successor creation, permitting a second successor or approval of the old schedule while Apply is in progress. Both were reproduced. All 457 tests passed and eval matched the baseline. See **Reviewer re-check** in `reviews/review-03-session-08.md`. Hold for triage.
+
+## 35. Session Notes — 2026-11-07: review-03 re-check triage and fix
+
+**Re-check (Codex, cheaper model escalated to the strongest at `78fad14`):** S08-03..06 and the findings gate confirmed fixed. S08-01/02 reopened: startup recovery deleted a *live* Apply's claim, allowing two successors or an old-schedule approval during Apply.
+**Builder:** 2/2 reproduced, plus a same-class race in `submit_decision` (check-then-resume). Verdicts first (`5ae3946`); fixed in `bbb1c51` with one leased lock per run shared by Apply and decisions; recovery acts only on expired leases; superseded runs never report cleared. Mutation-checked.
+**Status:** 462 tests passed; eval baseline unchanged.
+**Next up:** cheaper-model re-check 2 → merge Session 8 → Session 9 (decision log).

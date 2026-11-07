@@ -195,3 +195,24 @@ The conditional escalation to GPT-6 Astra independently reproduced S08-02 with t
 - **Defense in depth.** `list_decided` reports `cleared_for_execution=False` for any package in a superseded run, so an old-schedule approval can never read as cleared, whatever happened.
 
 **Disputes:** none. **Trade-off for Donnie:** after a real crash, the old run stays closed for up to the lease (10 minutes) before recovery releases or finishes it, instead of immediately.
+
+### Re-check fix
+
+Commit `bbb1c51`. New regression tests are `test_recheck_*` in `tests/test_review03_fixes.py`. Written first: 7 failed. Full suite **462 passed**; eval baseline unchanged. The `S08-0x-recheck` probes in `reviews/review-03-repro.py` no longer reproduce.
+
+| ID | Fix | Regression test(s) |
+|---|---|---|
+| S08-01 | One atomic per-run lock (`registry.run_locks`) held by Apply for its whole sequence; recovery acts only on locks older than `lease_seconds` (default 600) | `test_recheck_s08_01_service_starting_during_a_live_apply_cannot_apply_too` |
+| S08-02 | The same lock is held by `submit_decision` across check-then-resume; a young lock is never released by recovery; superseded runs never report cleared | `test_recheck_s08_02_*` (3), `test_recheck_superseded_run_never_reports_cleared` |
+
+**Builder-found same-class race, fixed by the same lock:** `submit_decision` checked "closed?" and then resumed, so an Apply in another process could claim the run in between. Covered by `test_recheck_s08_02_apply_is_refused_while_a_decision_is_being_recorded`.
+
+**Mutation checks:** recovery ignoring the lease, a decision taking no lock, Apply ignoring the lock, and superseded approvals reading as cleared: all four now fail a test. The decision-lock mutation was initially ineffective (it still took the lock) and was redone.
+
+**Trade-off:** after a real crash, the old run stays closed for up to the lease before recovery releases or finishes it. The two crash-restart tests now construct the service with `lease_seconds=0` to model a restart after the lease expires.
+
+**Note on the builder's original S08-01 probe:** it reported NOT REPRODUCED with a `BrokenBarrierError` in one worker, because the claim now refuses one worker before the barrier. That was expected, and the reopened race is covered by the new tests.
+
+### Reviewer re-check 2
+
+Pending. Cheaper model, per AGENTS.md.
