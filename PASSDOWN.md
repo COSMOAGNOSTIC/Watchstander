@@ -681,3 +681,7 @@ Tested `session-08-brief-apply` at `23b05e8abe810cc90444bec1ff8408c125882e31` on
 **Re-check 3 (Codex at `23b05e8`):** S08-01/02 reopened. A symlink to the same database got a different lock file, so a second service ran recovery over a live Apply.
 **Builder:** reproduced, plus the hard-link alias (same class); verdict first; fixed in `09a1636` by keying the lock on the database's device and inode. 469 tests passed; eval baseline unchanged.
 **Next up:** cheaper-model re-check 4 → merge Session 8 → Session 9.
+
+## Review 03 re-check 4
+
+Tested `session-08-brief-apply` at `103488af71b4f82761ef3aa55f65dc0b2b571df5` on `review-03-recheck4`. Symlink, hard-link and path-spelling exclusion passed in the common lock directory. S08-01 and S08-02 reopened because differing temp directories give two services different locks on the identical local database. Reproduced two successors and old-schedule approval during live Apply across processes. High impact with low likelihood in a normal single-reviewer launch. All 469 tests passed and eval matched the baseline. See **Reviewer re-check 4** in `reviews/review-03-session-08.md`. Hold for triage.

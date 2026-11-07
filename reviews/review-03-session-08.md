@@ -324,4 +324,29 @@ Tests: `test_recheck3_any_other_name_for_the_same_database_is_refused` (symlink,
 
 ### Reviewer re-check 4
 
-Pending. Cheaper model.
+Tested **`103488af71b4f82761ef3aa55f65dc0b2b571df5`**, the current `session-08-brief-apply` tip. Code inspection was limited to `git diff 23b05e8..HEAD -- reviewer tests`.
+
+| ID | Verdict | Scenario |
+|---|---|---|
+| S08-01 | reopened | **Medium in the documented local setup. High impact, low likelihood. Reproduced.** Database aliases share one lock within a common temp directory. With different temp directories, a second process opens the identical database path, removes the live Apply marker during recovery, and creates a successor. The original Apply resumes and creates another. |
+| S08-02 | reopened | **Medium in the documented local setup. High impact, low likelihood. Reproduced.** With the same separate temp directories, the second process can approve an old pending review while the first Apply is still active. The old approval reads as cleared before supersession. |
+
+**Alias checks pass.** The named tests verify that symlinks, hard links and a `sub/../r.db` path spelling all get the same device and inode lock when the services share the lock directory. The live Apply symlink regression passes. A separate-process control with the same temp directory also refused startup while Apply was paused.
+
+**Remaining gap** at `reviewer/graph_driver.py:41–55,98–102,241–253`. The device and inode match, but the lock directory comes from `tempfile.gettempdir()`. Two launches can resolve that directory differently, for example through different `TMPDIR` settings. Each acquires a distinct lock file. Startup recovery then assumes sole ownership and clears the other process's live marker.
+
+```text
+same database device + inode
+       |
+same temp directory?  yes -> same lock file -> second service refused
+       |
+       no -> two lock files -> second service starts -> live marker removed
+```
+
+**Reproduction.** Seed the real two-crew fixture in a temporary local SQLite database. Start Apply A for WELD-1 and pause it inside the real suggester after it records the marker. Launch a second Python process with the identical database pathname and a different `TMPDIR` from A's lock directory. It opens the service and confirms A's marker is gone. In one run it Applies TANK-ENTRY, then A resumes. Both calls succeed and the database contains two registered successors. In a separate run the second process approves the old WELD-1 interrupt and confirms it reads as cleared while A is still paused. A then successfully supersedes the old run. No symlink, hard link, or clock change is needed.
+
+**Local likelihood.** Low in the documented setup with one reviewer process, one local database and a consistent temp environment. The bypass requires a second overlapping launch with a different effective temp directory, which can happen if a development shell and a service use different environments. The reproduced consequences are the same two unsafe state transitions as the earlier findings. A stable lock namespace shared by all launches that can reach the database is part of the ownership guarantee.
+
+**Verification.** Ran `pip install -e ".[dev,retrieval,reviewer]"`, `pytest -q`, and `python -m eval.run_eval`. **469 passed, zero failures.** Eval matched the baseline. The additional interleavings ran against the real graph and temporary SQLite. Hold for triage.
+
+GPT-6 Astra independently reproduced S08-01 using two subprocesses with distinct actual `TMPDIR` values and the identical absolute database path. It also assessed the bypass as medium severity for the documented local setup because it requires overlapping launches with different temp configuration.
