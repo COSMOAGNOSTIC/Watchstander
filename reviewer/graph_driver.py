@@ -16,6 +16,7 @@ reviewer/README.md for why that gap mattered.
 from __future__ import annotations
 
 import sqlite3
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -67,8 +68,14 @@ class ReviewerService:
     request threadpool for this app's traffic level (a single local
     reviewer, not concurrent production load)."""
 
-    def __init__(self, db_path: str = DEFAULT_DB_PATH) -> None:
+    # review-03 re-check: how long a run lock must sit untouched before startup recovery
+    # treats its owner as crashed. Far longer than an Apply takes; within it, an interrupted
+    # run simply stays closed (fails safe).
+    DEFAULT_LEASE_SECONDS = 600
+
+    def __init__(self, db_path: str = DEFAULT_DB_PATH, lease_seconds: float | None = None) -> None:
         self.db_path = db_path
+        self.lease_seconds = self.DEFAULT_LEASE_SECONDS if lease_seconds is None else lease_seconds
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._checkpointer = SqliteSaver(self._conn)
@@ -128,9 +135,12 @@ class ReviewerService:
         new_thread = f"{thread_id}-applied-{interrupt_id[:8]}"
         # review-03 S08-01: claim the run before anything else. From here on the old run
         # takes no decisions (S08-02), and no other Apply, in any process, can proceed.
-        if not registry.claim_apply(self.db_path, thread_id, new_thread):
-            return ApplyResult(False, f"Not applied: another Apply on run {thread_id} is already in "
-                                      "progress, or the run was already superseded.")
+        if not registry.acquire_lock(self.db_path, thread_id, "apply", time.time(), successor=new_thread):
+            return ApplyResult(False, f"Not applied: another Apply or a decision on run {thread_id} is "
+                                      "already in progress, or the run was already superseded.")
+        if registry.superseded_by(self.db_path, thread_id) is not None:
+            registry.release_lock(self.db_path, thread_id)
+            return ApplyResult(False, f"Not applied: run {thread_id} was already superseded.")
 
         packages = [WorkPackageState.model_validate(p) for p in inputs["packages"]]
         crews = [Crew.model_validate(c) for c in inputs["crews"]]
@@ -139,7 +149,7 @@ class ReviewerService:
         fresh = suggest_crew_shift(packages, review.work_package_id, crews=crews,
                                    calendar=calendar, certificates=certificates)
         if fresh.suggestion is None or fresh.suggestion.model_dump() != shown["suggestion"]:
-            registry.release_claim(self.db_path, thread_id)
+            registry.release_lock(self.db_path, thread_id)
             why = fresh.reason or "the re-check produced a different move"
             return ApplyResult(False, f"Not applied: the suggestion no longer holds ({why}). Nothing was changed.")
 
@@ -160,7 +170,7 @@ class ReviewerService:
 
         self.seed_run(new_thread, new_packages, crews=crews, calendar=calendar, certificates=certificates,
                       label=f"schedule change applied from {thread_id}")
-        registry.set_claim_status(self.db_path, thread_id, "seeded")
+        registry.set_lock_status(self.db_path, thread_id, "seeded")
         self._close_superseded_reviews(thread_id, new_thread)
         return ApplyResult(
             True,
@@ -177,19 +187,22 @@ class ReviewerService:
             self._resume(thread_id, pending.interrupt_id, "reject",
                          f"superseded: schedule change applied in run {successor}")
         registry.mark_superseded(self.db_path, thread_id, successor)
-        registry.set_claim_status(self.db_path, thread_id, "done")
+        registry.release_lock(self.db_path, thread_id)
 
     def _recover_applies(self) -> None:
         """
-        review-03 S08-02: finish or roll back any Apply interrupted mid-way. If its
-        successor run exists, finish superseding the old run. If not, nothing changed
-        yet, so release the claim and the old run is reviewable again.
+        review-03 S08-02 and its re-check: finish or roll back work whose owner crashed.
+        Only locks older than the lease count as abandoned; a young lock belongs to a live
+        owner (possibly another process mid-Apply) and is left alone. For an expired Apply
+        lock: if its successor run exists, finish superseding the old run; if not, nothing
+        changed yet, so release it and the old run is reviewable again. An expired decision
+        lock is simply released (the resume either happened or it didn't).
         """
-        for thread_id, successor, _status in registry.open_claims(self.db_path):
-            if self.run_inputs(successor):
+        for thread_id, kind, successor in registry.expired_locks(self.db_path, time.time() - self.lease_seconds):
+            if kind == "apply" and successor and self.run_inputs(successor):
                 self._close_superseded_reviews(thread_id, successor)
             else:
-                registry.release_claim(self.db_path, thread_id)
+                registry.release_lock(self.db_path, thread_id)
 
     def seed_demo(self, thread_id: str) -> None:
         """Runs the real ACUSHNET demo work packages through the REAL
@@ -201,7 +214,8 @@ class ReviewerService:
 
     def _closed_to_decisions(self, thread_id: str) -> bool:
         """review-03 S08-02: a run being applied, or already superseded, takes no decisions."""
-        return (registry.get_claim(self.db_path, thread_id) is not None
+        lock = registry.get_lock(self.db_path, thread_id)
+        return ((lock is not None and lock["kind"] == "apply")
                 or registry.superseded_by(self.db_path, thread_id) is not None)
 
     def list_pending_reviews(self) -> list[PendingReview]:
@@ -262,6 +276,7 @@ class ReviewerService:
         for thread_id in registry.list_thread_ids(self.db_path):
             config = {"configurable": {"thread_id": thread_id}}
             state = self._graph.get_state(config)
+            superseded = registry.superseded_by(self.db_path, thread_id)
             for wp in state.values.get("reviewed_packages", []):
                 if wp.hitl_disposition is not None:
                     decided.append(
@@ -269,8 +284,9 @@ class ReviewerService:
                             "thread_id": thread_id,
                             "work_package_id": wp.work_package_id,
                             "disposition": wp.hitl_disposition,
-                            "cleared_for_execution": wp.cleared_for_execution,
-                            "superseded_by": registry.superseded_by(self.db_path, thread_id),
+                            # review-03 re-check: an approval on a replaced schedule never reads as cleared.
+                            "cleared_for_execution": wp.cleared_for_execution and superseded is None,
+                            "superseded_by": superseded,
                         }
                     )
         return decided
@@ -278,12 +294,20 @@ class ReviewerService:
     def submit_decision(
         self, thread_id: str, interrupt_id: str, decision: str, note: str | None = None
     ) -> None:
-        if self._closed_to_decisions(thread_id):
-            # review-03 S08-02: never act on a schedule that an Apply has replaced.
-            raise ValueError(
-                f"run {thread_id} is superseded or being applied; review the packages in its successor run"
-            )
-        self._resume(thread_id, interrupt_id, decision, note)
+        # review-03 re-check: hold the run's lock across check-then-resume, so an Apply in
+        # any process can't claim the run between the check and the write.
+        if not registry.acquire_lock(self.db_path, thread_id, "decision", time.time()):
+            raise ValueError(f"run {thread_id} is busy: an Apply or another decision is in progress, "
+                             "or it is being applied; try again or review its successor run")
+        try:
+            if self._closed_to_decisions(thread_id):
+                # review-03 S08-02: never act on a schedule that an Apply has replaced.
+                raise ValueError(
+                    f"run {thread_id} is superseded or being applied; review the packages in its successor run"
+                )
+            self._resume(thread_id, interrupt_id, decision, note)
+        finally:
+            registry.release_lock(self.db_path, thread_id)
 
     def _resume(self, thread_id: str, interrupt_id: str, decision: str, note: str | None) -> None:
         """Resumes only this one interrupt -- every other package still

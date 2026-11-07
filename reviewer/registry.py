@@ -35,25 +35,29 @@ def _connect(db_path: str) -> sqlite3.Connection:
         "superseded_by TEXT NOT NULL"
         ")"
     )
-    # review-03 S08-01/S08-02: one Apply per run. The primary key makes the claim
-    # atomic across processes sharing this database; `status` drives crash recovery.
+    # review-03 (and its re-check): ONE lock per run, shared by Apply and decisions, so
+    # neither can interleave with the other in any process. The primary key makes taking
+    # it atomic; `acquired_at` is the lease start, so startup recovery only acts on locks
+    # old enough to be abandoned (a live Apply is never mistaken for a crashed one).
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS apply_claims ("
+        "CREATE TABLE IF NOT EXISTS run_locks ("
         "thread_id TEXT PRIMARY KEY, "
-        "successor TEXT NOT NULL, "
-        "status TEXT NOT NULL"  # claimed -> seeded -> done
+        "kind TEXT NOT NULL, "          # apply | decision
+        "successor TEXT, "              # apply only
+        "status TEXT NOT NULL, "        # held | seeded
+        "acquired_at REAL NOT NULL"
         ")"
     )
     conn.commit()
     return conn
 
 
-def claim_apply(db_path: str, thread_id: str, successor: str) -> bool:
-    """True if this caller now owns the run's one Apply; False if anyone else already does."""
+def acquire_lock(db_path: str, thread_id: str, kind: str, now: float, successor: str | None = None) -> bool:
+    """True if this caller now holds the run's lock; False if anyone else does."""
     conn = _connect(db_path)
     try:
-        conn.execute("INSERT INTO apply_claims (thread_id, successor, status) VALUES (?, ?, 'claimed')",
-                     (thread_id, successor))
+        conn.execute("INSERT INTO run_locks (thread_id, kind, successor, status, acquired_at) "
+                     "VALUES (?, ?, ?, 'held', ?)", (thread_id, kind, successor, now))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -62,37 +66,40 @@ def claim_apply(db_path: str, thread_id: str, successor: str) -> bool:
         conn.close()
 
 
-def set_claim_status(db_path: str, thread_id: str, status: str) -> None:
+def set_lock_status(db_path: str, thread_id: str, status: str) -> None:
     conn = _connect(db_path)
     try:
-        conn.execute("UPDATE apply_claims SET status = ? WHERE thread_id = ?", (status, thread_id))
+        conn.execute("UPDATE run_locks SET status = ? WHERE thread_id = ?", (status, thread_id))
         conn.commit()
     finally:
         conn.close()
 
 
-def release_claim(db_path: str, thread_id: str) -> None:
+def release_lock(db_path: str, thread_id: str) -> None:
     conn = _connect(db_path)
     try:
-        conn.execute("DELETE FROM apply_claims WHERE thread_id = ?", (thread_id,))
+        conn.execute("DELETE FROM run_locks WHERE thread_id = ?", (thread_id,))
         conn.commit()
     finally:
         conn.close()
 
 
-def get_claim(db_path: str, thread_id: str) -> tuple[str, str] | None:
+def get_lock(db_path: str, thread_id: str) -> dict | None:
     conn = _connect(db_path)
     try:
-        row = conn.execute("SELECT successor, status FROM apply_claims WHERE thread_id = ?", (thread_id,)).fetchone()
-        return (row[0], row[1]) if row else None
+        row = conn.execute("SELECT kind, successor, status, acquired_at FROM run_locks WHERE thread_id = ?",
+                           (thread_id,)).fetchone()
+        return dict(zip(("kind", "successor", "status", "acquired_at"), row)) if row else None
     finally:
         conn.close()
 
 
-def open_claims(db_path: str) -> list[tuple[str, str, str]]:
+def expired_locks(db_path: str, older_than: float) -> list[tuple[str, str, str | None]]:
+    """(thread_id, kind, successor) for every lock taken at or before `older_than`."""
     conn = _connect(db_path)
     try:
-        return conn.execute("SELECT thread_id, successor, status FROM apply_claims WHERE status != 'done'").fetchall()
+        return conn.execute("SELECT thread_id, kind, successor FROM run_locks WHERE acquired_at <= ?",
+                            (older_than,)).fetchall()
     finally:
         conn.close()
 
