@@ -261,3 +261,25 @@ The conditional escalation to GPT-6 Astra independently reproduced the two-succe
 **Trade-off for Donnie:** two reviewer app instances can't share one database at the same time. The second gets a clear error. Multi-user review would need a real database server and a proper transaction design, which is out of scope for Sessions 12–15 unless you want it.
 
 **Disputes:** none.
+
+### Re-check 2 fix
+
+Commit `4865ce3`. Tests: `test_recheck2_*` in `tests/test_review03_fixes.py` (8), with the earlier concurrency tests rewritten for one-service-per-database. Full suite **465 passed**; eval baseline unchanged.
+
+| Property | Test |
+|---|---|
+| A second service on the same database refuses to start; closing releases it | `test_recheck2_a_second_service_on_the_same_database_refuses_to_start`, `test_recheck2_closing_a_service_lets_another_open_the_database` |
+| Concurrent Applies in one service yield one successor | `test_recheck2_concurrent_applies_in_one_service_yield_one_successor` |
+| A decision during a live Apply is refused once Apply finishes; nothing on the old run reads cleared | `test_recheck2_decision_during_a_live_apply_is_refused_once_apply_finishes` |
+| Apply re-reads the review inside the lock (the reviewer's stale-read ordering) | `test_recheck2_apply_rereads_the_review_and_refuses_one_decided_meanwhile` |
+| A decision mid-write holds off Apply (direct proof of serialization) | `test_recheck2_a_decision_in_progress_holds_off_apply_until_it_finishes` |
+| Failure before a successor reopens the run immediately | `test_recheck2_failure_before_a_successor_reopens_the_run_immediately` |
+| A real process killed mid-Apply (`os._exit`) is recovered by the next service | `test_recheck2_a_process_killed_mid_apply_is_recovered_by_the_next_service` |
+
+**Mutations, all caught:** no exclusive database lock; Apply not serialized; decision not serialized; no re-read inside the lock; no recovery; no reopen on early failure.
+
+**Reading `reviews/review-03-repro.py` now:** every probe that opens a second service on the same database reports ERROR "another reviewer service already has this database open". That refusal is the fix. The rest report NOT REPRODUCED. The script's original S08-01 probe also leaked a patched function into the next probe when it failed; that was fixed in the script, and S08-03 no longer errors.
+
+### Reviewer re-check 3
+
+Pending. Cheaper model.

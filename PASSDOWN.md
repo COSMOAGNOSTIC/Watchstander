@@ -663,3 +663,11 @@ Tested `session-08-brief-apply` at `78fad145f2dbcb41920d85d5afa43029a8253763` on
 ## Review 03 re-check 2
 
 Tested `session-08-brief-apply` at `557f3f6c1546997333c98efc6f5067288369783b` on `review-03-recheck2`. S08-01 and S08-02 reopened. Recovery can remove an expired lock from a live Apply, and Apply can use a pending review read before a racing decision completes. All 462 tests passed, eval matched its baseline, and both builder re-check probes reported NOT REPRODUCED within their scenarios. The reproduced interleavings and verdicts are under **Reviewer re-check 2** in `reviews/review-03-session-08.md`. Hold for triage.
+
+## 36. Session Notes — 2026-11-07: review-03 re-check 2 — change of approach
+
+**Re-check 2 (Codex at `557f3f6`):** S08-01/02 reopened a third time. A *live* Apply whose lease expired lost its lock, so two successors were created; and Apply acted on a review approved after it was read.
+**Builder:** 2/2 reproduced. Verdict and design first (`3f0958d`). Patching one interleaving at a time was the wrong approach, because a lease can't prove its owner is dead. Fixed in `4865ce3`: an exclusive per-database service lock (flock; the OS releases it on crash), recovery only under that lock, and one in-service lock serializing Apply and decisions with a re-read. A real-crash test uses a killed subprocess.
+**Constraint (documented in reviewer/README.md):** one reviewer service per database. Multi-user review is out of scope unless Donnie wants it.
+**Status:** 465 tests passed; eval baseline unchanged; 6 mutations caught.
+**Next up:** cheaper-model re-check 3 → merge Session 8 → Session 9.
