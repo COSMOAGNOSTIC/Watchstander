@@ -671,3 +671,7 @@ Tested `session-08-brief-apply` at `557f3f6c1546997333c98efc6f5067288369783b` on
 **Constraint (documented in reviewer/README.md):** one reviewer service per database. Multi-user review is out of scope unless Donnie wants it.
 **Status:** 465 tests passed; eval baseline unchanged; 6 mutations caught.
 **Next up:** cheaper-model re-check 3 → merge Session 8 → Session 9.
+
+## Review 03 re-check 3
+
+Tested `session-08-brief-apply` at `23b05e8abe810cc90444bec1ff8408c125882e31` on `review-03-recheck3`. S08-01 and S08-02 reopened. The same-path service exclusion and in-service decision serialization pass, but a symlink alias acquires a separate sidecar lock for the same SQLite database. Startup recovery then removes a live Apply marker, permitting either a second successor or old-schedule approval. Both effects were reproduced. All 465 tests passed and eval matched the baseline. Details are under **Reviewer re-check 3** in `reviews/review-03-session-08.md`. Hold for triage.

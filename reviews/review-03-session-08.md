@@ -282,4 +282,26 @@ Commit `4865ce3`. Tests: `test_recheck2_*` in `tests/test_review03_fixes.py` (8)
 
 ### Reviewer re-check 3
 
-Pending. Cheaper model.
+Tested **`23b05e8abe810cc90444bec1ff8408c125882e31`**, the current `session-08-brief-apply` tip. Code inspection was limited to `git diff 557f3f6..HEAD -- reviewer tests`.
+
+| ID | Verdict | Scenario |
+|---|---|---|
+| S08-01 | reopened | **High, reproduced.** Two services using the identical database path are excluded as intended. With a symlink alias to that same SQLite database, a second service starts, removes the first service's live Apply marker during recovery, and successfully Applies a different review. The first service resumes and also succeeds. |
+| S08-02 | reopened | **High, reproduced.** The in-service decision and Apply ordering tests pass, including the stale pending read. A second service using the symlink alias can still approve the old review during a live Apply. The old approval is visible as cleared before supersession. |
+
+**Shared cause** at `reviewer/graph_driver.py:79–86,222–234`. The exclusive lock is tied to the supplied path plus `.lock`. A symlink to the database file resolves to the same SQLite database, but its separately named lock file does not resolve to the first service's lock file.
+
+```text
+A opens r.db     -> holds r.db.lock     -> pauses after writing Apply marker
+B opens alias.db -> holds alias.db.lock -> reads same database through symlink
+                                          |
+                                   recovery removes A's marker
+                                          |
+                       B can Apply or approve an old review while A is live
+```
+
+**Reproduction.** Seed the builder's two-crew fixture using service A at `r.db`. Create `alias.db` as a symlink to `r.db` in the same temporary directory. Start Apply for WELD-1 and pause inside the suggester, after verifying the marker exists. Start service B at `alias.db` and verify that A's marker is gone. In one run B Applies TANK-ENTRY, then A resumes. Both report `applied=True`, and the registry lists both successors. In a separate run B approves the original WELD-1 interrupt, and `list_decided` reports it as cleared before A resumes and supersedes the run. No clock change was needed. These are two effects of the same ownership defect.
+
+**Verification.** Ran the requested install, `pytest -q`, `python -m eval.run_eval`, and `python reviews/review-03-repro.py`. **465 passed, zero failures.** Eval matched the baseline. The builder's same-path probes stop with the expected “another reviewer service already has this database open” error. The suite covers same-service Apply and decision serialization, pending-review revalidation, and recovery after process exit. The separate temporary SQLite probes above exercised two paths to the same file. Hold for triage.
+
+GPT-6 Astra independently reproduced both symlink outcomes at the same SHA using the real graph and temporary SQLite databases.
