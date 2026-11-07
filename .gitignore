@@ -10,3 +10,5 @@ __pycache__/
 venv/
 visualizer/.godot/
 retrieval/.chroma_store/
+# Reviewer service owner lock (review-03): lives next to the database file
+.*.reviewer.lock
