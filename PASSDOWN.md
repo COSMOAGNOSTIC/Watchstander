@@ -692,3 +692,7 @@ Tested `session-08-brief-apply` at `103488af71b4f82761ef3aa55f65dc0b2b571df5` on
 **Builder:** confirmed with two real processes (a first in-process probe gave a false "refused" through RecursionError and was discarded). Fixed in `a9c0672`: the lock sits beside the database's real file, independent of the environment. 470 tests passed; eval baseline unchanged.
 **Donnie's decision:** option 1. Fix this, then close the class. Remaining aliasing paths (cross-directory hard links, network filesystems, bind mounts) are in ARCHITECTURE.md Known Debt and reviewer/README.md as unsupported.
 **Next up:** a narrow cheaper-model re-check 5 → merge Session 8 → Session 9 (decision log).
+
+## Review 03 re-check 5
+
+Tested `session-08-brief-apply` at `4b14cc19e8af755b553c3e81d053dfeadca99733` on `review-03-recheck5`. S08-01 and S08-02 confirmed fixed within the accepted local database scope. The named TMPDIR regression and a separate live Apply probe verified that a second process with a different temp directory is refused, the marker is preserved and exactly one successor is registered. All 470 tests passed and eval matched the baseline. Details are under **Reviewer re-check 5** in `reviews/review-03-session-08.md`.
