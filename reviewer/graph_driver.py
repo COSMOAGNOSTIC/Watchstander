@@ -16,7 +16,9 @@ reviewer/README.md for why that gap mattered.
 from __future__ import annotations
 
 import fcntl
+import os
 import sqlite3
+import tempfile
 import threading
 import time
 from dataclasses import dataclass
@@ -34,6 +36,23 @@ from agent_core.state import WorkPackageState
 from reviewer import registry
 
 DEFAULT_DB_PATH = str(Path(__file__).parent / "reviewer_state.db")
+
+
+def _owner_lock_path(db_path: str) -> str:
+    """
+    review-03 re-check 3: the lock must follow the DATABASE, not the name used to open it.
+    A lock file named after the path let a symlink or hard link to the same database take
+    a second, different lock. Key it on the file's identity (device + inode), which every
+    alias shares. The database itself is never opened or closed for locking: on Linux,
+    closing any handle to a file drops that process's SQLite (POSIX) locks on it.
+    """
+    if not os.path.exists(db_path):
+        with open(db_path, "a"):  # create it, so it has an identity; nothing holds it open yet
+            pass
+    st = os.stat(db_path)  # follows symlinks; hard links share st_ino
+    lock_dir = Path(tempfile.gettempdir()) / "watchstander-reviewer-locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    return str(lock_dir / f"{st.st_dev}-{st.st_ino}.lock")
 
 
 @dataclass(frozen=True)
@@ -77,7 +96,7 @@ class ReviewerService:
         # to start. The OS releases it when this process exits for any reason (crash,
         # kill), so the next service to get it knows no other live owner exists.
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._lock_file = open(f"{db_path}.lock", "w")
+        self._lock_file = open(_owner_lock_path(db_path), "w")
         try:
             fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:

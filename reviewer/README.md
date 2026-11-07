@@ -68,4 +68,6 @@ likely want both, wired to the same underlying graph runs.
 
 ## One reviewer service per database
 
-`ReviewerService` holds an exclusive lock on `<database>.lock` for as long as it runs, and a second service on the same database refuses to start with "another reviewer service already has this database open". This is deliberate (review-03): Apply and decisions are serialized inside the one service, and crash recovery is only safe because no other live service can exist. If a service crashes, the OS releases the lock, and the next service to start finishes or rolls back any interrupted Apply. Multi-user review against one database would need a database server and real transactions; it is out of scope for now.
+`ReviewerService` holds an exclusive lock for as long as it runs, keyed on the database file's identity (device and inode, so symlinks, hard links and other spellings of the path all share it), stored under the system temp directory, and a second service on the same database refuses to start with "another reviewer service already has this database open". This is deliberate (review-03): Apply and decisions are serialized inside the one service, and crash recovery is only safe because no other live service can exist. If a service crashes, the OS releases the lock, and the next service to start finishes or rolls back any interrupted Apply. Multi-user review against one database would need a database server and real transactions; it is out of scope for now.
+
+`flock` is not reliable on some network filesystems; keep the database on a local disk.

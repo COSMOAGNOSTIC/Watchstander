@@ -379,3 +379,38 @@ def test_recheck2_a_decision_in_progress_holds_off_apply_until_it_finishes(svc, 
     d.join(timeout=20)
     a.join(timeout=20)
     assert a_started.is_set()
+
+
+# ===== review-03 re-check 3: the lock must follow the database, not its name =====
+
+
+@pytest.mark.parametrize("alias", ["symlink", "hardlink", "dotdot"])
+def test_recheck3_any_other_name_for_the_same_database_is_refused(svc, alias, tmp_path):
+    other = tmp_path / f"alias-{alias}.db"
+    if alias == "symlink":
+        os.symlink(svc.db_path, other)
+    elif alias == "hardlink":
+        os.link(svc.db_path, other)
+    else:
+        (tmp_path / "sub").mkdir()
+        other = tmp_path / "sub" / ".." / os.path.basename(svc.db_path)
+    with pytest.raises(RuntimeError, match="already has this database open"):
+        ReviewerService(str(other))
+
+
+def test_recheck3_a_symlinked_service_cannot_disturb_a_live_apply(svc, monkeypatch, tmp_path):
+    # The reviewer's scenario: a second service via a symlink must never get to run recovery.
+    pend = seed(svc)
+    link = tmp_path / "link.db"
+    os.symlink(svc.db_path, link)
+    inside, release = _pause_in_suggester(monkeypatch)
+    res = {}
+    a = threading.Thread(name="A", target=lambda: res.__setitem__("A", svc.apply_shift_suggestion("T1", pend["WELD-1"].interrupt_id)))
+    a.start()
+    assert inside.wait(timeout=10)
+    with pytest.raises(RuntimeError):
+        ReviewerService(str(link))
+    release.set()
+    a.join(timeout=20)
+    assert res["A"].applied
+    assert [tid for tid in registry.list_thread_ids(svc.db_path) if tid != "T1"] == [res["A"].new_thread_id]
