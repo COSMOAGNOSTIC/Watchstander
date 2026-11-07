@@ -137,4 +137,45 @@ Review findings: commit `c9314ec`. Builder-found same-class gap: commit `3578393
 
 ## Reviewer re-check
 
-Pending. Per AGENTS.md "Review cost policy": cheaper model.
+Tested current `session-08-brief-apply` tip **`78fad145f2dbcb41920d85d5afa43029a8253763`**. Scoped code review to `git diff 43886e6..HEAD -- agent_core reviewer tests`. **Five confirmed fixed. S08-01 and S08-02 reopened**, both through live Apply racing service startup recovery. Hold for triage.
+
+| ID | Verdict | Scenario and result |
+|---|---|---|
+| S08-01 | reopened | **High**, `reviewer/graph_driver.py:130–133,182–192`. The named two-Apply regression passes when both services are already running. A service starting during a live Apply can delete its claim. Both Applies then succeed and register separate successors. Reproduced below. |
+| S08-02 | reopened | **High**, `reviewer/graph_driver.py:182–192,202–205,278–288`. The named crash/restart cases pass when no Apply is still running. Starting a service during a live Apply makes its old review actionable again. Reproduced an old approval while Apply was paused, followed by successful Apply on the same review. |
+| S08-03 | confirmed fixed | Seeded approval and clearance are removed from the moved weld package. The replacement inputs show no disposition, false clearance, and required human review. The stale-derived-fields regression passes. |
+| S08-04 | confirmed fixed | A standalone unlocated overhead job now has a pending review with WS-JF-006 and Safety Officer in the rationale. The gate leaves it uncleared. The separate gas-free judgment test and clean-job control pass. |
+| S08-05 | confirmed fixed | With a permit valid only for the original shift, the brief includes the rejected shifts and WS-CT-001. The HTTP detail-page test checks the actual rejection list item. A reason-only rejection is also present in the deterministic text. |
+| S08-06 | confirmed fixed | The rewritten fixture has no suggestion because the permit expires at the original end. The probe injecting fabricated suggestion text fails the rewritten test, which also checks the stored outcome and WS-CT-001. |
+| Builder-found findings gate | confirmed fixed | A missing or expiring permit and an out-of-calendar job reach review with their findings and remain uncleared while waiting. The two-package double-booking case routes both packages. Full permit coverage and clean schedule controls pass. Schedule checks remain conditional on calendar data. |
+
+### Reproduced startup-recovery race
+
+Use the real reviewer service and the builder's two-crew fixture in a temporary SQLite database. Start Apply A for WELD-1. Pause it inside the fresh suggester call, after verifying its claim exists and before seeding its successor. Construct service B on the same database. Its startup recovery finds no successor inputs yet, treats A's claim as abandoned, and deletes it while A is still running.
+
+```text
+A holds live Apply claim + successor has not been written yet
+                         |
+                 B starts recovery
+                         |
+         no successor inputs -> delete A's claim
+                       /   \
+        B can Apply          B can approve old review
+              |                        |
+         A resumes                A resumes
+              |                        |
+      two successors          old approval retained on old run
+```
+
+- **S08-01:** Let B Apply the entry crew's suggestion to completion, then let A resume with the actual suggester. Both results were `applied=True`. Both successor IDs were registered. A's final supersession write replaced B's.
+- **S08-02:** In a separate database, use B to approve the old WELD-1 review during A's pause. Approval is accepted and clears the old package. A then returns `applied=True` for that same review. The superseded run retains WELD-1 as approved and cleared. Its still-pending entry review is rejected.
+
+Both interleavings were forced in memory using the actual service, graph, database and suggester. The builder already identified live-startup recovery as uncovered. The missing distinction is between a crashed owner and a live owner that has not yet written its successor.
+
+### Verification
+
+Ran `pip install -e ".[dev,retrieval,reviewer]"`, `pytest -q`, `python -m eval.run_eval`, and `python reviews/review-03-repro.py`. **457 tests passed, zero failures.** Eval matched the baseline: 14/14 documented conflict expectations and 7/7 retrieval cases, with deterministic fallback healthy.
+
+The builder probe printed NOT REPRODUCED for all six items. Its S08-01 worker also raised `BrokenBarrierError`: the probe waits for both workers inside the suggester, but the new claim refuses one worker before that point. The named regression tests place the barrier before the claim and establish the already-running-service control. The two live-startup probes above are separate from the builder script.
+
+The conditional escalation to GPT-6 Astra independently reproduced S08-02 with the real graph and temporary SQLite and confirmed the shared recovery defect reopens both findings. It verified that the old weld approval remains cleared after supersession.

@@ -648,3 +648,7 @@ Reviewed `session-08-brief-apply` at `2f94ed570302cc106062c36731592f68fb7553a3` 
 **Status:** 457 tests passed; eval baseline unchanged.
 **Process note:** the review cost policy is now in AGENTS.md (strongest model for first reviews, cheaper for re-checks, reviews at Sessions 8, 11, 16).
 **Next up:** cheaper-model re-check → merge Session 8 → Session 9 (decision log).
+
+## Review 03 re-check
+
+Tested `session-08-brief-apply` at `78fad145f2dbcb41920d85d5afa43029a8253763` on `review-03-recheck`. S08-03 through S08-06 and the findings gate are confirmed fixed. S08-01 and S08-02 reopened: startup recovery can delete a live Apply claim before successor creation, permitting a second successor or approval of the old schedule while Apply is in progress. Both were reproduced. All 457 tests passed and eval matched the baseline. See **Reviewer re-check** in `reviews/review-03-session-08.md`. Hold for triage.
