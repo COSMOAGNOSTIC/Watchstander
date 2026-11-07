@@ -96,3 +96,22 @@ A real no-suggestion fixture, with assertions on the outcome and rejection reaso
 - **Input purity and presentation.** Seeding preserved the caller's supplied package models. Successful moves preserve old `run_inputs`. The existing HTTP tests confirm the Apply button and result banner, and the manual detail-page probe verified the rejection-evidence omission. HTTP behavior was tested through FastAPI's test client.
 
 All additional probes, concurrency barriers, SDK stubs and fault injection were outside tracked source. This commit contains the review report and the required PASSDOWN entry.
+
+---
+
+## Builder responses
+
+**Builder:** Claude Code (Opus). **Date:** 2026-11-07. Rules: AGENTS.md, "Review loop". The reviewer's text above is unchanged. Reproductions rebuilt from the descriptions in `reviews/review-03-repro.py`, run at the reviewed SHA `2f94ed5`, each with its own temporary database: **6/6 reproduced**, no errors.
+
+| ID | Verdict | Builder's observed result | Planned fix |
+|---|---|---|---|
+| S08-01 | CONFIRMED | Two service instances on one database, barrier after the suggester: both Applies returned `applied=True`, creating successors `T1-applied-215b24e3` and `T1-applied-4239c41e`. | An atomic per-run **claim** (a primary-key insert in the registry) is taken *before* anything else. A second Apply on the same run, from any process, can't get the claim and is refused. |
+| S08-02 | CONFIRMED | Injected failure at the first old-review rejection, then restart: both old reviews were still pending, and approving old WELD-1 cleared it. | From the moment of the claim, the old run is **closed to decisions**: hidden from the pending list, and `submit_decision` refuses it. Recovery on service start: a claim whose successor exists is finished (old reviews rejected, marked done); a claim with no successor is released, so the old run becomes reviewable again and nothing changed. |
+| S08-03 | CONFIRMED | Moved WELD-1 in the new run: `disposition=approved`, `cleared=True`, `requires_review=True`. | Moved packages lose `hitl_disposition` and clearance, so they always need a fresh decision. Every successor package also drops the stale derived fields (`conflicts`, `conflict_rationale`, `safety_brief`), which the new run recomputes. |
+| S08-04 | CONFIRMED | `judgment_flags` returned `WS-JF-006`, but `seed_run` left 0 pending reviews. | A **judgment** node in the graph between detection and reasoning. Every package named by a judgment flag is marked `requires_hitl_review`, with the flag, rule, and routed person recorded in its rationale, so it reaches the review gate and gets a brief. This applies to all judgment rules, not just WS-JF-006 (the whole bug class). |
+| S08-05 | CONFIRMED | Stored rejections held `WS-CT-001`; the detail page didn't show it. | The deterministic sentence lists each rejected shift with its rule IDs and reasons, and the detail page renders the rejection list. |
+| S08-06 | CONFIRMED | The no-suggestion test passed with fabricated suggestion text. | A fixture that guarantees no suggestion, with assertions on the outcome, the reason, and the visible rejection evidence. |
+
+**Severity:** no disagreement. **Disputes for Donnie:** none.
+
+**Note on S08-04's scope (for Donnie):** routing every judgment flag to human review means packages that previously passed straight through (unlocated hot work, simultaneous entries, inconsistent classification, and so on) now pause for a decision. That is what "a person must decide" means, but it's a behaviour change across all judgment rules, not only the new one.
