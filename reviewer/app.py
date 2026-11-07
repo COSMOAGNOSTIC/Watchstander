@@ -113,6 +113,7 @@ def dashboard(msg: str = "") -> str:
         {cards}
         <h2>Recently decided</h2>
         {decided_rows}
+        <p><a href="/log">Decision log &rarr;</a></p>
     </body></html>"""
 
 
@@ -157,6 +158,8 @@ def review_detail(thread_id: str, interrupt_id: str) -> HTMLResponse:
                 <p>Apply re-checks every rule against this run first. If the move still holds,
                 it starts a new run with the moved times, supersedes this run's open reviews,
                 and every moved package still needs a human decision. Apply never approves.</p>
+                <label>Your name (recorded in the decision log):</label>
+                <input name="actor" type="text">
                 <button type="submit">Apply schedule change (re-checks first)</button>
             </form>"""
 
@@ -178,6 +181,8 @@ def review_detail(thread_id: str, interrupt_id: str) -> HTMLResponse:
                 conditional-approval state yet, so reject and resubmit once a
                 condition is actually met):</label>
             <textarea name="note" rows="2"></textarea>
+            <label>Your name (recorded in the decision log; there is no login yet):</label>
+            <input name="actor" type="text">
             <button class="approve" type="submit" name="decision" value="approve">Approve</button>
             <button class="reject" type="submit" name="decision" value="reject">Reject</button>
         </form>
@@ -185,18 +190,46 @@ def review_detail(thread_id: str, interrupt_id: str) -> HTMLResponse:
 
 
 @app.post("/review/{thread_id}/{interrupt_id}/apply")
-def apply_review(thread_id: str, interrupt_id: str) -> RedirectResponse:
-    result = service.apply_shift_suggestion(thread_id, interrupt_id)
+def apply_review(thread_id: str, interrupt_id: str, actor: str = Form("")) -> RedirectResponse:
+    result = service.apply_shift_suggestion(thread_id, interrupt_id, actor=actor)
     return RedirectResponse(url=f"/?msg={quote(result.message)}", status_code=303)
 
 
 @app.post("/review/{thread_id}/{interrupt_id}")
-def submit_review(thread_id: str, interrupt_id: str, decision: str = Form(...), note: str = Form("")) -> RedirectResponse:
+def submit_review(thread_id: str, interrupt_id: str, decision: str = Form(...), note: str = Form(""),
+                  actor: str = Form("")) -> RedirectResponse:
     # decision and note travel to the graph as separate fields -- never
     # concatenated into one string. See ReviewerService.submit_decision's
     # docstring for the bug this avoids.
     try:
-        service.submit_decision(thread_id, interrupt_id, decision, note.strip() or None)
+        service.submit_decision(thread_id, interrupt_id, decision, note.strip() or None, actor=actor)
     except ValueError as e:  # review-03 S08-02: superseded or being-applied run
         return RedirectResponse(url=f"/?msg={quote(f'Decision not recorded: {e}')}", status_code=303)
     return RedirectResponse(url="/", status_code=303)
+
+
+@app.get("/log", response_class=HTMLResponse)
+def decision_log_page() -> str:
+    """Session 9: every decision event, newest first, with the hash chain checked."""
+    from agent_core.decision_log import LogTamperError
+    try:
+        status = f"Chain verified: {service.decision_log.verify_chain()} entries"
+        status_class = "provenance"
+    except LogTamperError as e:
+        status, status_class = f"CHAIN BROKEN: {e}", "risk-critical"
+    rows = "\n".join(
+        f"<tr><td>{e.seq}</td><td>{html.escape(e.at.isoformat(timespec='seconds'))}</td>"
+        f"<td>{html.escape(e.actor)}</td><td>{html.escape(e.kind)}</td><td>{html.escape(e.run_id)}</td>"
+        f"<td>{html.escape(e.work_package_id or '')}</td>"
+        f"<td>{html.escape(', '.join(f'{k}={v}' for k, v in sorted(e.detail.items()) if k != 'moves'))}</td></tr>"
+        for e in reversed(service.decision_log.entries())
+    ) or '<tr><td colspan="7" class="empty">No decisions recorded yet.</td></tr>'
+    return f"""<!doctype html><html><head><title>Decision log</title>{_PAGE_STYLE}</head><body>
+        <p><a href="/">&larr; back to queue</a></p>
+        <h1>Decision log</h1>
+        <p class="{status_class}">{html.escape(status)}</p>
+        <p>Append-only: the database refuses edits and deletions, and each entry is hashed
+        with the one before it, so any change after the fact is detected.</p>
+        <table><tr><th>#</th><th>When (UTC)</th><th>Who</th><th>What</th><th>Run</th><th>Package</th><th>Detail</th></tr>
+        {rows}</table>
+    </body></html>"""

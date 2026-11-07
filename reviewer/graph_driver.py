@@ -28,6 +28,7 @@ from langgraph.types import Command
 
 from agent_core.certificates import Certificate
 from agent_core.crews import Crew, ShiftCalendar
+from agent_core.decision_log import DecisionLog
 from agent_core.demo_fixtures import acushnet_demo_work_packages
 from agent_core.graph import build_graph
 from agent_core.shift_suggester import suggest_crew_shift
@@ -65,6 +66,16 @@ class ApplyResult:
     applied: bool
     message: str
     new_thread_id: str | None = None
+    moves: tuple = ()  # Session 9: the moves applied, for the decision log
+
+
+UNIDENTIFIED = "unidentified reviewer"
+SYSTEM = "system"
+
+
+def _actor(actor: str | None) -> str:
+    """Session 9: the reviewer app has no login; a blank name is recorded honestly."""
+    return (actor or "").strip() or UNIDENTIFIED
 
 
 @dataclass(frozen=True)
@@ -115,12 +126,15 @@ class ReviewerService:
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._checkpointer = SqliteSaver(self._conn)
         self._graph = build_graph(checkpointer=self._checkpointer)
+        # Session 9: append-only, tamper-evident record of every decision event.
+        self.decision_log = DecisionLog(db_path)
         self._recover_applies()
 
     def close(self) -> None:
         """Idempotent: releases the database lock so another service may open it."""
         if self._lock_file.closed:
             return
+        self.decision_log.close()
         self._conn.close()
         fcntl.flock(self._lock_file, fcntl.LOCK_UN)
         self._lock_file.close()
@@ -150,9 +164,19 @@ class ReviewerService:
         state = self._graph.get_state({"configurable": {"thread_id": thread_id}})
         return state.values.get("run_inputs")
 
-    def apply_shift_suggestion(self, thread_id: str, interrupt_id: str) -> ApplyResult:
+    def apply_shift_suggestion(self, thread_id: str, interrupt_id: str, actor: str | None = None) -> ApplyResult:
         with self._op_lock:  # review-03 re-check 2: one operation at a time, end to end
-            return self._apply_locked(thread_id, interrupt_id)
+            wp_id = next((r.work_package_id for r in self._pending_for(thread_id) if r.interrupt_id == interrupt_id), None)
+            result = self._apply_locked(thread_id, interrupt_id)
+            if result.applied:
+                self.decision_log.append(kind="apply", actor=_actor(actor), run_id=thread_id, work_package_id=wp_id,
+                                         detail={"successor": result.new_thread_id, "moves": list(result.moves),
+                                                 "interrupt_id": interrupt_id})
+            else:
+                self.decision_log.append(kind="apply_refused", actor=_actor(actor), run_id=thread_id,
+                                         work_package_id=wp_id,
+                                         detail={"reason": result.message, "interrupt_id": interrupt_id})
+            return result
 
     def _apply_locked(self, thread_id: str, interrupt_id: str) -> ApplyResult:
         """
@@ -231,14 +255,19 @@ class ReviewerService:
             f"{fresh.suggestion.to_shift_id}. Every moved package still needs review; "
             f"the reviews in run {thread_id} were superseded.",
             new_thread,
+            tuple(m.model_dump() for m in fresh.suggestion.moves),
         )
 
     def _close_superseded_reviews(self, thread_id: str, successor: str) -> None:
         """Reject every still-pending review in the old run, record the supersession,
         and finish the claim. Idempotent, so crash recovery can call it again."""
         for pending in self._pending_for(thread_id):
-            self._resume(thread_id, pending.interrupt_id, "reject",
-                         f"superseded: schedule change applied in run {successor}")
+            note = f"superseded: schedule change applied in run {successor}"
+            self._resume(thread_id, pending.interrupt_id, "reject", note)
+            self.decision_log.append(kind="superseded", actor=SYSTEM, run_id=thread_id,
+                                     work_package_id=pending.work_package_id,
+                                     detail={"successor": successor, "disposition": "rejected", "note": note,
+                                             "interrupt_id": pending.interrupt_id})
         registry.mark_superseded(self.db_path, thread_id, successor)
         registry.release_lock(self.db_path, thread_id)
 
@@ -253,8 +282,12 @@ class ReviewerService:
         for thread_id, kind, successor in registry.expired_locks(self.db_path, float("inf")):
             if kind == "apply" and successor and self.run_inputs(successor):
                 self._close_superseded_reviews(thread_id, successor)
+                action = "finished interrupted Apply"
             else:
                 registry.release_lock(self.db_path, thread_id)
+                action = "released interrupted Apply (no successor existed)"
+            self.decision_log.append(kind="recovered", actor=SYSTEM, run_id=thread_id, work_package_id=None,
+                                     detail={"action": action, "successor": successor})
 
     def seed_demo(self, thread_id: str) -> None:
         """Runs the real ACUSHNET demo work packages through the REAL
@@ -344,17 +377,29 @@ class ReviewerService:
         return decided
 
     def submit_decision(
-        self, thread_id: str, interrupt_id: str, decision: str, note: str | None = None
+        self, thread_id: str, interrupt_id: str, decision: str, note: str | None = None,
+        actor: str | None = None,
     ) -> None:
         # review-03 re-check 2: the check and the write happen under the service's one
         # operation lock, so no Apply can start in between.
         with self._op_lock:
+            wp_id = next((r.work_package_id for r in self._pending_for(thread_id) if r.interrupt_id == interrupt_id), None)
             if self._closed_to_decisions(thread_id):
                 # review-03 S08-02: never act on a schedule that an Apply has replaced.
-                raise ValueError(
-                    f"run {thread_id} is superseded or being applied; review the packages in its successor run"
-                )
+                reason = f"run {thread_id} is superseded or being applied; review the packages in its successor run"
+                self.decision_log.append(kind="decision_refused", actor=_actor(actor), run_id=thread_id,
+                                         work_package_id=wp_id,
+                                         detail={"reason": reason, "requested": decision, "interrupt_id": interrupt_id})
+                raise ValueError(reason)
             self._resume(thread_id, interrupt_id, decision, note)
+            # Session 9: record the disposition the graph actually stored, not the request.
+            disposition = next(
+                (str(getattr(wp.hitl_disposition, "value", wp.hitl_disposition))
+                 for wp in self._graph.get_state({"configurable": {"thread_id": thread_id}}).values.get("reviewed_packages", [])
+                 if wp.work_package_id == wp_id and wp.hitl_disposition is not None),
+                None)
+            self.decision_log.append(kind="decision", actor=_actor(actor), run_id=thread_id, work_package_id=wp_id,
+                                     detail={"disposition": disposition, "note": note, "interrupt_id": interrupt_id})
 
     def _resume(self, thread_id: str, interrupt_id: str, decision: str, note: str | None) -> None:
         """Resumes only this one interrupt -- every other package still
