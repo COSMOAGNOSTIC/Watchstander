@@ -37,10 +37,12 @@ otherwise.
 
 Given the project's current stage, security review focuses primarily on:
 - Safe handling of any authorization/scheduling logic (deconfliction,
-  chit-expiration, hazard-pair checks)
+  certificate coverage, judgment flags, the shift suggester and the
+  reviewer's Apply)
 - No hardcoded secrets, credentials, or real organizational data in the
   public repository
-- Dependency hygiene (no known-vulnerable packages in `requirements.txt`)
+- Dependency hygiene (no known-vulnerable packages in `pyproject.toml`'s
+  dependencies; versions are not pinned yet, see ARCHITECTURE.md Known Debt)
 
 Findings outside this scope are still welcome but may be triaged with
 lower priority given the project's non-production status.

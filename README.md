@@ -11,11 +11,27 @@ Every deconfliction check, safety-brief synthesis, and HITL gate pause is broadc
 
 ## What it does
 
-Shipyard work packages (jobs, permits, tasks) carry spatial metadata — compartment, frame range, deck level, whether the work is aloft or over-the-side. The **Spatial Deconfliction Agent** evaluates concurrent work packages for hazardous overlap — hot work near an uncleared confined space, aloft work directly above unprotected personnel — and routes anything flagged to a mandatory **Human-in-the-Loop safety gate** before it can proceed.
+Shipyard work packages (jobs, permits, tasks) carry spatial metadata (compartment, frame range, deck level, aloft or over the side), a schedule, a crew, and the permits they require. Watchstander checks every package deterministically and routes anything that isn't clean to a mandatory **human review gate** before it can be cleared:
 
-Case grounding is sourced entirely from public OSHA/DOL records — real shipyard incidents, not synthetic examples. See `case_data/cases_v1.json` and `PASSDOWN.md` for sourcing detail and scope notes.
+```
+  conflicts between packages (hazard pairs, overhead work, fire-watch capacity) --+
+  judgment flags (things the engine can't decide: unlocated or adjacent work,   |
+                  simultaneous entries, inconsistent labels) --> a named person |
+  certificate coverage (every required permit valid for the WHOLE job) ---------+--> any finding --> human review
+  schedule rules (crew exists, inside the shift calendar, contractor windows,   |
+                  no crew double-booking) --------------------------------------+
+  nothing found --> passes through cleared
+```
 
-A second, site-scoped grounding source sits alongside the case data: a work package tagged with `governing_installation` (e.g. `"PSNS"`) is additionally cited against that installation's governing procedure — currently the public-domain NAVSEA 8010 Manual (fire prevention/hot work only) for PSNS. This is deliberately not a universal Navy-wide ruleset; a different installation or type command may operate under different governing instructions, and no installation's rules are assumed to apply anywhere they haven't been explicitly sourced. See `agent_core/procedural_lookup.py` and `case_data/navsea_8010_psns_v2014.json`.
+- **Every finding cites a named rule** (`WS-HZ-001`, `WS-CT-001`, ...) with its CFR/NAVSEA citations and who to call. Only citations read against the primary source are marked verified; every 29 CFR citation is still marked unverified.
+- **Status is an AND gate.** A package or project rolls up `CLEARED` only when its review, certificate, judgment and schedule checks are all clean. A check that wasn't run is never read as clean.
+- **Fix suggestions are deterministic and never applied automatically.** The shift-aware suggester moves a whole crew's block to the next open shift, re-checked against every rule, and lists why each rejected shift failed. In the reviewer, **Apply** re-checks first, starts a new run with the moved times, supersedes the old run's reviews, and never approves anything: every moved package still needs a human decision.
+- **The LLM explains, never decides or suggests.** It may phrase a brief's summary; the recommended action always comes from deterministic code. Every brief carries a provenance tag (LLM synthesis, deterministic fallback, or deterministic template).
+- **Every decision is logged.** An append-only (database-enforced), hash-chained decision log records who decided what, when and why, including refused decisions, Applies, supersessions and crash recovery.
+
+Case grounding comes from public OSHA/DOL records of real shipyard incidents (`case_data/cases_v1.json`). A work package tagged with `governing_installation` (e.g. `"PSNS"`) is also cited against that installation's governing procedure: currently the public-domain NAVSEA 8010 Manual (fire prevention/hot work only) for PSNS. This is deliberately not a universal Navy-wide ruleset. See `agent_core/procedural_lookup.py`.
+
+**About the data.** The roster of people in `case_data/roster_notional_v1.json` is invented. The ACUSHNET demo run uses compartment names and frame positions read from that cutter's public-domain HAER drawings (see `docs/uscg-acushnet-ars9-source.md`), and the OSHA cases are public records. A fully notional carrier dataset is planned (upgrade Session 10).
 
 ## Architecture
 
@@ -27,24 +43,24 @@ flowchart LR
     classDef live fill:#2da44e,stroke:#1a7f37,color:#fff,stroke-width:1px
     classDef schema fill:#57606a,stroke:#32383f,color:#fff,stroke-width:1px
 
-    Entry(["entry"]) --> Deconf["deconfliction_node<br/>(deconfliction.py)<br/>deterministic overlap check"]
-    Deconf --> Reason["reasoning_node<br/>(reasoning.py)<br/>SafetyBrief synthesis, LLM + fallback"]
-    Reason --> HitlPrep["hitl_prepare_node<br/>(hitl.py)<br/>splits reviewed vs. needs-review"]
-    HitlPrep -->|"no review needed"| End(["END"])
-    HitlPrep -->|"Send() fan-out, one per package"| Hitl["hitl_gate_single_node<br/>(hitl.py)<br/>interrupt() — genuine human pause, one package per invocation"]
+    Entry(["entry"]) --> Deconf["deconfliction_node<br/>(deconfliction.py)<br/>hazard pairs, overhead, fire watch"]
+    Deconf --> Judg["judgment_node<br/>(judgment.py)<br/>calls the engine can't make"]
+    Judg --> Find["findings_node<br/>(findings_gate.py)<br/>certificates + schedule rules"]
+    Find --> Reason["reasoning_node<br/>(reasoning.py)<br/>SafetyBrief + crew-shift suggestion"]
+    Reason --> HitlPrep["hitl_prepare_node<br/>(hitl.py)<br/>splits clean vs. needs-review"]
+    HitlPrep -->|"nothing found"| End(["END"])
+    HitlPrep -->|"Send() fan-out, one per package"| Hitl["hitl_gate_single_node<br/>(hitl.py)<br/>interrupt(): a real human pause"]
     Hitl --> End
 
-    class Entry,Deconf,Reason,HitlPrep core
+    class Entry,Deconf,Judg,Find,Reason,HitlPrep core
     class Hitl gate
 
-    CaseData[("case_data/cases_v1.json<br/>sourced OSHA/DOL cases")] --> Retrieval["retrieval.py<br/>TF-IDF ranked case lookup"]
-    Retrieval --> Reason
-    class CaseData,Retrieval data
+    CaseData[("case_data/<br/>OSHA cases, NAVSEA 8010,<br/>named rules, notional roster")] --> Reason
+    CaseData --> Judg
+    class CaseData data
 
-    State[["state.py<br/>WorkPackageState schema"]] -.-> Deconf
-    State -.-> Reason
-    State -.-> Hitl
-    class State schema
+    Hitl --> Reviewer["reviewer/<br/>FastAPI: approve / reject / Apply<br/>+ decision log"]
+    class Reviewer gate
 
     Deconf --> Events["events.py<br/>WebSocket broadcaster"]
     Reason --> Events
@@ -53,53 +69,69 @@ flowchart LR
     class Events,Viz live
 
     Eval["eval/<br/>fixed-scenario harness vs. checked-in baseline"] -.->|"regression-tests"| Deconf
-    Eval -.->|"regression-tests"| Retrieval
     class Eval schema
 ```
 
-*A larger, annotated version of this diagram with a legend and per-node explanations lives at [`docs/architecture-diagram.html`](https://cosmoagnostic.github.io/Watchstander/architecture-diagram.html) — open it directly in a browser.*
+*The larger annotated diagram at [`docs/architecture-diagram.html`](https://cosmoagnostic.github.io/Watchstander/architecture-diagram.html) predates the judgment and findings steps; the diagram above is current.*
 
-- **`agent_core/state.py`** — `WorkPackageState` schema: hazard categories, spatial coordinates, required permits, risk level.
-- **`agent_core/deconfliction.py`** — deterministic, testable overlap detection between work packages. Geometry-based, not LLM-dependent, so conflicts are auditable and repeatable.
-- **`agent_core/retrieval.py`** — TF-IDF ranked case lookup grounding each flagged conflict in a real, sourced OSHA/DOL case.
-- **`agent_core/procedural_lookup.py`** — site-scoped governing-procedure lookup (e.g. NAVSEA 8010 for `governing_installation="PSNS"`), distinct from case precedent — the rule that applies, not the incident it resembles.
-- **`agent_core/reasoning.py`** — synthesizes a flagged conflict + its grounded case citation + its governing-procedure citation (if any) into a provenance-tagged `SafetyBrief`, with a deterministic zero-network fallback.
-- **`agent_core/hitl.py`** — LangGraph `interrupt()`-based human review gate. Genuinely pauses graph execution; does not simulate review.
-- **`agent_core/graph.py`** — graph assembly: `entry -> deconfliction -> reasoning -> hitl_gate -> END`.
-- **`case_data/`** — sourced OSHA/DOL case histories (`cases_v1.json`) and site-scoped governing-procedure rulesets (`navsea_8010_psns_v2014.json`), tagged by hazard category, used to ground rationale generation.
-- **`agent_core/events.py`** — lazy WebSocket broadcaster, no-op with no listener, feeding the visualizer.
-- **`visualizer/`** — Godot 4 project rendering the graph's activity as a live scene over real HAER ship drawings (Inboard Profile default, Deck Plan switchable).
-- **`reviewer/`** — local FastAPI app, the real human-facing Approve/Reject interface: full brief, LLM-vs-deterministic provenance, genuine `interrupt()`/`Command(resume=...)` (see ARCHITECTURE.md Section 8.5).
-- **`agent_core/reschedule_suggestion.py`** — suggests a conflict-free schedule shift for one flagged package, re-checked against the same deterministic rules. A pure query: it never changes a schedule, and it is not yet wired into the graph or the reviewer (see ARCHITECTURE.md ADR-030, ADR-034 and Known Debt).
-- **`agent_core/rules_config.py`** / **`agent_core/rules_audit.py`** — declarative hazard rules loaded from `case_data/hazard_rules_v1.json`, and an append-only audit trail for rule changes (ARCHITECTURE.md ADR-032).
-- **`eval/`** — fixed-scenario evaluation harness scoring the deterministic-fallback path against a checked-in baseline (see ARCHITECTURE.md Section 7).
+**Detection and gates**
+- **`agent_core/state.py`**: `WorkPackageState` schema: hazards, location, schedule, crew, lock, permits, review state.
+- **`agent_core/deconfliction.py`**: deterministic conflict detection (incompatible hazard pairs, overhead work over other work, fire-watch capacity). No LLM.
+- **`agent_core/judgment.py`**: judgment flags (WS-JF-001 to 006) for calls the engine can't make, routed to a named person on the notional roster (Gas Free Engineer or Safety Officer).
+- **`agent_core/certificates.py`**: certificates with valid-from/valid-until, checked against the whole work window.
+- **`agent_core/crews.py`**: crews, shift calendar, locked packages, contractor windows, and the schedule rules (WS-SC-001 to 004).
+- **`agent_core/findings_gate.py`**: routes certificate and schedule findings to human review.
+- **`agent_core/named_rules.py`**: the rule catalogue (`case_data/named_rules_v1.json`): IDs, citations, who to call.
+- **`agent_core/projects.py`**: projects, priority, due dates, and the four-input status gate.
+- **`agent_core/validation.py`** / **`agent_core/intervals.py`**: shared input validation (non-blank IDs, one time convention, real-time comparison) and window coverage.
+
+**Suggestions, briefs and review**
+- **`agent_core/shift_suggester.py`**: moves a whole crew block to the next open shift, re-checked against every rule. Never applied by itself.
+- **`agent_core/reschedule_suggestion.py`**: the older single-package nearest-offset search (not wired into the graph or reviewer).
+- **`agent_core/reasoning.py`**: provenance-tagged `SafetyBrief` grounded in a sourced case and procedure. Deterministic recommendation, optional LLM phrasing.
+- **`agent_core/retrieval.py`** / **`agent_core/procedural_lookup.py`**: TF-IDF case ranking and site-scoped procedure lookup.
+- **`agent_core/hitl.py`** / **`agent_core/graph.py`**: the `interrupt()` review gate and graph assembly.
+- **`agent_core/decision_log.py`**: append-only, hash-chained decision log.
+- **`reviewer/`**: local FastAPI reviewer: full brief and provenance, approve/reject, Apply (re-checks first), and a `/log` page. One reviewer service per database (see [`reviewer/README.md`](reviewer/README.md)).
+
+**Rules, data, visuals, evaluation**
+- **`agent_core/rules_config.py`** / **`agent_core/rules_audit.py`**: declarative hazard rules (`case_data/hazard_rules_v1.json`) and an append-only rule-change audit trail.
+- **`case_data/`**: OSHA/DOL cases, the PSNS NAVSEA 8010 ruleset, hazard rules, named rules, and the notional roster.
+- **`agent_core/events.py`** / **`visualizer/`**: WebSocket events and the Godot 4 live scene over real HAER ship drawings.
+- **`eval/`**: fixed-scenario evaluation harness against a checked-in baseline, plus a detection-latency benchmark.
 
 ## Watch It Live
 
 `agent_core` broadcasts a WebSocket event at each stage of the graph — no configuration needed, it's a no-op until something connects. Open [`visualizer/`](visualizer/README.md) in Godot 4, run the main scene, then run [`visualizer/demo_broadcaster.py`](visualizer/demo_broadcaster.py) (no API key required) and watch work packages resolve through deconfliction, reasoning, and the Safety Review gate in real time — staged with real compartment names, deck levels, and frame positions from USCG Cutter ACUSHNET / ex-USS SHACKLE (ARS-9)'s public-domain HAER drawings, see [`docs/uscg-acushnet-ars9-source.md`](docs/uscg-acushnet-ars9-source.md). A separate static 3D blockout companion view (`visualizer/Main3D.tscn`) renders the same vessel's real compartment layout as a simplified hull — see [`visualizer/README.md`](visualizer/README.md#3d-blockout-companion-view-main3dtscn).
 
-The visualizer only shows *that* a package is flagged, deliberately never *why* (see `events.py`'s broadcast policy, ARCHITECTURE.md Section 8). For the actual human decision — reading the full brief and clicking a real Approve/Reject — see [`reviewer/`](reviewer/README.md): `pip install -e ".[dev,reviewer]"`, `uvicorn reviewer.app:app --reload`, seed a real ACUSHNET run, and work the review queue for real.
+The visualizer only shows *that* a package is flagged, deliberately never *why* (see `events.py`'s broadcast policy, ARCHITECTURE.md Section 8). For the actual human decision (reading the full brief, approving or rejecting, applying a suggested shift move, and reading the decision log) see [`reviewer/`](reviewer/README.md): `pip install -e ".[dev,reviewer]"`, `uvicorn reviewer.app:app --reload`, seed a run, and work the review queue.
 
 ## Project Docs
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — component map, design principles, decision log
-- [MIGRATION.md](MIGRATION.md) — phased build history with a definition of done per phase
-- [PASSDOWN.md](PASSDOWN.md) — team roles and session-to-session continuity notes
-- [AOSE.md](AOSE.md) — the adversarial review discipline behind this repo's fixes, with real instances from its own history
+- [AGENTS.md](AGENTS.md): the working rules every session follows (also loaded through [CLAUDE.md](CLAUDE.md)): tests first, deterministic safety logic, the review loop, and the review cost policy.
+- [ARCHITECTURE.md](ARCHITECTURE.md): component map, design principles, Known Debt, decision log (ADRs).
+- [MIGRATION.md](MIGRATION.md): phased build history, including the 16-session upgrade plan and its status.
+- [PASSDOWN.md](PASSDOWN.md): session-by-session continuity notes.
+- [AOSE.md](AOSE.md): the adversarial review discipline, with real instances from this repo's history.
+- [`reviews/`](reviews/): every cross-model review: the reviewer's findings, the builder's independent verdicts, the fixes, and the re-checks.
+- [PHILOSOPHY.md](PHILOSOPHY.md), [SECURITY.md](SECURITY.md).
 
 ## Installation
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,retrieval,reviewer]"
 ```
+
+This is exactly what CI installs. The `retrieval` extra pulls in PyTorch through `sentence-transformers`, so the first install takes several minutes.
 
 ## Testing
 
 ```bash
 pytest -v
+python -m eval.run_eval
 ```
 
-GitHub Actions runs the full suite on Python 3.11 and 3.12 for every push and pull request.
+Use plain `pytest`, not `python -m pytest` (see AOSE.md, "verification blind spot"). GitHub Actions runs the full suite on Python 3.11 and 3.12 for every push and pull request.
 
 ## Sub-projects
 

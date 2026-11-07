@@ -3,7 +3,7 @@
 > **Goal:** From a deterministic rules-engine scaffold to a fully case-grounded, HITL-reviewed multi-agent safety system — building each phase on a verified previous phase, never freelancing ahead of the plan.
 > **Companion doc:** PASSDOWN.md covers team roles and session continuity; this file is the build road.
 > **Rule of the road:** one phase per sitting where practical, each phase ends with tests passing. Never start a phase with the previous one's Definition of Done unmet.
-> **Last updated:** 2026-07-25 (Phase 4 in progress, Phase 5.5 complete)
+> **Last updated:** 2026-11-07 (upgrade Sessions 1–9 done; see "Upgrade plan" below). Previously 2026-07-25.
 
 Phase ordering logic: **prove the deterministic core → wire it to real case data → add reasoning on top → expand coverage → make it presentable/lockable.**
 
@@ -279,6 +279,27 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
 
 ---
 
+## Upgrade plan — 16 sessions (started 2026-11-04)
+
+A second build road, run as short sessions under AGENTS.md's rules (tests first, deterministic safety logic, the cross-model review loop). Each session's detail is in PASSDOWN.md; each review is in `reviews/`.
+
+| # | Session | Status | Notes |
+|---|---|---|---|
+| 1 | Docs cleanup | ✅ 2026-11-05 | |
+| 2 | Projects, priority, due dates, status rollup | ✅ 2026-11-05 | Status became a four-input AND gate after review-01 (ADR-035) |
+| 3 | Certificates checked against the whole work window | ✅ 2026-11-05 | ADR-036 |
+| 4 | Named rules with IDs, CFR cites, who to call | ✅ 2026-11-05 | 29 CFR cites still unverified (Known Debt) |
+| 5 | Judgment flags routed to a named Gas Free Engineer | ✅ 2026-11-05 | ADR-038 |
+| 6 | Crews, shift calendar, locked packages, contractor windows | ✅ 2026-11-05 | ADR-040 |
+| — | review-01 (Codex, Sessions 2–5) | ✅ closed | 17 findings + 7 from re-checks, all fixed |
+| 7 | Shift-aware fix suggester | ✅ 2026-11-06 | review-02 closed (ADR-041) |
+| 8 | Suggestions in the brief and reviewer; Apply that re-checks | ✅ 2026-11-07 | review-03 closed after five rounds (ADR-042 to ADR-046) |
+| 9 | Decision log | ✅ 2026-11-07 | ADR-047; reviewed at Session 11 |
+| 10 | Notional carrier dataset and a text daily brief | ⬜ next | Should replace the real-ship demo data (Known Debt) |
+| 11 | Independent review of the engine | ⬜ | Covers Sessions 9–10 too (review cost policy) |
+| 12–15 | Lean web UI | ⬜ | Red-team pass after these |
+| 16 | Final review and README for recruiters | ⬜ | |
+
 ## Phase status
 
 | Phase | Status | Date done |
@@ -296,5 +317,5 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
 | 7 — Real HITL reviewer web app | ✅ (auth, intake form, live updates scoped out) | 2026-08-08 |
 | 8 — Real print as the 2D visualizer background | ✅ (Godot-render verification still pending) | 2026-08-08 |
 | 9 — Connectivity fix + Inboard Profile default view + switchable views | ✅ confirmed live on Donnie's machine | 2026-08-08 |
-| 10 — Reschedule suggestion + declarative rules + perf benchmark | 🟡 core modules + tests done, UI/reasoning wiring and rule-editing tool deferred | 2026-08-21 |
+| 10 — Reschedule suggestion + declarative rules + perf benchmark | 🟡 core modules + tests done; reasoning and reviewer wiring done for the crew-shift suggester in upgrade Session 8; rule-editing tool still deferred | 2026-08-21 |
 | 11 — Visualizer manual-insert interaction | ⬜ designed, not built — needs Godot (not in this sandbox) | |

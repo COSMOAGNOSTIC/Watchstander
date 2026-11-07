@@ -37,7 +37,18 @@ up as pending review (two from a shared-compartment hot-work/confined-space
 conflict, one from an overlapping-frame-range vertical-stacking conflict).
 
 Click into a review, read the full brief and provenance tag, and hit Approve
-or Reject with an optional note. That decision genuinely resumes the graph
+or Reject with an optional note and your name (recorded in the decision log;
+there is no login yet, so a blank name is recorded as "unidentified reviewer").
+
+If the run was seeded with crews and a shift calendar (`ReviewerService.seed_run`),
+a flagged package's brief also shows a deterministic crew-shift suggestion and
+why any earlier shift was rejected. **Apply schedule change** re-checks the move
+first, starts a new run with the moved times, supersedes this run's open reviews,
+and never approves anything: every moved package still needs a decision. The
+ACUSHNET demo has no crew data, so it never shows a suggestion.
+
+`/log` lists every decision event (decisions, refused decisions, Applies,
+supersessions, crash recovery) with the hash-chain check. That decision genuinely resumes the graph
 — `reviewer/graph_driver.py`'s `submit_decision()` calls
 `graph.invoke(Command(resume={interrupt_id: decision_text}), config=...)`,
 the same mechanism `tests/test_graph.py` exercises directly. State persists

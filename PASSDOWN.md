@@ -716,3 +716,20 @@ Tested `session-08-brief-apply` at `4b14cc19e8af755b553c3e81d053dfeadca99733` on
 - `rules_audit.py` (AUD-14/15) isn't migrated onto this mechanism.
 
 **Next up:** Session 10 -- notional carrier dataset and a text daily brief.
+
+## 40. Session Notes — 2026-11-07: docs sync (pause between Sessions 9 and 10)
+
+**Branch:** `docs-sync`, from `session-09-decision-log` @ `de00709`. Docs only; no code changes. Not merged.
+**Why:** Donnie asked for a whole-repo docs check: anything a reader sees should match what the code does now.
+
+**What was stale, and what changed:**
+- **README.md:** graph diagram and module list predated judgment, findings gate, certificates, crews, named rules, shift suggester, Apply and the decision log; install command missed the extras CI uses. Rewritten from the code, with an honest note on which demo data is real-public vs notional.
+- **ARCHITECTURE.md:** header said Phase 11; no ADRs after ADR-034; component table and Known Debt predated Sessions 2–9. Added ADR-035 to ADR-047, component rows, Known Debt rows (29 CFR cites unverified, demo data vs rule 6, decision-log tail truncation, others) and closed or marked superseded the rows the sessions fixed.
+- **MIGRATION.md:** last updated 2026-07-25, no upgrade plan. Added the 16-session table with status.
+- **SECURITY.md:** referred to `requirements.txt` (the project uses `pyproject.toml`) and "chit-expiration" (now certificates).
+- **reviewer/README.md:** didn't mention the reviewer's name field, crew-shift suggestions, Apply, or `/log`.
+- **docs/architecture-diagram.html:** pre-rendered old graph; added an out-of-date banner rather than regenerating.
+- Historical ADRs and session notes left as written (they're a record).
+
+**For Donnie:** the ACUSHNET demo is derived from public-domain HAER drawings of a real cutter, which conflicts with rule 6. Logged as Known Debt; proposed fix is Session 10's notional carrier dataset replacing it as the default demo.
+**Next up:** Session 10.
