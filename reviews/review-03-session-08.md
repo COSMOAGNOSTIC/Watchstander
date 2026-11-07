@@ -115,3 +115,26 @@ All additional probes, concurrency barriers, SDK stubs and fault injection were 
 **Severity:** no disagreement. **Disputes for Donnie:** none.
 
 **Note on S08-04's scope (for Donnie):** routing every judgment flag to human review means packages that previously passed straight through (unlocated hot work, simultaneous entries, inconsistent classification, and so on) now pause for a decision. That is what "a person must decide" means, but it's a behaviour change across all judgment rules, not only the new one.
+
+## Fixes
+
+Review findings: commit `c9314ec`. Builder-found same-class gap: commit `3578393`. Regression tests: `tests/test_review03_fixes.py` (`test_s08_*`), `tests/test_findings_gate.py`, and the rewritten `test_brief_explains_when_there_is_no_suggestion`. Full suite **457 passed**; eval baseline unchanged. (`c9314ec`'s commit message says 445; the true count at that commit was 444, because one weak test was replaced rather than added.)
+
+| ID | Fix | Regression test(s) |
+|---|---|---|
+| S08-01 | Atomic per-run Apply claim, taken before anything else; any second Apply on the run, from any process, is refused | `test_s08_01_two_applies_that_both_pass_the_pending_check_yield_one_successor` (reproduces the reviewer's ordering), `test_s08_01_apply_on_a_superseded_run_is_refused` |
+| S08-02 | A claimed or superseded run is closed to decisions (hidden from the queue; `submit_decision` raises; the app reports it). Startup recovery finishes an Apply whose successor exists, or releases the claim | `test_s08_02_*` (3) |
+| S08-03 | Moved packages lose disposition and clearance; successor inputs drop stale derived fields | `test_s08_03_*` (2) |
+| S08-04 | `judgment_node` in the graph routes every package named by any judgment flag to review | `test_s08_04_*` (4) |
+| S08-05 | The deterministic sentence and the detail page list each rejected shift with its rule IDs and reasons | `test_s08_05_*` (3) |
+| S08-06 | A guaranteed no-suggestion fixture, with outcome and evidence assertions | rewritten test in `tests/test_session08b.py` |
+
+**Mutation checks (AGENTS.md, Review cost policy):** each fix was disabled in turn. Two tests passed under their mutation at first: the S08-01 race test paused *after* the claim, and the S08-05 page test matched brief text. Both were strengthened and now fail under their mutations.
+
+**Builder-found, same class as S08-04 (Donnie approved fixing now):** certificate and schedule findings never reached review either. A hot-work job with no permit on file, and a job outside every shift, both passed as cleared. `findings_node` (deconfliction → judgment → findings → reasoning) now routes any certificate finding (none on file counts as MISSING), and any schedule finding when the run has a calendar. Four mutations, all caught.
+
+**New behaviour to check:** more packages now pause for review (any judgment flag, missing or partial permit coverage, and schedule findings). The startup recovery runs when a service starts; a recovery racing a live Apply in another process isn't covered.
+
+## Reviewer re-check
+
+Pending. Per AGENTS.md "Review cost policy": cheaper model.

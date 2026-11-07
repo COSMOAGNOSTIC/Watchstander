@@ -638,3 +638,13 @@ Reviewed the current `session-07-shift-suggester` tip `4432f5771e662451f84c6e6bd
 ## Review 03 · Session 8
 
 Reviewed `session-08-brief-apply` at `2f94ed570302cc106062c36731592f68fb7553a3` against `main` at `91405be784bc32889c725012d50c45865f5bfc26`, on `review-03`. Included the documentation-only branch update received during review. Findings are in `reviews/review-03-session-08.md`. Four reproduced high-severity issues cover concurrent successor runs, interrupted Apply leaving old reviews open, inherited approval on moved packages, and WS-JF-006 missing the normal graph review gate. A medium finding covers hidden rejection evidence, with a related low-severity test observation. Hold for triage. All 431 tests passed and eval matched its baseline. Sequential Apply/reload/exact-match checks and deterministic recommendation isolation passed within the reported limits.
+
+## 34. Session Notes — 2026-11-07: review-03 (Session 8) triage and fixes
+
+**Branch:** `session-08-brief-apply` (now includes the `review-03` report). Not merged; waiting on a cheaper-model re-check.
+**Review (Codex, strongest model, at `2f94ed5`):** 6 findings, 4 high. Concurrent Apply created two successors; an interrupted Apply left the old schedule approvable; Apply carried a seeded approval into a moved package; WS-JF-006 never reached the review gate; why every shift failed was hidden; one test passed with fabricated text.
+**Builder:** 6/6 reproduced (`reviews/review-03-repro.py`); verdicts first (`43886e6`); fixed in `c9314ec`. Every fix mutation-checked; two tests strengthened.
+**Builder-found, same class (Donnie: fix now):** certificate and schedule findings never reached review, so a missing permit passed as cleared. Fixed in `3578393` with a findings node.
+**Status:** 457 tests passed; eval baseline unchanged.
+**Process note:** the review cost policy is now in AGENTS.md (strongest model for first reviews, cheaper for re-checks, reviews at Sessions 8, 11, 16).
+**Next up:** cheaper-model re-check → merge Session 8 → Session 9 (decision log).
