@@ -414,3 +414,37 @@ def test_recheck3_a_symlinked_service_cannot_disturb_a_live_apply(svc, monkeypat
     a.join(timeout=20)
     assert res["A"].applied
     assert [tid for tid in registry.list_thread_ids(svc.db_path) if tid != "T1"] == [res["A"].new_thread_id]
+
+
+# ===== review-03 re-check 4: the lock must not depend on the environment =====
+
+
+def test_recheck4_two_processes_with_different_tmpdir_cannot_share_a_database(tmp_path):
+    db, t1, t2 = str(tmp_path / "r.db"), tmp_path / "t1", tmp_path / "t2"
+    t1.mkdir(); t2.mkdir()
+    repo = os.getcwd()
+    hold = subprocess.Popen(
+        [sys.executable, "-c", textwrap.dedent(f"""
+            import sys, time
+            sys.path.insert(0, {repo!r})
+            from reviewer.graph_driver import ReviewerService
+            s = ReviewerService({db!r}); print("held", flush=True); time.sleep(30)
+        """)],
+        stdout=subprocess.PIPE, text=True, env={**os.environ, "TMPDIR": str(t1)})
+    try:
+        assert hold.stdout.readline().strip() == "held"
+        second = subprocess.run(
+            [sys.executable, "-c", textwrap.dedent(f"""
+                import sys
+                sys.path.insert(0, {repo!r})
+                from reviewer.graph_driver import ReviewerService
+                try:
+                    ReviewerService({db!r}); print("STARTED")
+                except RuntimeError:
+                    print("REFUSED")
+            """)],
+            capture_output=True, text=True, timeout=120, env={**os.environ, "TMPDIR": str(t2)})
+        assert second.stdout.strip().splitlines()[-1] == "REFUSED", second.stdout + second.stderr[-1500:]
+    finally:
+        hold.kill()
+        hold.wait()

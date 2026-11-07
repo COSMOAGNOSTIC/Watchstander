@@ -18,7 +18,6 @@ from __future__ import annotations
 import fcntl
 import os
 import sqlite3
-import tempfile
 import threading
 import time
 from dataclasses import dataclass
@@ -50,9 +49,14 @@ def _owner_lock_path(db_path: str) -> str:
         with open(db_path, "a"):  # create it, so it has an identity; nothing holds it open yet
             pass
     st = os.stat(db_path)  # follows symlinks; hard links share st_ino
-    lock_dir = Path(tempfile.gettempdir()) / "watchstander-reviewer-locks"
-    lock_dir.mkdir(parents=True, exist_ok=True)
-    return str(lock_dir / f"{st.st_dev}-{st.st_ino}.lock")
+    # review-03 re-check 4: nothing from the environment. A lock under the temp directory
+    # moved with TMPDIR, so two processes with different TMPDIR locked separately. The lock
+    # now lives next to the database's REAL file (symlinks resolve here), named by its
+    # identity. A hard link in a different directory is not covered: SQLite itself documents
+    # multiple names for one database file as unsafe (journal/WAL files are path-based),
+    # so that is unsupported, not chased.
+    real_dir = Path(os.path.realpath(db_path)).parent
+    return str(real_dir / f".{st.st_dev}-{st.st_ino}.reviewer.lock")
 
 
 @dataclass(frozen=True)
