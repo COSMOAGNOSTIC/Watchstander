@@ -659,3 +659,7 @@ Tested `session-08-brief-apply` at `78fad145f2dbcb41920d85d5afa43029a8253763` on
 **Builder:** 2/2 reproduced, plus a same-class race in `submit_decision` (check-then-resume). Verdicts first (`5ae3946`); fixed in `bbb1c51` with one leased lock per run shared by Apply and decisions; recovery acts only on expired leases; superseded runs never report cleared. Mutation-checked.
 **Status:** 462 tests passed; eval baseline unchanged.
 **Next up:** cheaper-model re-check 2 → merge Session 8 → Session 9 (decision log).
+
+## Review 03 re-check 2
+
+Tested `session-08-brief-apply` at `557f3f6c1546997333c98efc6f5067288369783b` on `review-03-recheck2`. S08-01 and S08-02 reopened. Recovery can remove an expired lock from a live Apply, and Apply can use a pending review read before a racing decision completes. All 462 tests passed, eval matched its baseline, and both builder re-check probes reported NOT REPRODUCED within their scenarios. The reproduced interleavings and verdicts are under **Reviewer re-check 2** in `reviews/review-03-session-08.md`. Hold for triage.

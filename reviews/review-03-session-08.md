@@ -215,4 +215,29 @@ Commit `bbb1c51`. New regression tests are `test_recheck_*` in `tests/test_revie
 
 ### Reviewer re-check 2
 
-Pending. Cheaper model, per AGENTS.md.
+Tested the current `session-08-brief-apply` tip **`557f3f6c1546997333c98efc6f5067288369783b`**. Code inspection was limited to `git diff 5ae3946..HEAD -- reviewer tests`.
+
+| ID | Verdict | Scenario |
+|---|---|---|
+| S08-01 | reopened | **High, reproduced.** A service starting within a live Apply's lease leaves its lock intact. After the default 600-second lease expires, startup recovery deletes the lock even if the owner is still live. Both requests can then create successors. See `reviewer/graph_driver.py:171,192–205`. |
+| S08-02 | reopened | **High for expired-owner approval, medium for the stale pending read. Both reproduced.** A decision already holding the lock blocks Apply. A decision that completes after Apply reads the pending review but before Apply acquires its lock does not block it. Apply proceeds using the stale review. An expired live Apply also permits an old approval after a second service starts. See `reviewer/graph_driver.py:124–143,192–205,294–310`. |
+
+**S08-01 reproduction.** Seed T1 with WELD-1 and TANK-ENTRY pending. Pause service A's Apply inside the real suggester after it acquires the lock. Advance only the reviewer's clock by 601 seconds, then start service B on the same SQLite database. B removes A's lock because the successor has yet to be seeded. Let B Apply TANK-ENTRY and then let A resume. Both return `applied=True` and register distinct successors. The simulated elapsed time models a suspended or delayed owner. A can still write the successor after recovery removes its lock because the operation does not verify ownership before seeding.
+
+**S08-02 reproduction.** Start two services on the same database. Let Apply A read the pending WELD-1 interrupt. Before A acquires the lock, have service B approve that same interrupt and release its decision lock. Verify WELD-1 is no longer pending. Resume A. It acquires the lock, checks only supersession, and successfully Applies the stale review. This reproduced with the default lease and without advancing the clock. In a separate database, let a live Apply's lease expire as above and have the newly started service approve the old review. The approval is accepted and reads as cleared while A is still active. After A supersedes the run, the new reporting mask correctly hides that clearance.
+
+```text
+Apply reads pending review
+            |
+Decision locks -> approves review -> releases lock
+            |
+Apply acquires lock -> checks supersession -> uses stale review
+            |
+     successor created
+```
+
+The probes used the real services, graph, and suggester with temporary SQLite databases. In-memory hooks forced the ordering. The lease probe advanced a test clock instead of waiting ten minutes.
+
+**Verification.** Ran the requested install, `pytest -q`, `python -m eval.run_eval`, and `python reviews/review-03-repro.py`. **462 passed, zero failures.** Eval matched its baseline. Both `S08-0x-recheck` probes reported NOT REPRODUCED. The historical S08-01 probe still emits its documented worker `BrokenBarrierError`. The named regressions pass for startup within the lease, a decision holding its lock when Apply tries to acquire it, and clearance masking after supersession. The reproduced interleavings above exercise different boundaries. Hold for triage.
+
+The conditional escalation to GPT-6 Astra independently reproduced the two-successor failure and the stale pending read at the same SHA. The stale-read scenario creates a successor requiring a new human review. The expired-owner approval scenario above separately demonstrates old-schedule clearance while Apply is active.
