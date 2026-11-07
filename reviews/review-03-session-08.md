@@ -350,3 +350,13 @@ same temp directory?  yes -> same lock file -> second service refused
 **Verification.** Ran `pip install -e ".[dev,retrieval,reviewer]"`, `pytest -q`, and `python -m eval.run_eval`. **469 passed, zero failures.** Eval matched the baseline. The additional interleavings ran against the real graph and temporary SQLite. Hold for triage.
 
 GPT-6 Astra independently reproduced S08-01 using two subprocesses with distinct actual `TMPDIR` values and the identical absolute database path. It also assessed the bypass as medium severity for the documented local setup because it requires overlapping launches with different temp configuration.
+
+### Builder response to re-check 4
+
+**Builder:** Claude Code (Opus). **Date:** 2026-11-07. The reviewer's text above is unchanged. **CONFIRMED**, reproduced at `103488a` with two real processes. Process A held the database with `TMPDIR=T1`. Process B, started with `TMPDIR=T2`, opened the same database; with the same `TMPDIR` it was refused. The builder's first in-process probe wrongly reported "refused": it patched `tempfile.gettempdir` with a lambda that called `mkdtemp()`, which recursed, and `RecursionError` is a `RuntimeError`. It was discarded and replaced by the two-process run.
+
+**Severity:** agree with medium in the documented local setup. The impact is high, but it needs overlapping launches with different temp configurations.
+
+**Root cause:** the lock directory came from the environment (`tempfile.gettempdir()`), so a different environment meant a different lock.
+
+**Proposed fix (Donnie to choose, given this is the fifth round):** put the lock file in the database's *real* directory (`realpath`), still keyed by device and inode. Nothing from the environment is used, so symlinks resolve to the same place. A hard link from a *different* directory would still differ. SQLite itself documents multiple names for one database file as unsafe (journal and WAL files are path-based), so that case would be documented as unsupported rather than chased.
