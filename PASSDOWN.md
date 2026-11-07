@@ -696,3 +696,23 @@ Tested `session-08-brief-apply` at `103488af71b4f82761ef3aa55f65dc0b2b571df5` on
 ## Review 03 re-check 5
 
 Tested `session-08-brief-apply` at `4b14cc19e8af755b553c3e81d053dfeadca99733` on `review-03-recheck5`. S08-01 and S08-02 confirmed fixed within the accepted local database scope. The named TMPDIR regression and a separate live Apply probe verified that a second process with a different temp directory is refused, the marker is preserved and exactly one successor is registered. All 470 tests passed and eval matched the baseline. Details are under **Reviewer re-check 5** in `reviews/review-03-session-08.md`.
+
+## 39. Session Notes — 2026-11-07: Upgrade Session 9 of 16 -- decision log
+
+**Branch:** `session-09-decision-log`, from `main` @ `1f3b716` (Session 8 and review-03 merged; CI green on main). Not merged.
+**Status:** Done. 485/485 tests passing (470 → 485); eval baseline unchanged. No separate review: per the review cost policy this rolls into the Session 11 review.
+
+**Pre-build search:** `rules_audit.py` kept an append-only JSONL log of rule changes only, append-only by convention (AUD-15) and fragile to one bad line (AUD-14). Human decisions lived only in graph checkpoint state, with no who, when or why, and no record of refused Applies, supersession or recovery. The reviewer had no user identity.
+
+**What was built** (commit `4fa101d`):
+- `agent_core/decision_log.py`: `DecisionLog` in the reviewer's SQLite database, with a closed set of kinds. Triggers refuse UPDATE and DELETE. A hash chain (prev hash + content, including seq) is checked by `verify_chain()`, which names the first bad entry.
+- `ReviewerService` logs every decision (the stored disposition), refused decision, Apply (successor and moves), refused Apply (reason), supersession rejection (actor `system`), and recovery (actor `system`).
+- Reviewer: "Your name" on the decision and Apply forms (blank becomes `unidentified reviewer`); a `/log` page with the chain status.
+
+**Known gaps (Session 11 review):**
+- **Tail truncation:** deleting the newest entries isn't detectable by the chain alone (documented with a test). Fix: anchor the head hash outside the database. Session 10's daily brief could print it.
+- Actor is self-declared (no auth); the log records it honestly as such.
+- A crash between a decision's checkpoint write and its log append loses that one log entry. The decision itself is safe and recorded in graph state.
+- `rules_audit.py` (AUD-14/15) isn't migrated onto this mechanism.
+
+**Next up:** Session 10 -- notional carrier dataset and a text daily brief.
