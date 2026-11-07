@@ -315,3 +315,13 @@ GPT-6 Astra independently reproduced both symlink outcomes at the same SHA using
 | S08-01 / S08-02 | CONFIRMED | The exclusive lock was taken on a separate file named after the database's path (`<path>.lock`), so a different name for the same database got a different lock. | Take the exclusive `flock` on the **database file itself**. An `flock` belongs to the file (inode), not the name used to open it, so symlinks, hard links and any path spelling all hit the same lock. SQLite uses POSIX `fcntl` record locks, which are independent of `flock` on Linux, so they don't interfere. |
 
 **Disputes:** none. **Known limit:** `flock` isn't reliable on some network filesystems. The reviewer is a local tool, and this is documented in reviewer/README.md.
+
+### Re-check 3 fix
+
+Commit `09a1636`. The exclusive service lock is keyed on the database file's identity (`st_dev` + `st_ino`), in a fixed directory under the system temp directory. Symlinks, hard links and any path spelling share it. The database file itself is never opened or closed for locking, because closing any handle to a file on Linux drops the process's SQLite POSIX locks on it.
+
+Tests: `test_recheck3_any_other_name_for_the_same_database_is_refused` (symlink, hard link, dot-dot) and `test_recheck3_a_symlinked_service_cannot_disturb_a_live_apply`. Written first: 3 failed (the dot-dot case was already refused). Mutation, reverting to a path-named lock: 3 tests fail. Full suite **469 passed**; eval baseline unchanged.
+
+### Reviewer re-check 4
+
+Pending. Cheaper model.
