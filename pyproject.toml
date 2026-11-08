@@ -60,4 +60,5 @@ reviewer = [
 # "retrieval*" (added retrieval/MIGRATION.md Phase 0) is included up front for
 # the same reason, proactively -- this is the exact failure mode described
 # above, so there's no reason to wait for CI to go red on it first.
-include = ["agent_core*", "eval*", "retrieval*", "reviewer*"]
+# "showcase*" (Session 12): same reason, for tests/test_showcase.py.
+include = ["agent_core*", "eval*", "retrieval*", "reviewer*", "showcase*"]

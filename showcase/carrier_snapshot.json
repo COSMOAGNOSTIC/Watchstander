@@ -1,0 +1,910 @@
+{
+ "generated_by": "showcase/export_snapshot.py (agent_core.daily_brief.run_checks; no LLM)",
+ "notional": true,
+ "site": "Notional carrier NC-1 (invented hull, no real ship)",
+ "as_of": "2027-03-15T06:00:00",
+ "shifts": [
+  {
+   "id": "20270315-MID",
+   "name": "MID",
+   "start": "2027-03-15T00:00:00",
+   "end": "2027-03-15T07:00:00"
+  },
+  {
+   "id": "20270315-DAY",
+   "name": "DAY",
+   "start": "2027-03-15T07:00:00",
+   "end": "2027-03-15T15:30:00"
+  },
+  {
+   "id": "20270315-SWING",
+   "name": "SWING",
+   "start": "2027-03-15T15:30:00",
+   "end": "2027-03-16T00:00:00"
+  },
+  {
+   "id": "20270316-MID",
+   "name": "MID",
+   "start": "2027-03-16T00:00:00",
+   "end": "2027-03-16T07:00:00"
+  },
+  {
+   "id": "20270316-DAY",
+   "name": "DAY",
+   "start": "2027-03-16T07:00:00",
+   "end": "2027-03-16T15:30:00"
+  },
+  {
+   "id": "20270316-SWING",
+   "name": "SWING",
+   "start": "2027-03-16T15:30:00",
+   "end": "2027-03-17T00:00:00"
+  },
+  {
+   "id": "20270317-MID",
+   "name": "MID",
+   "start": "2027-03-17T00:00:00",
+   "end": "2027-03-17T07:00:00"
+  },
+  {
+   "id": "20270317-DAY",
+   "name": "DAY",
+   "start": "2027-03-17T07:00:00",
+   "end": "2027-03-17T15:30:00"
+  },
+  {
+   "id": "20270317-SWING",
+   "name": "SWING",
+   "start": "2027-03-17T15:30:00",
+   "end": "2027-03-18T00:00:00"
+  }
+ ],
+ "crews": [
+  {
+   "id": "CR-WELD-A",
+   "name": "Notional weld crew A",
+   "contractor": false,
+   "windows": []
+  },
+  {
+   "id": "CR-WELD-B",
+   "name": "Notional weld crew B",
+   "contractor": false,
+   "windows": []
+  },
+  {
+   "id": "CR-TANK-A",
+   "name": "Notional tank inspection crew A",
+   "contractor": false,
+   "windows": []
+  },
+  {
+   "id": "CR-TANK-B",
+   "name": "Notional tank inspection crew B",
+   "contractor": false,
+   "windows": []
+  },
+  {
+   "id": "CR-RIG",
+   "name": "Notional rigging crew",
+   "contractor": false,
+   "windows": []
+  },
+  {
+   "id": "CR-RAIL",
+   "name": "Notional guardrail crew",
+   "contractor": false,
+   "windows": []
+  },
+  {
+   "id": "CR-WELD-C",
+   "name": "Notional weld crew C",
+   "contractor": false,
+   "windows": []
+  },
+  {
+   "id": "CR-DECK",
+   "name": "Notional deck preservation crew",
+   "contractor": false,
+   "windows": []
+  },
+  {
+   "id": "CR-ELEC",
+   "name": "Notional electrical crew",
+   "contractor": false,
+   "windows": []
+  },
+  {
+   "id": "CR-CONTRACT",
+   "name": "Notional contractor crew (invented firm)",
+   "contractor": true,
+   "windows": [
+    {
+     "start": "2027-03-15T07:00:00",
+     "end": "2027-03-15T12:00:00"
+    }
+   ]
+  }
+ ],
+ "packages": [
+  {
+   "id": "HW-101",
+   "description": "Notional: weld repair to a tank stiffener inside Aux Tank 3.",
+   "hazards": [
+    "hot_work"
+   ],
+   "compartment": "Notional Aux Tank 3",
+   "deck": "Notional 5th Deck",
+   "frame_start": 120,
+   "frame_end": 126,
+   "aloft": false,
+   "start": "2027-03-15T07:00:00",
+   "end": "2027-03-15T11:00:00",
+   "crew": "CR-WELD-A",
+   "locked": false,
+   "lock_reason": null,
+   "status": "pending_review",
+   "rules": [
+    {
+     "id": "WS-HZ-001",
+     "title": "Hot work in or adjacent to a confined or enclosed space",
+     "contact": "Gas Free Engineer",
+     "category": "hazard_pair",
+     "citations": [
+      {
+       "source": "29 CFR 1915.14",
+       "verified": false
+      },
+      {
+       "source": "NAVSEA8010-4.4.4",
+       "verified": true
+      }
+     ]
+    }
+   ],
+   "why": [
+    "Incompatible hazard categories (confined_space, hot_work) detected in overlapping spatial envelope between HW-101 and CS-102."
+   ],
+   "conflicts": [
+    "CS-102"
+   ],
+   "suggestion": {
+    "available": true,
+    "crew": "CR-WELD-A",
+    "from_shift": "20270315-DAY",
+    "to_shift": "20270315-SWING",
+    "moves": [
+     {
+      "id": "HW-101",
+      "start": "2027-03-15T15:30:00",
+      "end": "2027-03-15T19:30:00"
+     }
+    ],
+    "reason": null,
+    "rejected": []
+   }
+  },
+  {
+   "id": "CS-102",
+   "description": "Notional: confined-space entry to inspect Aux Tank 3 coatings.",
+   "hazards": [
+    "confined_space"
+   ],
+   "compartment": "Notional Aux Tank 3",
+   "deck": "Notional 5th Deck",
+   "frame_start": 121,
+   "frame_end": 124,
+   "aloft": false,
+   "start": "2027-03-15T07:00:00",
+   "end": "2027-03-15T15:00:00",
+   "crew": "CR-TANK-A",
+   "locked": true,
+   "lock_reason": "Notional: the tank's entry certification covers this window only.",
+   "status": "pending_review",
+   "rules": [
+    {
+     "id": "WS-HZ-001",
+     "title": "Hot work in or adjacent to a confined or enclosed space",
+     "contact": "Gas Free Engineer",
+     "category": "hazard_pair",
+     "citations": [
+      {
+       "source": "29 CFR 1915.14",
+       "verified": false
+      },
+      {
+       "source": "NAVSEA8010-4.4.4",
+       "verified": true
+      }
+     ]
+    }
+   ],
+   "why": [
+    "Incompatible hazard categories (confined_space, hot_work) detected in overlapping spatial envelope between HW-101 and CS-102."
+   ],
+   "conflicts": [
+    "HW-101"
+   ],
+   "suggestion": {
+    "available": false,
+    "crew": null,
+    "from_shift": null,
+    "to_shift": null,
+    "moves": [],
+    "reason": "crew block can't move: CS-102 is locked.",
+    "rejected": []
+   }
+  },
+  {
+   "id": "HW-103",
+   "description": "Notional: hot work on a pipe hanger in Shaft Alley 2.",
+   "hazards": [
+    "hot_work"
+   ],
+   "compartment": "Notional Shaft Alley 2",
+   "deck": "Notional 5th Deck",
+   "frame_start": 140,
+   "frame_end": 144,
+   "aloft": false,
+   "start": "2027-03-15T08:00:00",
+   "end": "2027-03-15T12:00:00",
+   "crew": "CR-WELD-B",
+   "locked": false,
+   "lock_reason": null,
+   "status": "pending_review",
+   "rules": [
+    {
+     "id": "WS-JF-001",
+     "title": "Hot work near, but not overlapping, a confined or enclosed space",
+     "contact": "Gas Free Engineer",
+     "category": "judgment",
+     "citations": [
+      {
+       "source": "NAVSEA8010-4.3",
+       "verified": true
+      },
+      {
+       "source": "29 CFR 1915.14",
+       "verified": false
+      }
+     ]
+    }
+   ],
+   "why": [
+    "Judgment flag WS-JF-001: hot work and confined space are 2 frame(s) apart and concurrent; detection does not flag adjacency. Route to Gas Free Engineer Riley Example (NP-GFE-01)."
+   ],
+   "conflicts": [],
+   "suggestion": {
+    "available": false,
+    "crew": null,
+    "from_shift": null,
+    "to_shift": null,
+    "moves": [],
+    "reason": "no shift among the next 6 passes every check for crew CR-WELD-B.",
+    "rejected": [
+     {
+      "shift": "20270315-SWING",
+      "rules": [
+       "WS-CT-001"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-MID",
+      "rules": [
+       "WS-CT-001"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-DAY",
+      "rules": [
+       "WS-CT-001"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-SWING",
+      "rules": [
+       "WS-CT-001"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270317-MID",
+      "rules": [
+       "WS-CT-001"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270317-DAY",
+      "rules": [
+       "WS-CT-001"
+      ],
+      "reasons": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "CS-104",
+   "description": "Notional: confined-space entry to Void 146, next to Shaft Alley 2.",
+   "hazards": [
+    "confined_space"
+   ],
+   "compartment": "Notional Void 146",
+   "deck": "Notional 5th Deck",
+   "frame_start": 146,
+   "frame_end": 150,
+   "aloft": false,
+   "start": "2027-03-15T08:00:00",
+   "end": "2027-03-15T14:00:00",
+   "crew": "CR-TANK-B",
+   "locked": false,
+   "lock_reason": null,
+   "status": "pending_review",
+   "rules": [
+    {
+     "id": "WS-JF-001",
+     "title": "Hot work near, but not overlapping, a confined or enclosed space",
+     "contact": "Gas Free Engineer",
+     "category": "judgment",
+     "citations": [
+      {
+       "source": "NAVSEA8010-4.3",
+       "verified": true
+      },
+      {
+       "source": "29 CFR 1915.14",
+       "verified": false
+      }
+     ]
+    }
+   ],
+   "why": [
+    "Judgment flag WS-JF-001: hot work and confined space are 2 frame(s) apart and concurrent; detection does not flag adjacency. Route to Gas Free Engineer Riley Example (NP-GFE-01)."
+   ],
+   "conflicts": [],
+   "suggestion": {
+    "available": false,
+    "crew": null,
+    "from_shift": null,
+    "to_shift": null,
+    "moves": [],
+    "reason": "no shift among the next 6 passes every check for crew CR-TANK-B.",
+    "rejected": [
+     {
+      "shift": "20270315-SWING",
+      "rules": [
+       "WS-CT-002"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-MID",
+      "rules": [
+       "WS-CT-002"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-DAY",
+      "rules": [
+       "WS-CT-002"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-SWING",
+      "rules": [
+       "WS-CT-002"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270317-MID",
+      "rules": [
+       "WS-CT-002"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270317-DAY",
+      "rules": [
+       "WS-CT-002"
+      ],
+      "reasons": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "ALOFT-105",
+   "description": "Notional: rigging work aloft on the island mast.",
+   "hazards": [
+    "working_aloft"
+   ],
+   "compartment": "Notional Island Mast",
+   "deck": "Notional Flight Deck",
+   "frame_start": 160,
+   "frame_end": 170,
+   "aloft": true,
+   "start": "2027-03-15T07:00:00",
+   "end": "2027-03-15T11:00:00",
+   "crew": "CR-RIG",
+   "locked": false,
+   "lock_reason": null,
+   "status": "pending_review",
+   "rules": [
+    {
+     "id": "WS-OH-001",
+     "title": "Overhead work above other work with no vertical deconfliction confirmed",
+     "contact": "Safety Officer",
+     "category": "overhead",
+     "citations": []
+    }
+   ],
+   "why": [
+    "Overhead work (ALOFT-105) and underlying work (DECK-106) share an overlapping frame range with no vertical deconfliction confirmed."
+   ],
+   "conflicts": [
+    "DECK-106"
+   ],
+   "suggestion": {
+    "available": true,
+    "crew": "CR-RIG",
+    "from_shift": "20270315-DAY",
+    "to_shift": "20270315-SWING",
+    "moves": [
+     {
+      "id": "ALOFT-105",
+      "start": "2027-03-15T15:30:00",
+      "end": "2027-03-15T19:30:00"
+     }
+    ],
+    "reason": null,
+    "rejected": []
+   }
+  },
+  {
+   "id": "DECK-106",
+   "description": "Notional: deck preservation directly below the island mast.",
+   "hazards": [],
+   "compartment": "Notional Flight Deck, starboard",
+   "deck": "Notional Flight Deck",
+   "frame_start": 162,
+   "frame_end": 166,
+   "aloft": false,
+   "start": "2027-03-15T08:00:00",
+   "end": "2027-03-15T11:30:00",
+   "crew": "CR-DECK",
+   "locked": false,
+   "lock_reason": null,
+   "status": "pending_review",
+   "rules": [
+    {
+     "id": "WS-OH-001",
+     "title": "Overhead work above other work with no vertical deconfliction confirmed",
+     "contact": "Safety Officer",
+     "category": "overhead",
+     "citations": []
+    }
+   ],
+   "why": [
+    "Overhead work (ALOFT-105) and underlying work (DECK-106) share an overlapping frame range with no vertical deconfliction confirmed."
+   ],
+   "conflicts": [
+    "ALOFT-105"
+   ],
+   "suggestion": {
+    "available": true,
+    "crew": "CR-DECK",
+    "from_shift": "20270315-DAY",
+    "to_shift": "20270315-SWING",
+    "moves": [
+     {
+      "id": "DECK-106",
+      "start": "2027-03-15T16:30:00",
+      "end": "2027-03-15T20:00:00"
+     }
+    ],
+    "reason": null,
+    "rejected": []
+   }
+  },
+  {
+   "id": "FALL-107",
+   "description": "Notional: guardrail repair at a deck edge, harnessed.",
+   "hazards": [
+    "fall_protection"
+   ],
+   "compartment": "Notional Hangar Bay 2, aft edge",
+   "deck": "Notional Hangar Deck",
+   "frame_start": 20,
+   "frame_end": 30,
+   "aloft": false,
+   "start": "2027-03-15T07:00:00",
+   "end": "2027-03-15T15:00:00",
+   "crew": "CR-RAIL",
+   "locked": false,
+   "lock_reason": null,
+   "status": "pending_review",
+   "rules": [
+    {
+     "id": "WS-CT-003",
+     "title": "Fall protection plan must cover the whole work window",
+     "contact": "Safety Officer",
+     "category": "certificate",
+     "citations": [
+      {
+       "source": "29 CFR 1915.159",
+       "verified": false
+      }
+     ]
+    }
+   ],
+   "why": [
+    "Finding WS-CT-003: fall_protection_plan: not covered for 2027-03-15 12:00 to 2027-03-15 15:00. Contact: Safety Officer."
+   ],
+   "conflicts": [],
+   "suggestion": {
+    "available": false,
+    "crew": null,
+    "from_shift": null,
+    "to_shift": null,
+    "moves": [],
+    "reason": "no shift among the next 6 passes every check for crew CR-RAIL.",
+    "rejected": [
+     {
+      "shift": "20270315-SWING",
+      "rules": [
+       "WS-CT-003"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-MID",
+      "rules": [
+       "WS-CT-003"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-DAY",
+      "rules": [
+       "WS-CT-003"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-SWING",
+      "rules": [
+       "WS-CT-003"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270317-MID",
+      "rules": [
+       "WS-CT-003"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270317-DAY",
+      "rules": [
+       "WS-CT-003"
+      ],
+      "reasons": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "HW-108",
+   "description": "Notional: grinding and welding on a hull fitting.",
+   "hazards": [
+    "hot_work"
+   ],
+   "compartment": "Notional Engineering Workshop",
+   "deck": "Notional 3rd Deck",
+   "frame_start": 200,
+   "frame_end": 204,
+   "aloft": false,
+   "start": "2027-03-15T07:30:00",
+   "end": "2027-03-15T10:00:00",
+   "crew": "CR-WELD-C",
+   "locked": false,
+   "lock_reason": null,
+   "status": "pending_review",
+   "rules": [
+    {
+     "id": "WS-CT-001",
+     "title": "Hot work permit must cover the whole work window",
+     "contact": "Fire Safety Coordinator",
+     "category": "certificate",
+     "citations": [
+      {
+       "source": "NAVSEA8010-4.2",
+       "verified": true
+      },
+      {
+       "source": "29 CFR 1915.503",
+       "verified": false
+      }
+     ]
+    }
+   ],
+   "why": [
+    "Finding WS-CT-001: hot_work_permit: no certificate on file for 2027-03-15 07:30 to 2027-03-15 10:00. Contact: Fire Safety Coordinator."
+   ],
+   "conflicts": [],
+   "suggestion": {
+    "available": false,
+    "crew": null,
+    "from_shift": null,
+    "to_shift": null,
+    "moves": [],
+    "reason": "no shift among the next 6 passes every check for crew CR-WELD-C.",
+    "rejected": [
+     {
+      "shift": "20270315-SWING",
+      "rules": [
+       "WS-CT-001"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-MID",
+      "rules": [
+       "WS-CT-001"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-DAY",
+      "rules": [
+       "WS-CT-001"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-SWING",
+      "rules": [
+       "WS-CT-001"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270317-MID",
+      "rules": [
+       "WS-CT-001"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270317-DAY",
+      "rules": [
+       "WS-CT-001"
+      ],
+      "reasons": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "CONTR-109",
+   "description": "Notional: contractor installs a ventilation duct.",
+   "hazards": [],
+   "compartment": "Notional Fan Room 220",
+   "deck": "Notional 2nd Deck",
+   "frame_start": 220,
+   "frame_end": 224,
+   "aloft": false,
+   "start": "2027-03-15T10:00:00",
+   "end": "2027-03-15T14:00:00",
+   "crew": "CR-CONTRACT",
+   "locked": false,
+   "lock_reason": null,
+   "status": "pending_review",
+   "rules": [
+    {
+     "id": "WS-SC-002",
+     "title": "Contractor work outside the contractor's allowed windows",
+     "contact": "Production Planner",
+     "category": "schedule",
+     "citations": []
+    }
+   ],
+   "why": [
+    "Finding WS-SC-002 (Contractor work outside the contractor's allowed windows) for CONTR-109: outside contractor windows for 2027-03-15 12:00 to 2027-03-15 14:00. Contact: Production Planner."
+   ],
+   "conflicts": [],
+   "suggestion": {
+    "available": false,
+    "crew": null,
+    "from_shift": null,
+    "to_shift": null,
+    "moves": [],
+    "reason": "no shift among the next 6 passes every check for crew CR-CONTRACT.",
+    "rejected": [
+     {
+      "shift": "20270315-SWING",
+      "rules": [
+       "WS-SC-002"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-MID",
+      "rules": [
+       "WS-SC-002"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-DAY",
+      "rules": [
+       "WS-SC-002"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270316-SWING",
+      "rules": [
+       "WS-SC-002"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270317-MID",
+      "rules": [
+       "WS-SC-002"
+      ],
+      "reasons": []
+     },
+     {
+      "shift": "20270317-DAY",
+      "rules": [
+       "WS-SC-002"
+      ],
+      "reasons": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "LOCKED-110",
+   "description": "Notional: cable tray inspection, fixed to a test window.",
+   "hazards": [],
+   "compartment": "Notional Passageway 240",
+   "deck": "Notional 2nd Deck",
+   "frame_start": 240,
+   "frame_end": 244,
+   "aloft": false,
+   "start": "2027-03-15T07:00:00",
+   "end": "2027-03-15T11:00:00",
+   "crew": "CR-ELEC",
+   "locked": true,
+   "lock_reason": "Notional: tied to a scheduled system test.",
+   "status": "cleared",
+   "rules": [],
+   "why": [],
+   "conflicts": [],
+   "suggestion": null
+  },
+  {
+   "id": "ELEC-111",
+   "description": "Notional: replace a lighting fixture.",
+   "hazards": [],
+   "compartment": "Notional Berthing 250",
+   "deck": "Notional 2nd Deck",
+   "frame_start": 250,
+   "frame_end": 254,
+   "aloft": false,
+   "start": "2027-03-15T12:00:00",
+   "end": "2027-03-15T15:00:00",
+   "crew": "CR-ELEC",
+   "locked": false,
+   "lock_reason": null,
+   "status": "cleared",
+   "rules": [],
+   "why": [],
+   "conflicts": [],
+   "suggestion": null
+  }
+ ],
+ "judgment_flags": [
+  {
+   "rule": "WS-JF-001",
+   "packages": [
+    "CS-104",
+    "HW-103"
+   ],
+   "reason": "hot work and confined space are 2 frame(s) apart and concurrent; detection does not flag adjacency.",
+   "person": "Riley Example",
+   "role": "Gas Free Engineer",
+   "person_id": "NP-GFE-01"
+  }
+ ],
+ "certificate_findings": [
+  {
+   "rule": "WS-CT-003",
+   "package": "FALL-107",
+   "message": "fall_protection_plan: not covered for 2027-03-15 12:00 to 2027-03-15 15:00"
+  },
+  {
+   "rule": "WS-CT-001",
+   "package": "HW-108",
+   "message": "hot_work_permit: no certificate on file for 2027-03-15 07:30 to 2027-03-15 10:00"
+  }
+ ],
+ "schedule_findings": [
+  {
+   "rule": "WS-SC-002",
+   "packages": [
+    "CONTR-109"
+   ],
+   "message": "WS-SC-002 (Contractor work outside the contractor's allowed windows) for CONTR-109: outside contractor windows for 2027-03-15 12:00 to 2027-03-15 14:00. Contact: Production Planner."
+  }
+ ],
+ "projects": [
+  {
+   "id": "PRJ-A",
+   "name": "Notional Aux Tank 3 repair",
+   "priority": "urgent",
+   "due": "2027-03-15T23:00:00",
+   "status": "pending_review",
+   "counts": {
+    "pending_review": 2
+   },
+   "late": [],
+   "past_due": false
+  },
+  {
+   "id": "PRJ-B",
+   "name": "Notional shaft alley piping",
+   "priority": "high",
+   "due": "2027-03-16T15:30:00",
+   "status": "pending_review",
+   "counts": {
+    "pending_review": 2
+   },
+   "late": [],
+   "past_due": false
+  },
+  {
+   "id": "PRJ-C",
+   "name": "Notional topside and hangar work",
+   "priority": "routine",
+   "due": "2027-03-15T12:00:00",
+   "status": "pending_review",
+   "counts": {
+    "pending_review": 3
+   },
+   "late": [
+    "FALL-107"
+   ],
+   "past_due": false
+  },
+  {
+   "id": "PRJ-D",
+   "name": "Notional habitability and hull fittings",
+   "priority": "low",
+   "due": null,
+   "status": "pending_review",
+   "counts": {
+    "pending_review": 2,
+    "cleared": 2
+   },
+   "late": [],
+   "past_due": false
+  }
+ ],
+ "cleared": [
+  "LOCKED-110",
+  "ELEC-111"
+ ],
+ "brief_text": "WATCHSTANDER DAILY BRIEF -- NOTIONAL DATA, NOT FOR OPERATIONAL USE\nSite: Notional carrier NC-1 (invented hull, no real ship)\nAs of: 2027-03-15 06:00\n\nSUMMARY\n  11 packages: 2 cleared, 9 need a person.\n  Nothing below has been applied or approved; the reviewer is where decisions are made.\n\nPROJECTS (priority, then due date)\n  [URGENT] PRJ-A  Notional Aux Tank 3 repair  due 2027-03-15 23:00  status: pending_review\n      pending_review: HW-101, CS-102\n  [HIGH] PRJ-B  Notional shaft alley piping  due 2027-03-16 15:30  status: pending_review\n      pending_review: HW-103, CS-104\n  [ROUTINE] PRJ-C  Notional topside and hangar work  due 2027-03-15 12:00  status: pending_review\n      pending_review: ALOFT-105, DECK-106, FALL-107\n      LATE (ends after due date): FALL-107\n  [LOW] PRJ-D  Notional habitability and hull fittings  due no due date  status: pending_review\n      pending_review: HW-108, CONTR-109\n      cleared: LOCKED-110, ELEC-111\n\nNEEDS A PERSON\n  HW-101  pending_review  2027-03-15 07:00 to 2027-03-15 11:00  crew CR-WELD-A\n    Notional: weld repair to a tank stiffener inside Aux Tank 3.\n    WS-HZ-001 Hot work in or adjacent to a confined or enclosed space. Contact: Gas Free Engineer.\n    Why: Incompatible hazard categories (confined_space, hot_work) detected in overlapping spatial envelope between HW-101 and CS-102.\n    Conflicts with: CS-102\n    Suggested, not applied: move crew CR-WELD-A from 20270315-DAY to 20270315-SWING (HW-101 2027-03-15 15:30 to 2027-03-15 19:30). Re-checked against every rule; a person must Apply it in the reviewer.\n  CS-102  pending_review  2027-03-15 07:00 to 2027-03-15 15:00  crew CR-TANK-A, locked (Notional: the tank's entry certification covers this window only.)\n    Notional: confined-space entry to inspect Aux Tank 3 coatings.\n    WS-HZ-001 Hot work in or adjacent to a confined or enclosed space. Contact: Gas Free Engineer.\n    Why: Incompatible hazard categories (confined_space, hot_work) detected in overlapping spatial envelope between HW-101 and CS-102.\n    Conflicts with: HW-101\n    No crew-shift suggestion: crew block can't move: CS-102 is locked.\n  HW-103  pending_review  2027-03-15 08:00 to 2027-03-15 12:00  crew CR-WELD-B\n    Notional: hot work on a pipe hanger in Shaft Alley 2.\n    WS-JF-001 Hot work near, but not overlapping, a confined or enclosed space. Contact: Gas Free Engineer.\n    Why: Judgment flag WS-JF-001: hot work and confined space are 2 frame(s) apart and concurrent; detection does not flag adjacency. Route to Gas Free Engineer Riley Example (NP-GFE-01).\n    No crew-shift suggestion: no shift among the next 6 passes every check for crew CR-WELD-B. Rejected: 20270315-SWING (WS-CT-001); 20270316-MID (WS-CT-001); 20270316-DAY (WS-CT-001); 20270316-SWING (WS-CT-001); 20270317-MID (WS-CT-001); 20270317-DAY (WS-CT-001).\n  CS-104  pending_review  2027-03-15 08:00 to 2027-03-15 14:00  crew CR-TANK-B\n    Notional: confined-space entry to Void 146, next to Shaft Alley 2.\n    WS-JF-001 Hot work near, but not overlapping, a confined or enclosed space. Contact: Gas Free Engineer.\n    Why: Judgment flag WS-JF-001: hot work and confined space are 2 frame(s) apart and concurrent; detection does not flag adjacency. Route to Gas Free Engineer Riley Example (NP-GFE-01).\n    No crew-shift suggestion: no shift among the next 6 passes every check for crew CR-TANK-B. Rejected: 20270315-SWING (WS-CT-002); 20270316-MID (WS-CT-002); 20270316-DAY (WS-CT-002); 20270316-SWING (WS-CT-002); 20270317-MID (WS-CT-002); 20270317-DAY (WS-CT-002).\n  ALOFT-105  pending_review  2027-03-15 07:00 to 2027-03-15 11:00  crew CR-RIG\n    Notional: rigging work aloft on the island mast.\n    WS-OH-001 Overhead work above other work with no vertical deconfliction confirmed. Contact: Safety Officer.\n    Why: Overhead work (ALOFT-105) and underlying work (DECK-106) share an overlapping frame range with no vertical deconfliction confirmed.\n    Conflicts with: DECK-106\n    Suggested, not applied: move crew CR-RIG from 20270315-DAY to 20270315-SWING (ALOFT-105 2027-03-15 15:30 to 2027-03-15 19:30). Re-checked against every rule; a person must Apply it in the reviewer.\n  DECK-106  pending_review  2027-03-15 08:00 to 2027-03-15 11:30  crew CR-DECK\n    Notional: deck preservation directly below the island mast.\n    WS-OH-001 Overhead work above other work with no vertical deconfliction confirmed. Contact: Safety Officer.\n    Why: Overhead work (ALOFT-105) and underlying work (DECK-106) share an overlapping frame range with no vertical deconfliction confirmed.\n    Conflicts with: ALOFT-105\n    Suggested, not applied: move crew CR-DECK from 20270315-DAY to 20270315-SWING (DECK-106 2027-03-15 16:30 to 2027-03-15 20:00). Re-checked against every rule; a person must Apply it in the reviewer.\n  FALL-107  pending_review  2027-03-15 07:00 to 2027-03-15 15:00  crew CR-RAIL\n    Notional: guardrail repair at a deck edge, harnessed.\n    WS-CT-003 Fall protection plan must cover the whole work window. Contact: Safety Officer.\n    Why: Finding WS-CT-003: fall_protection_plan: not covered for 2027-03-15 12:00 to 2027-03-15 15:00. Contact: Safety Officer.\n    No crew-shift suggestion: no shift among the next 6 passes every check for crew CR-RAIL. Rejected: 20270315-SWING (WS-CT-003); 20270316-MID (WS-CT-003); 20270316-DAY (WS-CT-003); 20270316-SWING (WS-CT-003); 20270317-MID (WS-CT-003); 20270317-DAY (WS-CT-003).\n  HW-108  pending_review  2027-03-15 07:30 to 2027-03-15 10:00  crew CR-WELD-C\n    Notional: grinding and welding on a hull fitting.\n    WS-CT-001 Hot work permit must cover the whole work window. Contact: Fire Safety Coordinator.\n    Why: Finding WS-CT-001: hot_work_permit: no certificate on file for 2027-03-15 07:30 to 2027-03-15 10:00. Contact: Fire Safety Coordinator.\n    No crew-shift suggestion: no shift among the next 6 passes every check for crew CR-WELD-C. Rejected: 20270315-SWING (WS-CT-001); 20270316-MID (WS-CT-001); 20270316-DAY (WS-CT-001); 20270316-SWING (WS-CT-001); 20270317-MID (WS-CT-001); 20270317-DAY (WS-CT-001).\n  CONTR-109  pending_review  2027-03-15 10:00 to 2027-03-15 14:00  crew CR-CONTRACT\n    Notional: contractor installs a ventilation duct.\n    WS-SC-002 Contractor work outside the contractor's allowed windows. Contact: Production Planner.\n    Why: Finding WS-SC-002 (Contractor work outside the contractor's allowed windows) for CONTR-109: outside contractor windows for 2027-03-15 12:00 to 2027-03-15 14:00. Contact: Production Planner.\n    No crew-shift suggestion: no shift among the next 6 passes every check for crew CR-CONTRACT. Rejected: 20270315-SWING (WS-SC-002); 20270316-MID (WS-SC-002); 20270316-DAY (WS-SC-002); 20270316-SWING (WS-SC-002); 20270317-MID (WS-SC-002); 20270317-DAY (WS-SC-002).\n\nJUDGMENT FLAGS (routed to a named person)\n  WS-JF-001 CS-104, HW-103 -> Gas Free Engineer Riley Example (NP-GFE-01): hot work and confined space are 2 frame(s) apart and concurrent; detection does not flag adjacency.\n\nCERTIFICATES\n  WS-CT-003 FALL-107: fall_protection_plan: not covered for 2027-03-15 12:00 to 2027-03-15 15:00\n  WS-CT-001 HW-108: hot_work_permit: no certificate on file for 2027-03-15 07:30 to 2027-03-15 10:00\n\nSCHEDULE\n  WS-SC-002 (Contractor work outside the contractor's allowed windows) for CONTR-109: outside contractor windows for 2027-03-15 12:00 to 2027-03-15 14:00. Contact: Production Planner.\n\nCLEARED\n  LOCKED-110, ELEC-111\n\nDECISION LOG\n  No decision log supplied (pass --db to include one).\n\nGenerated by deterministic code only; no language model wrote any of this brief.\n"
+}

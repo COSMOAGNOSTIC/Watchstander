@@ -1,0 +1,370 @@
+<title>Watchstander Carrier Plot</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Public+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a damage-control plot. The hull profile is the hero; the selected package's
+   gate and suggestion sit beside the queue; the crew-shift timeline runs underneath. */
+:root {
+  --bg: #e7ecef; --panel: #f6f8f9; --ink: #15212b; --muted: #576876; --rule: #c3ccd4;
+  --hull: #d0d9e0; --hull-line: #8d9ba7; --accent: #1d5c87;
+  --crit: #c22f2f; --warn: #a86b12; --ok: #2c7a4b; --sugg: #6f52b0;
+  --warn-fill: #f1d9b0; --ok-fill: #cfe7d7; --crit-fill: #f3c9c6; --sugg-fill: #e3daf5;
+  --display: "Big Shoulders Display", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c1319; --panel: #131c24; --ink: #dce5eb; --muted: #8b9cab; --rule: #273541;
+  --hull: #18242e; --hull-line: #4a5d6d; --accent: #6ba7d4;
+  --crit: #f07070; --warn: #e2a64c; --ok: #5cbf86; --sugg: #ad93ea;
+  --warn-fill: #4a3615; --ok-fill: #173a26; --crit-fill: #4a1d1d; --sugg-fill: #2e2547; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0c1319; --panel: #131c24; --ink: #dce5eb; --muted: #8b9cab; --rule: #273541;
+  --hull: #18242e; --hull-line: #4a5d6d; --accent: #6ba7d4;
+  --crit: #f07070; --warn: #e2a64c; --ok: #5cbf86; --sugg: #ad93ea;
+  --warn-fill: #4a3615; --ok-fill: #173a26; --crit-fill: #4a1d1d; --sugg-fill: #2e2547; color-scheme: dark }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 22px; }
+h1, h2 { font-family: var(--display); font-weight: 800; letter-spacing: .01em; text-wrap: balance; margin: 0; line-height: 1.05; }
+h1 { font-size: clamp(30px, 4.4vw, 46px); }
+h2 { font-size: 22px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; border-bottom: 2px solid var(--ink); padding-bottom: 12px; }
+header .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
+.tag { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .08em; padding: 2px 7px; border: 1.5px solid currentColor; border-radius: 3px; }
+.tag.notional { color: var(--sugg); }
+.summary { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; }
+.summary b { font-family: var(--mono); font-size: 18px; margin-right: 4px; }
+
+.plot { background: var(--panel); border: 1px solid var(--rule); padding: 14px 14px 8px; }
+.plot-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 18px; height: 10px; vertical-align: -1px; margin-right: 5px; border: 1.5px solid; }
+.scroll { overflow-x: auto; }
+svg text { font-family: var(--mono); }
+.pkg { cursor: pointer; }
+.pkg:focus { outline: none; }
+.pkg:focus-visible rect.bar, .pkg.sel rect.bar { stroke-width: 3; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 22px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.queue { display: grid; gap: 18px; min-width: 0; }
+.list { display: grid; gap: 0; border-top: 1px solid var(--rule); }
+.row { display: grid; grid-template-columns: 6px 94px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 6px 8px 0; border-bottom: 1px solid var(--rule); cursor: pointer; background: none; border-left: 0; border-right: 0; border-top: 0; text-align: left; color: inherit; font: inherit; width: 100%; }
+.row:hover, .row[aria-pressed="true"] { background: var(--bg); }
+.row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.row .stripe { align-self: stretch; }
+.row .id { font-family: var(--mono); font-weight: 600; font-size: 13px; }
+.row .what { font-size: 13px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .rid { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.projects { width: 100%; border-collapse: collapse; font-size: 13px; }
+.projects th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; padding: 4px 6px 4px 0; border-bottom: 1px solid var(--rule); }
+.projects td { padding: 6px 6px 6px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.pri { font-family: var(--mono); font-size: 11px; font-weight: 600; }
+.late { color: var(--crit); font-family: var(--mono); font-size: 12px; }
+
+.detail { background: var(--panel); border: 1px solid var(--rule); border-top: 4px solid var(--warn); padding: 16px 18px 18px; display: grid; gap: 14px; min-width: 0; }
+.detail.cleared { border-top-color: var(--ok); }
+.detail h3 { font-family: var(--display); font-weight: 800; font-size: 30px; margin: 0; line-height: 1; }
+.pill { font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--warn-fill); color: var(--warn); letter-spacing: .04em; }
+.pill.ok { background: var(--ok-fill); color: var(--ok); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 16px; font-size: 13px; }
+.facts div span { display: block; }
+.rule { border-left: 3px solid var(--crit); padding: 2px 0 2px 10px; display: grid; gap: 2px; }
+.rule .rid { font-family: var(--mono); font-weight: 600; font-size: 13px; color: var(--crit); }
+.rule .who { font-size: 13px; }
+.cite { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.why { font-size: 13px; color: var(--muted); margin: 0; padding-left: 16px; }
+.sugg { border: 1.5px dashed var(--sugg); background: var(--sugg-fill); padding: 10px 12px; display: grid; gap: 6px; font-size: 13px; }
+.sugg .head { font-family: var(--mono); font-weight: 600; color: var(--sugg); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+.nosugg { font-size: 13px; color: var(--muted); border-left: 3px solid var(--rule); padding-left: 10px; }
+.gatebox { overflow-x: auto; min-width: 0; }
+.wrap > *, .main > * { min-width: 0; }
+
+.timeline { background: var(--panel); border: 1px solid var(--rule); padding: 14px; }
+details.brief { background: var(--panel); border: 1px solid var(--rule); padding: 12px 14px; }
+details.brief summary { cursor: pointer; font-weight: 600; }
+details.brief pre { font-family: var(--mono); font-size: 12px; line-height: 1.45; overflow-x: auto; margin: 12px 0 0; white-space: pre; }
+footer { font-size: 12px; color: var(--muted); max-width: 80ch; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div style="display:grid;gap:6px">
+      <span class="label">Watchstander · safety deconfliction</span>
+      <h1 id="site">Carrier plot</h1>
+      <div class="meta"><span class="tag notional">NOTIONAL DATA</span><span id="asof"></span><span>Pre-review: nothing here is applied or approved</span></div>
+    </div>
+    <div class="summary" id="summary"></div>
+  </header>
+
+  <section class="plot" aria-labelledby="plot-h">
+    <div class="plot-head">
+      <h2 id="plot-h">Inboard profile · work by frame and deck</h2>
+      <div class="legend">
+        <span><i style="background:var(--warn-fill);border-color:var(--warn)"></i>needs a person</span>
+        <span><i style="background:var(--ok-fill);border-color:var(--ok)"></i>cleared</span>
+        <span><i style="background:none;border-color:var(--crit);border-style:solid;height:0;border-width:1.5px 0 0"></i>conflict</span>
+        <span>▣ locked</span>
+      </div>
+    </div>
+    <div class="scroll"><svg id="hull" viewBox="0 0 1000 360" style="min-width:760px;width:100%;display:block" role="img" aria-label="Notional carrier inboard profile with work packages placed by frame range and deck"></svg></div>
+  </section>
+
+  <div class="main">
+    <div class="queue">
+      <section aria-labelledby="q-h">
+        <h2 id="q-h" style="margin-bottom:8px">Needs a person</h2>
+        <div class="list" id="queue"></div>
+      </section>
+      <section aria-labelledby="p-h">
+        <h2 id="p-h" style="margin-bottom:8px">Projects</h2>
+        <div style="overflow-x:auto"><table class="projects" id="projects"></table></div>
+      </section>
+    </div>
+    <section class="detail" id="detail" aria-live="polite"></section>
+  </div>
+
+  <section class="timeline" aria-labelledby="t-h">
+    <div class="plot-head">
+      <h2 id="t-h">Crew shifts · 15 March</h2>
+      <div class="legend"><span><i style="background:var(--sugg-fill);border-color:var(--sugg);border-style:dashed"></i>suggested move, not applied</span><span><i style="background:var(--bg);border-color:var(--hull-line);border-style:dotted"></i>contractor window</span></div>
+    </div>
+    <div class="scroll"><svg id="tl" viewBox="0 0 1000 300" style="min-width:760px;width:100%;display:block" role="img" aria-label="Crew shift timeline"></svg></div>
+  </section>
+
+  <details class="brief"><summary>The plain-text daily brief from the same run</summary><pre id="brief"></pre></details>
+
+  <footer>Every package, rule, contact, status and suggestion on this page comes from one run of Watchstander's deterministic checks (<span class="mono" id="genby"></span>) over an invented carrier. No language model wrote any of it. Suggestions are never applied here; in the reviewer, Apply re-checks the move and every moved package still needs a person's decision.</footer>
+</div>
+
+<script type="application/json" id="snap">{"generated_by": "showcase/export_snapshot.py (agent_core.daily_brief.run_checks; no LLM)", "notional": true, "site": "Notional carrier NC-1 (invented hull, no real ship)", "as_of": "2027-03-15T06:00:00", "shifts": [{"id": "20270315-MID", "name": "MID", "start": "2027-03-15T00:00:00", "end": "2027-03-15T07:00:00"}, {"id": "20270315-DAY", "name": "DAY", "start": "2027-03-15T07:00:00", "end": "2027-03-15T15:30:00"}, {"id": "20270315-SWING", "name": "SWING", "start": "2027-03-15T15:30:00", "end": "2027-03-16T00:00:00"}, {"id": "20270316-MID", "name": "MID", "start": "2027-03-16T00:00:00", "end": "2027-03-16T07:00:00"}, {"id": "20270316-DAY", "name": "DAY", "start": "2027-03-16T07:00:00", "end": "2027-03-16T15:30:00"}, {"id": "20270316-SWING", "name": "SWING", "start": "2027-03-16T15:30:00", "end": "2027-03-17T00:00:00"}, {"id": "20270317-MID", "name": "MID", "start": "2027-03-17T00:00:00", "end": "2027-03-17T07:00:00"}, {"id": "20270317-DAY", "name": "DAY", "start": "2027-03-17T07:00:00", "end": "2027-03-17T15:30:00"}, {"id": "20270317-SWING", "name": "SWING", "start": "2027-03-17T15:30:00", "end": "2027-03-18T00:00:00"}], "crews": [{"id": "CR-WELD-A", "name": "Notional weld crew A", "contractor": false, "windows": []}, {"id": "CR-WELD-B", "name": "Notional weld crew B", "contractor": false, "windows": []}, {"id": "CR-TANK-A", "name": "Notional tank inspection crew A", "contractor": false, "windows": []}, {"id": "CR-TANK-B", "name": "Notional tank inspection crew B", "contractor": false, "windows": []}, {"id": "CR-RIG", "name": "Notional rigging crew", "contractor": false, "windows": []}, {"id": "CR-RAIL", "name": "Notional guardrail crew", "contractor": false, "windows": []}, {"id": "CR-WELD-C", "name": "Notional weld crew C", "contractor": false, "windows": []}, {"id": "CR-DECK", "name": "Notional deck preservation crew", "contractor": false, "windows": []}, {"id": "CR-ELEC", "name": "Notional electrical crew", "contractor": false, "windows": []}, {"id": "CR-CONTRACT", "name": "Notional contractor crew (invented firm)", "contractor": true, "windows": [{"start": "2027-03-15T07:00:00", "end": "2027-03-15T12:00:00"}]}], "packages": [{"id": "HW-101", "description": "Notional: weld repair to a tank stiffener inside Aux Tank 3.", "hazards": ["hot_work"], "compartment": "Notional Aux Tank 3", "deck": "Notional 5th Deck", "frame_start": 120, "frame_end": 126, "aloft": false, "start": "2027-03-15T07:00:00", "end": "2027-03-15T11:00:00", "crew": "CR-WELD-A", "locked": false, "lock_reason": null, "status": "pending_review", "rules": [{"id": "WS-HZ-001", "title": "Hot work in or adjacent to a confined or enclosed space", "contact": "Gas Free Engineer", "category": "hazard_pair", "citations": [{"source": "29 CFR 1915.14", "verified": false}, {"source": "NAVSEA8010-4.4.4", "verified": true}]}], "why": ["Incompatible hazard categories (confined_space, hot_work) detected in overlapping spatial envelope between HW-101 and CS-102."], "conflicts": ["CS-102"], "suggestion": {"available": true, "crew": "CR-WELD-A", "from_shift": "20270315-DAY", "to_shift": "20270315-SWING", "moves": [{"id": "HW-101", "start": "2027-03-15T15:30:00", "end": "2027-03-15T19:30:00"}], "reason": null, "rejected": []}}, {"id": "CS-102", "description": "Notional: confined-space entry to inspect Aux Tank 3 coatings.", "hazards": ["confined_space"], "compartment": "Notional Aux Tank 3", "deck": "Notional 5th Deck", "frame_start": 121, "frame_end": 124, "aloft": false, "start": "2027-03-15T07:00:00", "end": "2027-03-15T15:00:00", "crew": "CR-TANK-A", "locked": true, "lock_reason": "Notional: the tank's entry certification covers this window only.", "status": "pending_review", "rules": [{"id": "WS-HZ-001", "title": "Hot work in or adjacent to a confined or enclosed space", "contact": "Gas Free Engineer", "category": "hazard_pair", "citations": [{"source": "29 CFR 1915.14", "verified": false}, {"source": "NAVSEA8010-4.4.4", "verified": true}]}], "why": ["Incompatible hazard categories (confined_space, hot_work) detected in overlapping spatial envelope between HW-101 and CS-102."], "conflicts": ["HW-101"], "suggestion": {"available": false, "crew": null, "from_shift": null, "to_shift": null, "moves": [], "reason": "crew block can't move: CS-102 is locked.", "rejected": []}}, {"id": "HW-103", "description": "Notional: hot work on a pipe hanger in Shaft Alley 2.", "hazards": ["hot_work"], "compartment": "Notional Shaft Alley 2", "deck": "Notional 5th Deck", "frame_start": 140, "frame_end": 144, "aloft": false, "start": "2027-03-15T08:00:00", "end": "2027-03-15T12:00:00", "crew": "CR-WELD-B", "locked": false, "lock_reason": null, "status": "pending_review", "rules": [{"id": "WS-JF-001", "title": "Hot work near, but not overlapping, a confined or enclosed space", "contact": "Gas Free Engineer", "category": "judgment", "citations": [{"source": "NAVSEA8010-4.3", "verified": true}, {"source": "29 CFR 1915.14", "verified": false}]}], "why": ["Judgment flag WS-JF-001: hot work and confined space are 2 frame(s) apart and concurrent; detection does not flag adjacency. Route to Gas Free Engineer Riley Example (NP-GFE-01)."], "conflicts": [], "suggestion": {"available": false, "crew": null, "from_shift": null, "to_shift": null, "moves": [], "reason": "no shift among the next 6 passes every check for crew CR-WELD-B.", "rejected": [{"shift": "20270315-SWING", "rules": ["WS-CT-001"], "reasons": []}, {"shift": "20270316-MID", "rules": ["WS-CT-001"], "reasons": []}, {"shift": "20270316-DAY", "rules": ["WS-CT-001"], "reasons": []}, {"shift": "20270316-SWING", "rules": ["WS-CT-001"], "reasons": []}, {"shift": "20270317-MID", "rules": ["WS-CT-001"], "reasons": []}, {"shift": "20270317-DAY", "rules": ["WS-CT-001"], "reasons": []}]}}, {"id": "CS-104", "description": "Notional: confined-space entry to Void 146, next to Shaft Alley 2.", "hazards": ["confined_space"], "compartment": "Notional Void 146", "deck": "Notional 5th Deck", "frame_start": 146, "frame_end": 150, "aloft": false, "start": "2027-03-15T08:00:00", "end": "2027-03-15T14:00:00", "crew": "CR-TANK-B", "locked": false, "lock_reason": null, "status": "pending_review", "rules": [{"id": "WS-JF-001", "title": "Hot work near, but not overlapping, a confined or enclosed space", "contact": "Gas Free Engineer", "category": "judgment", "citations": [{"source": "NAVSEA8010-4.3", "verified": true}, {"source": "29 CFR 1915.14", "verified": false}]}], "why": ["Judgment flag WS-JF-001: hot work and confined space are 2 frame(s) apart and concurrent; detection does not flag adjacency. Route to Gas Free Engineer Riley Example (NP-GFE-01)."], "conflicts": [], "suggestion": {"available": false, "crew": null, "from_shift": null, "to_shift": null, "moves": [], "reason": "no shift among the next 6 passes every check for crew CR-TANK-B.", "rejected": [{"shift": "20270315-SWING", "rules": ["WS-CT-002"], "reasons": []}, {"shift": "20270316-MID", "rules": ["WS-CT-002"], "reasons": []}, {"shift": "20270316-DAY", "rules": ["WS-CT-002"], "reasons": []}, {"shift": "20270316-SWING", "rules": ["WS-CT-002"], "reasons": []}, {"shift": "20270317-MID", "rules": ["WS-CT-002"], "reasons": []}, {"shift": "20270317-DAY", "rules": ["WS-CT-002"], "reasons": []}]}}, {"id": "ALOFT-105", "description": "Notional: rigging work aloft on the island mast.", "hazards": ["working_aloft"], "compartment": "Notional Island Mast", "deck": "Notional Flight Deck", "frame_start": 160, "frame_end": 170, "aloft": true, "start": "2027-03-15T07:00:00", "end": "2027-03-15T11:00:00", "crew": "CR-RIG", "locked": false, "lock_reason": null, "status": "pending_review", "rules": [{"id": "WS-OH-001", "title": "Overhead work above other work with no vertical deconfliction confirmed", "contact": "Safety Officer", "category": "overhead", "citations": []}], "why": ["Overhead work (ALOFT-105) and underlying work (DECK-106) share an overlapping frame range with no vertical deconfliction confirmed."], "conflicts": ["DECK-106"], "suggestion": {"available": true, "crew": "CR-RIG", "from_shift": "20270315-DAY", "to_shift": "20270315-SWING", "moves": [{"id": "ALOFT-105", "start": "2027-03-15T15:30:00", "end": "2027-03-15T19:30:00"}], "reason": null, "rejected": []}}, {"id": "DECK-106", "description": "Notional: deck preservation directly below the island mast.", "hazards": [], "compartment": "Notional Flight Deck, starboard", "deck": "Notional Flight Deck", "frame_start": 162, "frame_end": 166, "aloft": false, "start": "2027-03-15T08:00:00", "end": "2027-03-15T11:30:00", "crew": "CR-DECK", "locked": false, "lock_reason": null, "status": "pending_review", "rules": [{"id": "WS-OH-001", "title": "Overhead work above other work with no vertical deconfliction confirmed", "contact": "Safety Officer", "category": "overhead", "citations": []}], "why": ["Overhead work (ALOFT-105) and underlying work (DECK-106) share an overlapping frame range with no vertical deconfliction confirmed."], "conflicts": ["ALOFT-105"], "suggestion": {"available": true, "crew": "CR-DECK", "from_shift": "20270315-DAY", "to_shift": "20270315-SWING", "moves": [{"id": "DECK-106", "start": "2027-03-15T16:30:00", "end": "2027-03-15T20:00:00"}], "reason": null, "rejected": []}}, {"id": "FALL-107", "description": "Notional: guardrail repair at a deck edge, harnessed.", "hazards": ["fall_protection"], "compartment": "Notional Hangar Bay 2, aft edge", "deck": "Notional Hangar Deck", "frame_start": 20, "frame_end": 30, "aloft": false, "start": "2027-03-15T07:00:00", "end": "2027-03-15T15:00:00", "crew": "CR-RAIL", "locked": false, "lock_reason": null, "status": "pending_review", "rules": [{"id": "WS-CT-003", "title": "Fall protection plan must cover the whole work window", "contact": "Safety Officer", "category": "certificate", "citations": [{"source": "29 CFR 1915.159", "verified": false}]}], "why": ["Finding WS-CT-003: fall_protection_plan: not covered for 2027-03-15 12:00 to 2027-03-15 15:00. Contact: Safety Officer."], "conflicts": [], "suggestion": {"available": false, "crew": null, "from_shift": null, "to_shift": null, "moves": [], "reason": "no shift among the next 6 passes every check for crew CR-RAIL.", "rejected": [{"shift": "20270315-SWING", "rules": ["WS-CT-003"], "reasons": []}, {"shift": "20270316-MID", "rules": ["WS-CT-003"], "reasons": []}, {"shift": "20270316-DAY", "rules": ["WS-CT-003"], "reasons": []}, {"shift": "20270316-SWING", "rules": ["WS-CT-003"], "reasons": []}, {"shift": "20270317-MID", "rules": ["WS-CT-003"], "reasons": []}, {"shift": "20270317-DAY", "rules": ["WS-CT-003"], "reasons": []}]}}, {"id": "HW-108", "description": "Notional: grinding and welding on a hull fitting.", "hazards": ["hot_work"], "compartment": "Notional Engineering Workshop", "deck": "Notional 3rd Deck", "frame_start": 200, "frame_end": 204, "aloft": false, "start": "2027-03-15T07:30:00", "end": "2027-03-15T10:00:00", "crew": "CR-WELD-C", "locked": false, "lock_reason": null, "status": "pending_review", "rules": [{"id": "WS-CT-001", "title": "Hot work permit must cover the whole work window", "contact": "Fire Safety Coordinator", "category": "certificate", "citations": [{"source": "NAVSEA8010-4.2", "verified": true}, {"source": "29 CFR 1915.503", "verified": false}]}], "why": ["Finding WS-CT-001: hot_work_permit: no certificate on file for 2027-03-15 07:30 to 2027-03-15 10:00. Contact: Fire Safety Coordinator."], "conflicts": [], "suggestion": {"available": false, "crew": null, "from_shift": null, "to_shift": null, "moves": [], "reason": "no shift among the next 6 passes every check for crew CR-WELD-C.", "rejected": [{"shift": "20270315-SWING", "rules": ["WS-CT-001"], "reasons": []}, {"shift": "20270316-MID", "rules": ["WS-CT-001"], "reasons": []}, {"shift": "20270316-DAY", "rules": ["WS-CT-001"], "reasons": []}, {"shift": "20270316-SWING", "rules": ["WS-CT-001"], "reasons": []}, {"shift": "20270317-MID", "rules": ["WS-CT-001"], "reasons": []}, {"shift": "20270317-DAY", "rules": ["WS-CT-001"], "reasons": []}]}}, {"id": "CONTR-109", "description": "Notional: contractor installs a ventilation duct.", "hazards": [], "compartment": "Notional Fan Room 220", "deck": "Notional 2nd Deck", "frame_start": 220, "frame_end": 224, "aloft": false, "start": "2027-03-15T10:00:00", "end": "2027-03-15T14:00:00", "crew": "CR-CONTRACT", "locked": false, "lock_reason": null, "status": "pending_review", "rules": [{"id": "WS-SC-002", "title": "Contractor work outside the contractor's allowed windows", "contact": "Production Planner", "category": "schedule", "citations": []}], "why": ["Finding WS-SC-002 (Contractor work outside the contractor's allowed windows) for CONTR-109: outside contractor windows for 2027-03-15 12:00 to 2027-03-15 14:00. Contact: Production Planner."], "conflicts": [], "suggestion": {"available": false, "crew": null, "from_shift": null, "to_shift": null, "moves": [], "reason": "no shift among the next 6 passes every check for crew CR-CONTRACT.", "rejected": [{"shift": "20270315-SWING", "rules": ["WS-SC-002"], "reasons": []}, {"shift": "20270316-MID", "rules": ["WS-SC-002"], "reasons": []}, {"shift": "20270316-DAY", "rules": ["WS-SC-002"], "reasons": []}, {"shift": "20270316-SWING", "rules": ["WS-SC-002"], "reasons": []}, {"shift": "20270317-MID", "rules": ["WS-SC-002"], "reasons": []}, {"shift": "20270317-DAY", "rules": ["WS-SC-002"], "reasons": []}]}}, {"id": "LOCKED-110", "description": "Notional: cable tray inspection, fixed to a test window.", "hazards": [], "compartment": "Notional Passageway 240", "deck": "Notional 2nd Deck", "frame_start": 240, "frame_end": 244, "aloft": false, "start": "2027-03-15T07:00:00", "end": "2027-03-15T11:00:00", "crew": "CR-ELEC", "locked": true, "lock_reason": "Notional: tied to a scheduled system test.", "status": "cleared", "rules": [], "why": [], "conflicts": [], "suggestion": null}, {"id": "ELEC-111", "description": "Notional: replace a lighting fixture.", "hazards": [], "compartment": "Notional Berthing 250", "deck": "Notional 2nd Deck", "frame_start": 250, "frame_end": 254, "aloft": false, "start": "2027-03-15T12:00:00", "end": "2027-03-15T15:00:00", "crew": "CR-ELEC", "locked": false, "lock_reason": null, "status": "cleared", "rules": [], "why": [], "conflicts": [], "suggestion": null}], "judgment_flags": [{"rule": "WS-JF-001", "packages": ["CS-104", "HW-103"], "reason": "hot work and confined space are 2 frame(s) apart and concurrent; detection does not flag adjacency.", "person": "Riley Example", "role": "Gas Free Engineer", "person_id": "NP-GFE-01"}], "certificate_findings": [{"rule": "WS-CT-003", "package": "FALL-107", "message": "fall_protection_plan: not covered for 2027-03-15 12:00 to 2027-03-15 15:00"}, {"rule": "WS-CT-001", "package": "HW-108", "message": "hot_work_permit: no certificate on file for 2027-03-15 07:30 to 2027-03-15 10:00"}], "schedule_findings": [{"rule": "WS-SC-002", "packages": ["CONTR-109"], "message": "WS-SC-002 (Contractor work outside the contractor's allowed windows) for CONTR-109: outside contractor windows for 2027-03-15 12:00 to 2027-03-15 14:00. Contact: Production Planner."}], "projects": [{"id": "PRJ-A", "name": "Notional Aux Tank 3 repair", "priority": "urgent", "due": "2027-03-15T23:00:00", "status": "pending_review", "counts": {"pending_review": 2}, "late": [], "past_due": false}, {"id": "PRJ-B", "name": "Notional shaft alley piping", "priority": "high", "due": "2027-03-16T15:30:00", "status": "pending_review", "counts": {"pending_review": 2}, "late": [], "past_due": false}, {"id": "PRJ-C", "name": "Notional topside and hangar work", "priority": "routine", "due": "2027-03-15T12:00:00", "status": "pending_review", "counts": {"pending_review": 3}, "late": ["FALL-107"], "past_due": false}, {"id": "PRJ-D", "name": "Notional habitability and hull fittings", "priority": "low", "due": null, "status": "pending_review", "counts": {"pending_review": 2, "cleared": 2}, "late": [], "past_due": false}], "cleared": ["LOCKED-110", "ELEC-111"], "brief_text": "WATCHSTANDER DAILY BRIEF -- NOTIONAL DATA, NOT FOR OPERATIONAL USE\nSite: Notional carrier NC-1 (invented hull, no real ship)\nAs of: 2027-03-15 06:00\n\nSUMMARY\n  11 packages: 2 cleared, 9 need a person.\n  Nothing below has been applied or approved; the reviewer is where decisions are made.\n\nPROJECTS (priority, then due date)\n  [URGENT] PRJ-A  Notional Aux Tank 3 repair  due 2027-03-15 23:00  status: pending_review\n      pending_review: HW-101, CS-102\n  [HIGH] PRJ-B  Notional shaft alley piping  due 2027-03-16 15:30  status: pending_review\n      pending_review: HW-103, CS-104\n  [ROUTINE] PRJ-C  Notional topside and hangar work  due 2027-03-15 12:00  status: pending_review\n      pending_review: ALOFT-105, DECK-106, FALL-107\n      LATE (ends after due date): FALL-107\n  [LOW] PRJ-D  Notional habitability and hull fittings  due no due date  status: pending_review\n      pending_review: HW-108, CONTR-109\n      cleared: LOCKED-110, ELEC-111\n\nNEEDS A PERSON\n  HW-101  pending_review  2027-03-15 07:00 to 2027-03-15 11:00  crew CR-WELD-A\n    Notional: weld repair to a tank stiffener inside Aux Tank 3.\n    WS-HZ-001 Hot work in or adjacent to a confined or enclosed space. Contact: Gas Free Engineer.\n    Why: Incompatible hazard categories (confined_space, hot_work) detected in overlapping spatial envelope between HW-101 and CS-102.\n    Conflicts with: CS-102\n    Suggested, not applied: move crew CR-WELD-A from 20270315-DAY to 20270315-SWING (HW-101 2027-03-15 15:30 to 2027-03-15 19:30). Re-checked against every rule; a person must Apply it in the reviewer.\n  CS-102  pending_review  2027-03-15 07:00 to 2027-03-15 15:00  crew CR-TANK-A, locked (Notional: the tank's entry certification covers this window only.)\n    Notional: confined-space entry to inspect Aux Tank 3 coatings.\n    WS-HZ-001 Hot work in or adjacent to a confined or enclosed space. Contact: Gas Free Engineer.\n    Why: Incompatible hazard categories (confined_space, hot_work) detected in overlapping spatial envelope between HW-101 and CS-102.\n    Conflicts with: HW-101\n    No crew-shift suggestion: crew block can't move: CS-102 is locked.\n  HW-103  pending_review  2027-03-15 08:00 to 2027-03-15 12:00  crew CR-WELD-B\n    Notional: hot work on a pipe hanger in Shaft Alley 2.\n    WS-JF-001 Hot work near, but not overlapping, a confined or enclosed space. Contact: Gas Free Engineer.\n    Why: Judgment flag WS-JF-001: hot work and confined space are 2 frame(s) apart and concurrent; detection does not flag adjacency. Route to Gas Free Engineer Riley Example (NP-GFE-01).\n    No crew-shift suggestion: no shift among the next 6 passes every check for crew CR-WELD-B. Rejected: 20270315-SWING (WS-CT-001); 20270316-MID (WS-CT-001); 20270316-DAY (WS-CT-001); 20270316-SWING (WS-CT-001); 20270317-MID (WS-CT-001); 20270317-DAY (WS-CT-001).\n  CS-104  pending_review  2027-03-15 08:00 to 2027-03-15 14:00  crew CR-TANK-B\n    Notional: confined-space entry to Void 146, next to Shaft Alley 2.\n    WS-JF-001 Hot work near, but not overlapping, a confined or enclosed space. Contact: Gas Free Engineer.\n    Why: Judgment flag WS-JF-001: hot work and confined space are 2 frame(s) apart and concurrent; detection does not flag adjacency. Route to Gas Free Engineer Riley Example (NP-GFE-01).\n    No crew-shift suggestion: no shift among the next 6 passes every check for crew CR-TANK-B. Rejected: 20270315-SWING (WS-CT-002); 20270316-MID (WS-CT-002); 20270316-DAY (WS-CT-002); 20270316-SWING (WS-CT-002); 20270317-MID (WS-CT-002); 20270317-DAY (WS-CT-002).\n  ALOFT-105  pending_review  2027-03-15 07:00 to 2027-03-15 11:00  crew CR-RIG\n    Notional: rigging work aloft on the island mast.\n    WS-OH-001 Overhead work above other work with no vertical deconfliction confirmed. Contact: Safety Officer.\n    Why: Overhead work (ALOFT-105) and underlying work (DECK-106) share an overlapping frame range with no vertical deconfliction confirmed.\n    Conflicts with: DECK-106\n    Suggested, not applied: move crew CR-RIG from 20270315-DAY to 20270315-SWING (ALOFT-105 2027-03-15 15:30 to 2027-03-15 19:30). Re-checked against every rule; a person must Apply it in the reviewer.\n  DECK-106  pending_review  2027-03-15 08:00 to 2027-03-15 11:30  crew CR-DECK\n    Notional: deck preservation directly below the island mast.\n    WS-OH-001 Overhead work above other work with no vertical deconfliction confirmed. Contact: Safety Officer.\n    Why: Overhead work (ALOFT-105) and underlying work (DECK-106) share an overlapping frame range with no vertical deconfliction confirmed.\n    Conflicts with: ALOFT-105\n    Suggested, not applied: move crew CR-DECK from 20270315-DAY to 20270315-SWING (DECK-106 2027-03-15 16:30 to 2027-03-15 20:00). Re-checked against every rule; a person must Apply it in the reviewer.\n  FALL-107  pending_review  2027-03-15 07:00 to 2027-03-15 15:00  crew CR-RAIL\n    Notional: guardrail repair at a deck edge, harnessed.\n    WS-CT-003 Fall protection plan must cover the whole work window. Contact: Safety Officer.\n    Why: Finding WS-CT-003: fall_protection_plan: not covered for 2027-03-15 12:00 to 2027-03-15 15:00. Contact: Safety Officer.\n    No crew-shift suggestion: no shift among the next 6 passes every check for crew CR-RAIL. Rejected: 20270315-SWING (WS-CT-003); 20270316-MID (WS-CT-003); 20270316-DAY (WS-CT-003); 20270316-SWING (WS-CT-003); 20270317-MID (WS-CT-003); 20270317-DAY (WS-CT-003).\n  HW-108  pending_review  2027-03-15 07:30 to 2027-03-15 10:00  crew CR-WELD-C\n    Notional: grinding and welding on a hull fitting.\n    WS-CT-001 Hot work permit must cover the whole work window. Contact: Fire Safety Coordinator.\n    Why: Finding WS-CT-001: hot_work_permit: no certificate on file for 2027-03-15 07:30 to 2027-03-15 10:00. Contact: Fire Safety Coordinator.\n    No crew-shift suggestion: no shift among the next 6 passes every check for crew CR-WELD-C. Rejected: 20270315-SWING (WS-CT-001); 20270316-MID (WS-CT-001); 20270316-DAY (WS-CT-001); 20270316-SWING (WS-CT-001); 20270317-MID (WS-CT-001); 20270317-DAY (WS-CT-001).\n  CONTR-109  pending_review  2027-03-15 10:00 to 2027-03-15 14:00  crew CR-CONTRACT\n    Notional: contractor installs a ventilation duct.\n    WS-SC-002 Contractor work outside the contractor's allowed windows. Contact: Production Planner.\n    Why: Finding WS-SC-002 (Contractor work outside the contractor's allowed windows) for CONTR-109: outside contractor windows for 2027-03-15 12:00 to 2027-03-15 14:00. Contact: Production Planner.\n    No crew-shift suggestion: no shift among the next 6 passes every check for crew CR-CONTRACT. Rejected: 20270315-SWING (WS-SC-002); 20270316-MID (WS-SC-002); 20270316-DAY (WS-SC-002); 20270316-SWING (WS-SC-002); 20270317-MID (WS-SC-002); 20270317-DAY (WS-SC-002).\n\nJUDGMENT FLAGS (routed to a named person)\n  WS-JF-001 CS-104, HW-103 -> Gas Free Engineer Riley Example (NP-GFE-01): hot work and confined space are 2 frame(s) apart and concurrent; detection does not flag adjacency.\n\nCERTIFICATES\n  WS-CT-003 FALL-107: fall_protection_plan: not covered for 2027-03-15 12:00 to 2027-03-15 15:00\n  WS-CT-001 HW-108: hot_work_permit: no certificate on file for 2027-03-15 07:30 to 2027-03-15 10:00\n\nSCHEDULE\n  WS-SC-002 (Contractor work outside the contractor's allowed windows) for CONTR-109: outside contractor windows for 2027-03-15 12:00 to 2027-03-15 14:00. Contact: Production Planner.\n\nCLEARED\n  LOCKED-110, ELEC-111\n\nDECISION LOG\n  No decision log supplied (pass --db to include one).\n\nGenerated by deterministic code only; no language model wrote any of this brief.\n"}</script>
+<script>
+const S = JSON.parse(document.getElementById("snap").textContent);
+const NS = "http://www.w3.org/2000/svg";
+const byId = Object.fromEntries(S.packages.map(p => [p.id, p]));
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const hm = iso => iso ? iso.slice(11, 16) : "—";
+const needs = S.packages.filter(p => p.status !== "cleared");
+let selected = (needs.find(p => p.suggestion && p.suggestion.available) || needs[0] || S.packages[0]).id;
+
+document.getElementById("site").textContent = S.site.replace(/\s*\(.*\)/, "");
+document.getElementById("asof").textContent = "As of " + S.as_of.replace("T", " ").slice(0, 16);
+document.getElementById("genby").textContent = S.generated_by;
+document.getElementById("brief").textContent = S.brief_text;
+const sugCount = needs.filter(p => p.suggestion && p.suggestion.available).length;
+document.getElementById("summary").innerHTML =
+  `<span><b>${S.packages.length}</b>packages</span><span style="color:var(--warn)"><b>${needs.length}</b>need a person</span>` +
+  `<span style="color:var(--ok)"><b>${S.cleared.length}</b>cleared</span><span style="color:var(--sugg)"><b>${sugCount}</b>fixes suggested</span>`;
+
+/* ---------- hull profile ---------- */
+const FX0 = 150, FX1 = 960, FMAX = 260;
+const fx = f => FX0 + (f / FMAX) * (FX1 - FX0);
+const DECKS = [ // y of each deck line, top to bottom; band = where markers for that deck sit
+  { key: "aloft", name: "ALOFT", y: 26 }, { key: "flight", name: "FLIGHT DECK", y: 86 },
+  { key: "hangar", name: "HANGAR DECK", y: 128 }, { key: "2nd", name: "2ND DECK", y: 168 },
+  { key: "3rd", name: "3RD DECK", y: 204 }, { key: "5th", name: "5TH DECK", y: 244 },
+];
+function deckOf(p) {
+  if (p.aloft) return "aloft";
+  const d = (p.deck || "").toLowerCase();
+  for (const k of ["flight", "hangar", "2nd", "3rd", "5th"]) if (d.includes(k)) return k;
+  return "2nd";
+}
+function drawHull() {
+  const svg = document.getElementById("hull");
+  // notional hull outline: raked bow at frame 0 (left), transom stern at frame 260 (right)
+  el("path", { d: `M ${fx(0)-30} 86 L ${fx(260)+8} 86 L ${fx(260)+4} 250 Q ${fx(250)} 318 ${fx(225)} 320 L ${fx(30)} 320 Q ${fx(6)} 316 ${fx(0)} 220 Z`,
+    fill: "var(--hull)", stroke: "var(--hull-line)", "stroke-width": 1.5 }, svg);
+  // island and mast (notional), frames 150-178
+  el("path", { d: `M ${fx(150)} 86 L ${fx(150)} 50 L ${fx(162)} 50 L ${fx(164)} 14 L ${fx(166)} 14 L ${fx(168)} 50 L ${fx(178)} 50 L ${fx(178)} 86 Z`,
+    fill: "var(--hull)", stroke: "var(--hull-line)", "stroke-width": 1.2 }, svg);
+  // waterline
+  el("line", { x1: 20, x2: 990, y1: 304, y2: 304, stroke: "var(--accent)", "stroke-width": 1, "stroke-dasharray": "6 5", opacity: .7 }, svg);
+  el("text", { x: 984, y: 300, "text-anchor": "end", "font-size": 9, fill: "var(--accent)" }, svg).textContent = "WL";
+  // deck lines and labels
+  for (const d of DECKS.slice(1)) {
+    el("line", { x1: fx(0), x2: fx(260), y1: d.y + 12, y2: d.y + 12, stroke: "var(--hull-line)", "stroke-width": .8, opacity: .8 }, svg);
+  }
+  for (const d of DECKS) {
+    el("text", { x: 8, y: d.y + 4, "font-size": 9.5, fill: "var(--muted)", "letter-spacing": ".08em" }, svg).textContent = d.name;
+  }
+  // frame scale
+  for (let f = 0; f <= 260; f += 10) {
+    const major = f % 50 === 0;
+    el("line", { x1: fx(f), x2: fx(f), y1: 330, y2: major ? 340 : 335, stroke: "var(--muted)", "stroke-width": major ? 1 : .6 }, svg);
+    if (major) el("text", { x: fx(f), y: 354, "text-anchor": "middle", "font-size": 10, fill: "var(--muted)" }, svg).textContent = f;
+  }
+  el("text", { x: 8, y: 354, "font-size": 9.5, fill: "var(--muted)" }, svg).textContent = "FRAME";
+  el("text", { x: fx(0) - 30, y: 80, "font-size": 9, fill: "var(--muted)" }, svg).textContent = "FWD";
+  el("text", { x: fx(260) - 2, y: 80, "font-size": 9, fill: "var(--muted)", "text-anchor": "end" }, svg).textContent = "AFT";
+
+  // conflicts first (under the bars)
+  const centre = {};
+  const lanes = {};
+  const placed = S.packages.filter(p => p.frame_start != null && p.frame_end != null).map(p => {
+    const k = deckOf(p); lanes[k] = lanes[k] || [];
+    let lane = 0;
+    const LABEL = 17; // frames reserved to the right of a bar for its label
+    while (lanes[k].some(o => o.lane === lane && !(p.frame_end + LABEL < o.p.frame_start || p.frame_start > o.p.frame_end + LABEL))) lane++;
+    lanes[k].push({ p, lane });
+    const d = DECKS.find(x => x.key === k);
+    const y = d.y - 8 + lane * 20;
+    centre[p.id] = { x: (fx(p.frame_start) + fx(p.frame_end)) / 2, y: y + 6 };
+    return { p, y };
+  });
+  const linkG = el("g", {}, svg);
+  const seen = new Set();
+  for (const { p } of placed) for (const o of p.conflicts) {
+    const key = [p.id, o].sort().join("|"); if (seen.has(key) || !centre[o]) continue; seen.add(key);
+    const a = centre[p.id], b = centre[o];
+    const lift = Math.max(18, Math.abs(a.x - b.x) / 2);
+    el("path", { d: `M ${a.x} ${a.y} C ${a.x} ${a.y - lift}, ${b.x} ${b.y - lift}, ${b.x} ${b.y}`, fill: "none", stroke: "var(--crit)", "stroke-width": 1.6 }, linkG);
+  }
+  for (const { p, y } of placed) {
+    const ok = p.status === "cleared";
+    const g = el("g", { class: "pkg", "data-id": p.id, tabindex: 0, role: "button", "aria-label": `${p.id}, ${p.status.replace("_", " ")}` }, svg);
+    const x1 = fx(p.frame_start), w = Math.max(8, fx(p.frame_end) - x1);
+    el("rect", { class: "bar", x: x1, y, width: w, height: 12, rx: 1.5, fill: ok ? "var(--ok-fill)" : "var(--warn-fill)", stroke: ok ? "var(--ok)" : "var(--warn)", "stroke-width": 1.5 }, g);
+    const label = el("text", { x: x1 + w + 4, y: y + 10, "text-anchor": "start", "font-size": 10, "font-weight": 600, fill: "var(--ink)" }, g);
+    label.textContent = (p.locked ? "▣ " : "") + p.id;
+    g.addEventListener("click", () => select(p.id));
+    g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(p.id); } });
+  }
+}
+
+/* ---------- queue, projects ---------- */
+function drawQueue() {
+  const q = document.getElementById("queue");
+  q.innerHTML = needs.map(p => {
+    const r = p.rules[0];
+    return `<button class="row" data-id="${esc(p.id)}" aria-pressed="false"><span class="stripe" style="background:var(--warn)"></span>` +
+      `<span class="id">${esc(p.id)}</span><span class="what">${esc(p.description.replace(/^Notional:\s*/, ""))}</span>` +
+      `<span class="rid">${esc(r ? r.id : "review")}${p.suggestion && p.suggestion.available ? ' <span style="color:var(--sugg)">◆</span>' : ""}</span></button>`;
+  }).join("");
+  q.querySelectorAll(".row").forEach(b => b.addEventListener("click", () => select(b.dataset.id)));
+  const t = document.getElementById("projects");
+  t.innerHTML = `<thead><tr><th>Priority</th><th>Project</th><th>Due</th><th>Status</th></tr></thead><tbody>` +
+    S.projects.map(pr => `<tr><td class="pri">${esc(pr.priority.toUpperCase())}</td><td>${esc(pr.name.replace(/^Notional\s*/, ""))}<div class="cite">${esc(pr.id)}</div></td>` +
+      `<td class="mono" style="font-size:12px">${pr.due ? esc(pr.due.slice(5, 16).replace("T", " ")) : "—"}${pr.late.length ? `<div class="late">late: ${esc(pr.late.join(", "))}</div>` : ""}</td>` +
+      `<td style="font-size:12px">${Object.entries(pr.counts).map(([k, v]) => `${v} ${esc(k.replace("_", " "))}`).join("<br>")}</td></tr>`).join("") + `</tbody>`;
+}
+
+/* ---------- the four-input AND gate for the selected package ---------- */
+function gateInputs(p) {
+  const has = pre => p.rules.some(r => r.id.startsWith(pre));
+  const detection = p.rules.some(r => /^WS-(HZ|OH|FW)-/.test(r.id)) || p.conflicts.length > 0;
+  return [
+    { name: "human review", clean: p.status === "cleared", note: detection ? "conflict found" : (p.status === "cleared" ? "not needed" : "decision pending") },
+    { name: "certificates", clean: !has("WS-CT-"), note: has("WS-CT-") ? "finding" : "clean" },
+    { name: "judgment flags", clean: !has("WS-JF-"), note: has("WS-JF-") ? "flagged" : "clean" },
+    { name: "schedule rules", clean: !has("WS-SC-"), note: has("WS-SC-") ? "finding" : "clean" },
+  ];
+}
+function gateSvg(p) {
+  const ins = gateInputs(p), all = ins.every(i => i.clean);
+  const W = 580, H = 150, gx = 300;
+  let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:420px;display:block" role="img" aria-label="Status gate: ${all ? "cleared" : "routed to a person"}">`;
+  ins.forEach((i, n) => {
+    const y = 22 + n * 32, c = i.clean ? "var(--ok)" : "var(--crit)";
+    s += `<text x="0" y="${y + 4}" font-size="12" fill="var(--ink)" font-family="var(--body)">${i.name}</text>`;
+    s += `<text x="118" y="${y + 4}" font-size="10.5" fill="${c}">${i.clean ? "✓" : "✗"} ${i.note}</text>`;
+    s += `<line x1="222" x2="${gx}" y1="${y}" y2="${y}" stroke="${c}" stroke-width="2"/>`;
+    s += `<line x1="${gx}" x2="${gx}" y1="${y}" y2="${y}" />`;
+  });
+  s += `<path d="M ${gx} 8 L ${gx + 36} 8 A 64 64 0 0 1 ${gx + 36} 136 L ${gx} 136 Z" fill="var(--panel)" stroke="var(--ink)" stroke-width="2"/>`;
+  s += `<text x="${gx + 30}" y="77" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">AND</text>`;
+  const oc = all ? "var(--ok)" : "var(--warn)";
+  s += `<line x1="${gx + 100}" x2="${gx + 128}" y1="72" y2="72" stroke="${oc}" stroke-width="2.5"/>`;
+  s += `<text x="${gx + 132}" y="68" font-size="12" font-weight="600" fill="${oc}">${all ? "CLEARED" : "TO A PERSON"}</text>`;
+  s += `<text x="${gx + 132}" y="84" font-size="10" fill="var(--muted)">${all ? "all four clean" : "any input not clean"}</text>`;
+  s += `</svg>`;
+  return s;
+}
+
+/* ---------- detail ---------- */
+function select(id) {
+  selected = id;
+  const p = byId[id];
+  document.querySelectorAll(".pkg").forEach(g => g.classList.toggle("sel", g.dataset.id === id));
+  document.querySelectorAll(".row").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.id === id)));
+  const ok = p.status === "cleared";
+  const d = document.getElementById("detail");
+  d.classList.toggle("cleared", ok);
+  const rules = p.rules.map(r => `<div class="rule"><span class="rid">${esc(r.id)}</span><span>${esc(r.title)}</span>` +
+    `<span class="who">Call: <b>${esc(r.contact)}</b>${(S.judgment_flags.find(f => f.rule === r.id && f.packages.includes(p.id)) || {}).person ? ` · routed to ${esc(S.judgment_flags.find(f => f.rule === r.id && f.packages.includes(p.id)).person)} <span class="cite">(notional roster)</span>` : ""}</span>` +
+    `<span class="cite">${r.citations.map(c => `${esc(c.source)} ${c.verified ? "· verified" : "· unverified"}`).join("  |  ")}</span></div>`).join("");
+  const why = p.why.length ? `<ul class="why">${p.why.map(w => `<li>${esc(w)}</li>`).join("")}</ul>` : "";
+  let sug = "";
+  if (p.suggestion) {
+    const s = p.suggestion;
+    sug = s.available
+      ? `<div class="sugg"><span class="head">Suggested, not applied</span><span>Move crew <b class="mono">${esc(s.crew)}</b> from <span class="mono">${esc(s.from_shift)}</span> to <span class="mono">${esc(s.to_shift)}</span>: ` +
+        s.moves.map(m => `<span class="mono">${esc(m.id)} ${hm(m.start)}–${hm(m.end)}</span>`).join(", ") +
+        `.</span><span style="color:var(--muted)">Re-checked against every rule. In the reviewer, Apply re-checks again, opens a new run, and the moved work still needs a person's decision.</span></div>`
+      : `<div class="nosugg"><b>No fix suggested.</b> ${esc(s.reason || "")}${s.rejected.length ? `<div class="cite" style="margin-top:4px">Rejected: ${s.rejected.map(r => `${esc(r.shift)} (${esc([...r.rules, ...r.reasons].join(", "))})`).join("; ")}</div>` : ""}</div>`;
+  }
+  d.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+      <h3>${esc(p.id)}</h3><span class="pill ${ok ? "ok" : ""}">${esc(p.status.replace("_", " ").toUpperCase())}</span></div>
+    <div style="font-size:14px">${esc(p.description.replace(/^Notional:\s*/, ""))}</div>
+    <div class="facts">
+      <div><span class="label">Where</span>${esc((p.compartment || "").replace(/^Notional\s*/, ""))}<span class="cite">frames ${p.frame_start}–${p.frame_end}</span></div>
+      <div><span class="label">When</span><span class="mono">${hm(p.start)}–${hm(p.end)}</span><span class="cite">crew ${esc(p.crew || "none")}${p.locked ? " · locked" : ""}</span></div>
+      <div><span class="label">Hazards</span>${esc(p.hazards.map(h => h.replace("_", " ")).join(", ") || "none")}${p.conflicts.length ? `<span class="cite">conflicts with ${esc(p.conflicts.join(", "))}</span>` : ""}</div>
+    </div>
+    ${rules || `<div class="nosugg">No rule fired. Every check is clean.</div>`}
+    ${why}
+    <div class="gatebox"><span class="label">Status gate</span>${gateSvg(p)}</div>
+    ${sug}`;
+}
+
+/* ---------- crew-shift timeline (day 1) ---------- */
+function drawTimeline() {
+  const svg = document.getElementById("tl");
+  const day = S.as_of.slice(0, 10);
+  const t0 = Date.parse(day + "T07:00:00Z"), t1 = Date.parse(day + "T07:00:00Z") + 17 * 3600e3; // 07:00 -> 24:00
+  const X0 = 150, X1 = 990, tx = iso => X0 + (Date.parse(iso + "Z") - t0) / (t1 - t0) * (X1 - X0);
+  const crews = S.crews.filter(c => S.packages.some(p => p.crew === c.id));
+  const rowH = (300 - 34) / crews.length;
+  for (const sh of S.shifts.filter(s => s.start.startsWith(day) && s.start.slice(11) >= "07:00")) {
+    const a = tx(sh.start), b = Math.min(X1, tx(sh.end));
+    el("rect", { x: a, y: 0, width: b - a, height: 300, fill: sh.name === "DAY" ? "var(--panel)" : "var(--bg)" }, svg);
+    el("text", { x: a + 6, y: 14, "font-size": 10.5, fill: "var(--muted)", "font-weight": 600 }, svg).textContent = sh.name + " " + sh.start.slice(11, 16);
+  }
+  for (let h = 7; h <= 24; h += 1) {
+    const iso = day + "T" + String(h % 24).padStart(2, "0") + ":00:00";
+    const x = h === 24 ? X1 : tx(iso);
+    el("line", { x1: x, x2: x, y1: 22, y2: 300, stroke: "var(--rule)", "stroke-width": h % 4 === 3 ? 1 : .5 }, svg);
+    if ((h - 7) % 2 === 0) el("text", { x, y: 30, "font-size": 9, fill: "var(--muted)", "text-anchor": "middle" }, svg).textContent = String(h % 24).padStart(2, "0");
+  }
+  crews.forEach((c, i) => {
+    const y = 36 + i * rowH;
+    el("text", { x: 4, y: y + rowH / 2 + 3, "font-size": 10, fill: "var(--ink)" }, svg).textContent = c.id + (c.contractor ? " (contractor)" : "");
+    for (const w of c.windows) el("rect", { x: tx(w.start), y: y + 2, width: tx(w.end) - tx(w.start), height: rowH - 4, fill: "none", stroke: "var(--hull-line)", "stroke-dasharray": "2 3" }, svg);
+    for (const p of S.packages.filter(p => p.crew === c.id && p.start)) {
+      const ok = p.status === "cleared";
+      const g = el("g", { class: "pkg", "data-id": p.id, tabindex: 0, role: "button", "aria-label": p.id }, svg);
+      el("rect", { class: "bar", x: tx(p.start), y: y + 4, width: tx(p.end) - tx(p.start), height: rowH - 8, rx: 1.5, fill: ok ? "var(--ok-fill)" : "var(--warn-fill)", stroke: ok ? "var(--ok)" : "var(--warn)", "stroke-width": 1.5 }, g);
+      el("text", { x: tx(p.start) + 5, y: y + rowH / 2 + 3, "font-size": 9.5, "font-weight": 600, fill: "var(--ink)" }, g).textContent = (p.locked ? "▣ " : "") + p.id;
+      g.addEventListener("click", () => select(p.id));
+      if (p.suggestion && p.suggestion.available) for (const m of p.suggestion.moves.filter(m => m.id === p.id)) {
+        const a = tx(m.start), b = tx(m.end);
+        el("rect", { x: a, y: y + 4, width: b - a, height: rowH - 8, rx: 1.5, fill: "var(--sugg-fill)", stroke: "var(--sugg)", "stroke-dasharray": "4 3", "stroke-width": 1.5 }, svg);
+        el("text", { x: a + 5, y: y + rowH / 2 + 3, "font-size": 9.5, fill: "var(--sugg)" }, svg).textContent = "→ " + p.id;
+      }
+    }
+  });
+}
+
+drawHull(); drawQueue(); drawTimeline(); select(selected);
+</script>

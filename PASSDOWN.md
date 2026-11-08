@@ -773,3 +773,12 @@ Tested `session-08-brief-apply` at `4b14cc19e8af755b553c3e81d053dfeadca99733` on
 **Tests:** `tests/test_review04.py` (11, failing first), 532 passed, eval unchanged. Each fix mutation-tested: undoing any one fails the tests. `reviews/review-04-builder-repro.py` prints FIXED/REPRODUCED/ERROR per finding (the reviewer's own script now stops at the new refusal by design).
 **Donnie's calls this session:** showcase = one-page carrier mockup from real check results, screenshots reviewed before the full build; Godot stays as an optional demo.
 **Next up:** cheaper-model re-check of these fixes → merge Sessions 9, docs-sync, 10 and these fixes (Donnie's go) → Session 12 mockup.
+
+## 44. Session Notes — 2026-11-08: Session 12 started -- showcase mockup
+
+**Branch:** `session-12-showcase`, from `fix-review-04`. Not merged.
+**Donnie's direction:** one-page carrier mockup from real check results, screenshots reviewed before the full build; Godot stays as an optional demo.
+**Built:** `showcase/export_snapshot.py` runs `daily_brief.run_checks` on the notional carrier and writes `carrier_snapshot.json`; `showcase/build_mockup.py` inlines it into `mockup_template.html` → `mockup.html`. The page: inboard-profile plot (packages by frame and deck, conflict links), the queue, projects, a detail panel with rule, contact, citations (verified/unverified), routing notes, the four-input AND gate, and the suggestion marked not applied; a crew-shift timeline with suggested moves dashed; the plain-text brief. No LLM; nothing applies.
+**Tests:** `tests/test_showcase.py` checks the snapshot equals the real checks and the page inlines exactly that snapshot. `showcase*` added to pyproject packages (plain-pytest blind spot). 534 passed.
+**Checked:** rendered in Chromium at 1280px light/dark and 400px; no console errors, no sideways scroll.
+**Next up:** Donnie reviews the mockup → full build (Sessions 13–15). Review-04 re-check still pending.
