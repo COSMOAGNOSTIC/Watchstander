@@ -42,21 +42,21 @@ Reproduced independently with my own probe (not `review-04-repro.py`), on `fix-r
 - **Verdict:** CONFIRMED
 - **Evidence:** Carrier demo run. `submit_decision("T", "no-such-interrupt", "approve")` raised `RuntimeError` from the graph and the log stayed `[]`. Then approved HW-101 and submitted `reject` for the same interrupt: no error, stored disposition still `approved`, and a second `decision` entry appeared with actor "Riley Example", package `None`, disposition `None`.
 - **Disposition:** fix. A target that isn't a pending review in this run is refused and logged as `decision_refused` before the graph is touched; a graph error is logged as a new kind `decision_failed` and re-raised; a `decision` entry is written only when the graph stored a disposition for that package, otherwise `decision_failed`. Whole class: every outcome of `submit_decision` now writes exactly one entry whose kind matches what happened.
-- **Fix commit / regression test:** pending
+- **Fix commit / regression test:** `f2b9f2a`; `tests/test_review04.py::test_s11_01_* (5 tests)`; `reviews/review-04-builder-repro.py` prints FIXED. Mutation-tested: undoing the fix fails the tests.
 - **Reviewer re-check:** pending
 
 ### S11-02
 - **Verdict:** CONFIRMED
 - **Evidence:** Seeded the carrier demo, made successor `seed_run` raise `RuntimeError("injected")`, Applied HW-101's suggestion: the exception escaped, the log was `[]`, and after reopening the service it was still `[]`, with HW-101 pending again.
 - **Disposition:** fix. Any exception out of Apply is logged as a new kind `apply_failed` (error, and whether an Apply marker remains for restart recovery) before it is re-raised. Whole class: every outcome of `apply_shift_suggestion` (applied, refused, failed) writes exactly one entry.
-- **Fix commit / regression test:** pending
+- **Fix commit / regression test:** `f2b9f2a`; `tests/test_review04.py::test_s11_02_* (2 tests)`; `reviews/review-04-builder-repro.py` prints FIXED. Mutation-tested: undoing the fix fails the tests.
 - **Reviewer re-check:** pending
 
 ### S11-03
 - **Verdict:** CONFIRMED
 - **Evidence:** Carrier dataset with ELEC-111 given `requires_hitl_review=True` and the reviewer's rationale. The real graph routes it to review; the brief lists it `pending_review` with no reason and no contact (`"isolation boundary" in brief` and `"Electrical Supervisor" in brief` both False).
 - **Disposition:** fix. The brief prints every routing note the package carries (its `conflict_rationale`, split on the graph's ` | ` separator) as "Why:" lines, and when a package is pending with no rule and no note it says so explicitly. Whole class: a test checks that every package in NEEDS A PERSON shows at least one rule or "Why:" line.
-- **Fix commit / regression test:** pending
+- **Fix commit / regression test:** `f2b9f2a`; `tests/test_review04.py::test_s11_03_* (4 tests)`; `reviews/review-04-builder-repro.py` prints FIXED. Mutation-tested: undoing the fix fails the tests.
 - **Reviewer re-check:** pending
 
 ## Disputes for Donnie
