@@ -54,8 +54,10 @@ For a plain-text summary of the same checks, run
 It prints the decision log's head hash; keep that line somewhere else and pass it
 back with `--anchor SEQ:HASH` to detect entries removed from the end of the log.
 
-`/log` lists every decision event (decisions, refused decisions, Applies,
-supersessions, crash recovery) with the hash-chain check. That decision genuinely resumes the graph
+`/log` lists every decision event (decisions, refused and failed decisions,
+Applies, refused and failed Applies, supersessions, crash recovery) with the
+hash-chain check. A stale or unknown form submission is refused and logged, never
+recorded as a decision (review-04). That decision genuinely resumes the graph
 — `reviewer/graph_driver.py`'s `submit_decision()` calls
 `graph.invoke(Command(resume={interrupt_id: decision_text}), config=...)`,
 the same mechanism `tests/test_graph.py` exercises directly. State persists

@@ -30,7 +30,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-KINDS = frozenset({"decision", "decision_refused", "apply", "apply_refused", "superseded", "recovered"})
+KINDS = frozenset({"decision", "decision_refused", "decision_failed", "apply", "apply_refused", "apply_failed",
+                   "superseded", "recovered"})  # *_failed: review-04 S11-01/S11-02
 _GENESIS = "GENESIS"
 
 

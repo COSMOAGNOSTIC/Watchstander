@@ -175,6 +175,12 @@ def render(ds: CarrierDataset, *, as_of: datetime, decision_log: Optional[Decisi
         for rid in sorted(rules[pid]):
             rule = named_rules.get_rule(rid)
             out.append(f"    {rid} {rule.title}. Contact: {rule.contact_role}.")
+        # review-04 S11-03: every routing note the graph carries, verbatim, so a reason
+        # or contact that isn't a catalogue rule is never dropped.
+        notes = [n.strip() for n in (p.conflict_rationale or "").split(" | ") if n.strip()]
+        out += [f"    Why: {n}" for n in notes]
+        if not notes and not rules[pid]:
+            out.append("    Why: marked for review in its input; no reason was recorded. Ask the planner who flagged it.")
         if p.conflicts:
             out.append(f"    Conflicts with: {', '.join(p.conflicts)}")
         if pid in run.shift_outcomes:

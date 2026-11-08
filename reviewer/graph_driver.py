@@ -167,7 +167,20 @@ class ReviewerService:
     def apply_shift_suggestion(self, thread_id: str, interrupt_id: str, actor: str | None = None) -> ApplyResult:
         with self._op_lock:  # review-03 re-check 2: one operation at a time, end to end
             wp_id = next((r.work_package_id for r in self._pending_for(thread_id) if r.interrupt_id == interrupt_id), None)
-            result = self._apply_locked(thread_id, interrupt_id)
+            try:
+                result = self._apply_locked(thread_id, interrupt_id)
+            except Exception as e:
+                # review-04 S11-02: an Apply that raises is still an Apply attempt. Record it,
+                # and whether its marker is left for restart recovery, then re-raise.
+                marker = registry.get_lock(self.db_path, thread_id)
+                left = marker is not None and marker["kind"] == "apply"
+                self.decision_log.append(kind="apply_failed", actor=_actor(actor), run_id=thread_id,
+                                         work_package_id=wp_id,
+                                         detail={"error": repr(e), "interrupt_id": interrupt_id,
+                                                 "apply_marker_left": left,
+                                                 "note": ("restart recovery will finish or undo this Apply" if left
+                                                          else "nothing was changed; the run stays open")})
+                raise
             if result.applied:
                 self.decision_log.append(kind="apply", actor=_actor(actor), run_id=thread_id, work_package_id=wp_id,
                                          detail={"successor": result.new_thread_id, "moves": list(result.moves),
@@ -391,13 +404,35 @@ class ReviewerService:
                                          work_package_id=wp_id,
                                          detail={"reason": reason, "requested": decision, "interrupt_id": interrupt_id})
                 raise ValueError(reason)
-            self._resume(thread_id, interrupt_id, decision, note)
+            if wp_id is None:
+                # review-04 S11-01: unknown, or already decided (a stale form). Refuse before
+                # touching the graph, and log the refusal; never log it as a decision.
+                reason = (f"no pending review for interrupt {interrupt_id} in run {thread_id} "
+                          "(unknown, or already decided)")
+                self.decision_log.append(kind="decision_refused", actor=_actor(actor), run_id=thread_id,
+                                         work_package_id=None,
+                                         detail={"reason": reason, "requested": decision, "interrupt_id": interrupt_id})
+                raise ValueError(reason)
+            try:
+                self._resume(thread_id, interrupt_id, decision, note)
+            except Exception as e:
+                self.decision_log.append(kind="decision_failed", actor=_actor(actor), run_id=thread_id,
+                                         work_package_id=wp_id,
+                                         detail={"error": repr(e), "requested": decision, "interrupt_id": interrupt_id})
+                raise
             # Session 9: record the disposition the graph actually stored, not the request.
             disposition = next(
                 (str(getattr(wp.hitl_disposition, "value", wp.hitl_disposition))
                  for wp in self._graph.get_state({"configurable": {"thread_id": thread_id}}).values.get("reviewed_packages", [])
                  if wp.work_package_id == wp_id and wp.hitl_disposition is not None),
                 None)
+            if disposition is None:
+                # review-04 S11-01: a `decision` entry always names a stored disposition.
+                err = f"the graph stored no disposition for {wp_id} after the decision was submitted"
+                self.decision_log.append(kind="decision_failed", actor=_actor(actor), run_id=thread_id,
+                                         work_package_id=wp_id,
+                                         detail={"error": err, "requested": decision, "interrupt_id": interrupt_id})
+                raise RuntimeError(err)
             self.decision_log.append(kind="decision", actor=_actor(actor), run_id=thread_id, work_package_id=wp_id,
                                      detail={"disposition": disposition, "note": note, "interrupt_id": interrupt_id})
 

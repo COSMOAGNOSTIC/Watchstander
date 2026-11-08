@@ -762,3 +762,14 @@ Tested `session-08-brief-apply` at `4b14cc19e8af755b553c3e81d053dfeadca99733` on
 **Tests:** ACUSHNET reviewer tests ported to the notional carrier with the same assertions. New: a guard that fails on any real-ship reference in code, data or the visualizer (confirmed failing before the cleanup); a check that the broadcaster's scripted conflicts equal the real deconfliction on the dataset; the old seed route is gone. 521 passed; eval unchanged.
 **Not verified:** the Godot scene. Running a downloaded Godot binary was refused in this environment, so `Main.gd`'s edits were not run. Donnie: open `visualizer/` in Godot once and report anything off.
 **Next up:** Session 11 review (prompt in `reviews/review-04-session-11-prompt.md`).
+
+## 43. Session Notes — 2026-11-08: Session 11 review (review-04) triaged and fixed
+
+**Review:** separate reviewer session (Donnie reports GPT-6 Astra) at `96447220`, report on `review-04-session-11` @ `167ea54`. 521 passed, eval 14/14 and 7/7. Three medium findings, all reproduced by the reviewer.
+**Builder triage** (branch `fix-review-04`, from `session-10-carrier-brief`): all three **CONFIRMED** with my own probes before any fix.
+- **S11-01:** an unknown interrupt went unlogged; a stale resubmission wrote a `decision` entry with no package or disposition. Now refused and logged as `decision_refused` before the graph is touched; graph errors log `decision_failed`; a `decision` entry always names a stored disposition.
+- **S11-02:** an Apply that raised before its successor existed left no log entry, even after restart. Now logged as `apply_failed` with whether a marker is left for recovery.
+- **S11-03:** the daily brief dropped a routing reason that wasn't a catalogue rule. It now prints every routing note as "Why:", and says so when a pending package has no reason at all.
+**Tests:** `tests/test_review04.py` (11, failing first), 532 passed, eval unchanged. Each fix mutation-tested: undoing any one fails the tests. `reviews/review-04-builder-repro.py` prints FIXED/REPRODUCED/ERROR per finding (the reviewer's own script now stops at the new refusal by design).
+**Donnie's calls this session:** showcase = one-page carrier mockup from real check results, screenshots reviewed before the full build; Godot stays as an optional demo.
+**Next up:** cheaper-model re-check of these fixes → merge Sessions 9, docs-sync, 10 and these fixes (Donnie's go) → Session 12 mockup.
