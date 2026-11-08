@@ -90,7 +90,7 @@ def test_run_without_crew_data_says_so_in_the_brief():
 
 
 def test_seed_demo_still_works_without_crew_data(svc):
-    svc.seed_demo("DEMO")
+    svc.seed_acushnet_demo("DEMO")
     assert {r.work_package_id for r in svc.list_pending_reviews()} >= {"HW-2201", "CS-2202"}
 
 
@@ -131,7 +131,7 @@ def test_apply_refuses_when_the_fresh_recheck_differs(svc, monkeypatch):
 
 
 def test_apply_refuses_when_there_is_no_suggestion(svc):
-    svc.seed_demo("DEMO")
+    svc.seed_acushnet_demo("DEMO")
     hw = next(r for r in svc.list_pending_reviews() if r.work_package_id == "HW-2201")
     res = svc.apply_shift_suggestion("DEMO", hw.interrupt_id)
     assert not res.applied and "no suggestion" in res.message
@@ -177,6 +177,6 @@ def test_apply_endpoint_reports_the_outcome_on_the_dashboard(tmp_path):
 
 def test_detail_page_has_no_apply_button_without_a_suggestion(tmp_path):
     client = _client(tmp_path)
-    app_module.service.seed_demo("DEMO")
+    app_module.service.seed_acushnet_demo("DEMO")
     hw = next(r for r in app_module.service.list_pending_reviews() if r.work_package_id == "HW-2201")
     assert "/apply" not in client.get(f"/review/DEMO/{hw.interrupt_id}").text

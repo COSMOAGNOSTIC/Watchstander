@@ -3,7 +3,7 @@
 > **Goal:** From a deterministic rules-engine scaffold to a fully case-grounded, HITL-reviewed multi-agent safety system — building each phase on a verified previous phase, never freelancing ahead of the plan.
 > **Companion doc:** PASSDOWN.md covers team roles and session continuity; this file is the build road.
 > **Rule of the road:** one phase per sitting where practical, each phase ends with tests passing. Never start a phase with the previous one's Definition of Done unmet.
-> **Last updated:** 2026-11-07 (upgrade Sessions 1–9 done; see "Upgrade plan" below). Previously 2026-07-25.
+> **Last updated:** 2026-11-08 (upgrade Sessions 1–10 done; see "Upgrade plan" below). Previously 2026-07-25.
 
 Phase ordering logic: **prove the deterministic core → wire it to real case data → add reasoning on top → expand coverage → make it presentable/lockable.**
 
@@ -295,8 +295,8 @@ A second build road, run as short sessions under AGENTS.md's rules (tests first,
 | 7 | Shift-aware fix suggester | ✅ 2026-11-06 | review-02 closed (ADR-041) |
 | 8 | Suggestions in the brief and reviewer; Apply that re-checks | ✅ 2026-11-07 | review-03 closed after five rounds (ADR-042 to ADR-046) |
 | 9 | Decision log | ✅ 2026-11-07 | ADR-047; reviewed at Session 11 |
-| 10 | Notional carrier dataset and a text daily brief | ⬜ next | Should replace the real-ship demo data (Known Debt) |
-| 11 | Independent review of the engine | ⬜ | Covers Sessions 9–10 too (review cost policy) |
+| 10 | Notional carrier dataset and a text daily brief | ✅ 2026-11-08 | ADR-048; now the reviewer's default demo. Reviewed at Session 11 |
+| 11 | Independent review of the engine | ⬜ next | Covers Sessions 9–10 too (review cost policy) |
 | 12–15 | Lean web UI | ⬜ | Red-team pass after these |
 | 16 | Final review and README for recruiters | ⬜ | |
 

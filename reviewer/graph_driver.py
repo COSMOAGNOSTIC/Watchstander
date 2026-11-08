@@ -29,6 +29,7 @@ from langgraph.types import Command
 from agent_core.certificates import Certificate
 from agent_core.crews import Crew, ShiftCalendar
 from agent_core.decision_log import DecisionLog
+from agent_core.carrier_demo import load_carrier_dataset
 from agent_core.demo_fixtures import acushnet_demo_work_packages
 from agent_core.graph import build_graph
 from agent_core.shift_suggester import suggest_crew_shift
@@ -290,12 +291,19 @@ class ReviewerService:
                                      detail={"action": action, "successor": successor})
 
     def seed_demo(self, thread_id: str) -> None:
-        """Runs the real ACUSHNET demo work packages through the REAL
-        graph -- real deconfliction, real reasoning (deterministic
-        fallback unless ANTHROPIC_API_KEY is set), a real interrupt()
-        for every flagged package. Not the scripted event replay
-        visualizer/demo_broadcaster.py uses."""
-        self.seed_run(thread_id, acushnet_demo_work_packages(), label="ACUSHNET demo run")
+        """Session 10: the default demo is the notional carrier dataset
+        (agent_core/carrier_demo.py), with crews, a shift calendar and certificates,
+        run through the REAL graph. Every name and place in it is invented (rule 6)."""
+        ds = load_carrier_dataset()
+        self.seed_run(thread_id, ds.fresh_packages(), crews=ds.crews, calendar=ds.calendar,
+                      certificates=ds.certificates, label="Notional carrier demo run")
+
+    def seed_acushnet_demo(self, thread_id: str) -> None:
+        """The pre-Session-10 demo: compartments read off public-domain HAER drawings of
+        a real cutter (not notional; see agent_core/demo_fixtures.py). No crew data, so
+        it never shows a crew-shift suggestion. Kept for the visualizer's demo and the
+        tests that pin its behavior."""
+        self.seed_run(thread_id, acushnet_demo_work_packages(), label="ACUSHNET demo run (public HAER drawings)")
 
     def _closed_to_decisions(self, thread_id: str) -> bool:
         """review-03 S08-02: a run being applied, or already superseded, takes no decisions."""

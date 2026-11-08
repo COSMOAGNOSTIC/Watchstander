@@ -46,7 +46,7 @@ from itertools import combinations
 from pathlib import Path
 from typing import Iterable, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, StrictBool, model_validator
 
 from agent_core import named_rules
 from agent_core.deconfliction import (
@@ -75,7 +75,7 @@ class RosterPerson(BaseModel):
     display_name: NonBlankStr
     role: NonBlankStr
     primary: bool = False
-    notional: bool
+    notional: StrictBool  # Session 10: "yes" must not coerce to True
 
     @model_validator(mode="after")
     def _must_be_notional(self) -> "RosterPerson":

@@ -114,6 +114,23 @@ class DecisionLog:
         return [LogEntry(r[0], datetime.fromisoformat(r[1]), r[2], r[3], r[4], r[5], json.loads(r[6]), r[7], r[8])
                 for r in rows]
 
+    def head(self) -> Optional[tuple[int, str]]:
+        """(seq, hash) of the newest entry, or None for an empty log. Session 10: record
+        this somewhere outside the database (the daily brief prints it) so a later
+        `verify_anchor` can catch the newest entries being cut off, which the chain
+        alone can't see."""
+        row = self._conn.execute("SELECT seq, hash FROM decision_log ORDER BY seq DESC LIMIT 1").fetchone()
+        return (row[0], row[1]) if row else None
+
+    def verify_anchor(self, seq: int, expected_hash: str) -> None:
+        """Raise LogTamperError unless entry `seq` exists with `expected_hash`. With
+        `verify_chain()`, this proves entries 1..seq are the ones that were anchored."""
+        row = self._conn.execute("SELECT hash FROM decision_log WHERE seq = ?", (seq,)).fetchone()
+        if row is None:
+            raise LogTamperError(f"anchor entry {seq} is missing: the log was cut back below it")
+        if row[0] != expected_hash:
+            raise LogTamperError(f"anchor entry {seq}'s hash does not match the recorded anchor")
+
     def verify_chain(self) -> int:
         """Recompute every hash. Returns the entry count, or raises LogTamperError."""
         rows = self._conn.execute(

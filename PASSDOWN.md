@@ -733,3 +733,21 @@ Tested `session-08-brief-apply` at `4b14cc19e8af755b553c3e81d053dfeadca99733` on
 
 **For Donnie:** the ACUSHNET demo is derived from public-domain HAER drawings of a real cutter, which conflicts with rule 6. Logged as Known Debt; proposed fix is Session 10's notional carrier dataset replacing it as the default demo.
 **Next up:** Session 10.
+
+## 41. Session Notes — 2026-11-08: Upgrade Session 10 of 16 -- notional carrier dataset and text daily brief
+
+**Branch:** `session-10-carrier-brief`, from `docs-sync` (which sits on `session-09-decision-log`). Not merged; Sessions 9, docs-sync and 10 are stacked and waiting for Donnie's go.
+**Status:** Done. 518/518 tests passing (485 → 518); eval baseline unchanged. No separate review: rolls into Session 11 per the review cost policy.
+
+**Pre-build search:** the only demo was `demo_fixtures.py` (4 ACUSHNET packages, real-ship HAER data, no times, crews, certificates or projects). Every check existed; no daily brief; nothing recorded the decision-log head outside the database.
+
+**What was built:**
+- `case_data/carrier_notional_v1.json` + `agent_core/carrier_demo.py`: invented carrier, 11 packages, 10 crews (one contractor), a 3-day DAY/SWING/MID calendar, 5 certificates, 4 projects. Loader refuses `notional` other than a real JSON `true` and dangling project/certificate references. Each scenario is pinned to the one rule it triggers (WS-HZ-001, WS-JF-001, WS-OH-001, WS-CT-003, WS-CT-001, WS-SC-002; two packages clean).
+- `agent_core/daily_brief.py`: `run_checks()` and `render()`, plus `python -m agent_core.daily_brief --as-of ... [--db] [--anchor SEQ:HASH]`. Deterministic, no LLM, never applies or approves.
+- `DecisionLog.head()` and `verify_anchor()`: with a recorded anchor, cutting entries off the end is now caught (Session 9's gap).
+- Reviewer: default **Seed** button runs the notional carrier; ACUSHNET moved to a labeled second button (`seed_acushnet_demo`). ACUSHNET-pinned tests now call it by name, assertions unchanged.
+
+**Found while building:** the first dataset draft double-booked two crews (WS-SC-004); the pinned-rule tests caught it. Mutation testing found `"notional": "yes"` loading as true; fixed with StrictBool in both the dataset and the Session 5 roster (same class), failing tests first.
+
+**Known gaps (Session 11 review):** the anchor only helps if someone records the head line outside the database; nothing does it automatically. The brief is pre-review (every flagged package reads pending). The visualizer still uses ACUSHNET. LangGraph's checkpoint deserialization warning (Known Debt) now also names CertificateKind.
+**Next up:** Session 11 -- independent review of the engine (strongest model), covering Sessions 9 and 10.

@@ -31,7 +31,9 @@ Shipyard work packages (jobs, permits, tasks) carry spatial metadata (compartmen
 
 Case grounding comes from public OSHA/DOL records of real shipyard incidents (`case_data/cases_v1.json`). A work package tagged with `governing_installation` (e.g. `"PSNS"`) is also cited against that installation's governing procedure: currently the public-domain NAVSEA 8010 Manual (fire prevention/hot work only) for PSNS. This is deliberately not a universal Navy-wide ruleset. See `agent_core/procedural_lookup.py`.
 
-**About the data.** The roster of people in `case_data/roster_notional_v1.json` is invented. The ACUSHNET demo run uses compartment names and frame positions read from that cutter's public-domain HAER drawings (see `docs/uscg-acushnet-ars9-source.md`), and the OSHA cases are public records. A fully notional carrier dataset is planned (upgrade Session 10).
+**About the data.** The default demo is a notional carrier (`case_data/carrier_notional_v1.json`): ship, compartments, crews, permits and projects are all invented, and each scenario is built to trigger one named rule. The roster in `case_data/roster_notional_v1.json` is invented too. The older ACUSHNET demo, still available as a labeled second option and used by the visualizer, takes compartment names and frame positions from that cutter's public-domain HAER drawings (see `docs/uscg-acushnet-ars9-source.md`). The OSHA cases are public records.
+
+**Daily brief.** `python -m agent_core.daily_brief --as-of 2027-03-15T06:00` prints a plain-text brief of the notional dataset: projects by priority, every package that needs a person with its rule and who to call, suggestions marked not applied, and (with `--db`) the decision log's head hash for checking later that nothing was cut off the end. Deterministic code only.
 
 ## Architecture
 
@@ -91,12 +93,14 @@ flowchart LR
 - **`agent_core/reasoning.py`**: provenance-tagged `SafetyBrief` grounded in a sourced case and procedure. Deterministic recommendation, optional LLM phrasing.
 - **`agent_core/retrieval.py`** / **`agent_core/procedural_lookup.py`**: TF-IDF case ranking and site-scoped procedure lookup.
 - **`agent_core/hitl.py`** / **`agent_core/graph.py`**: the `interrupt()` review gate and graph assembly.
-- **`agent_core/decision_log.py`**: append-only, hash-chained decision log.
+- **`agent_core/decision_log.py`**: append-only, hash-chained decision log, with a head hash to record elsewhere and check later.
+- **`agent_core/daily_brief.py`**: plain-text daily brief from the same deterministic checks; no LLM.
 - **`reviewer/`**: local FastAPI reviewer: full brief and provenance, approve/reject, Apply (re-checks first), and a `/log` page. One reviewer service per database (see [`reviewer/README.md`](reviewer/README.md)).
 
 **Rules, data, visuals, evaluation**
 - **`agent_core/rules_config.py`** / **`agent_core/rules_audit.py`**: declarative hazard rules (`case_data/hazard_rules_v1.json`) and an append-only rule-change audit trail.
-- **`case_data/`**: OSHA/DOL cases, the PSNS NAVSEA 8010 ruleset, hazard rules, named rules, and the notional roster.
+- **`agent_core/carrier_demo.py`**: loads the notional carrier dataset (`case_data/carrier_notional_v1.json`), refusing anything not marked notional.
+- **`case_data/`**: OSHA/DOL cases, the PSNS NAVSEA 8010 ruleset, hazard rules, named rules, the notional roster and the notional carrier dataset.
 - **`agent_core/events.py`** / **`visualizer/`**: WebSocket events and the Godot 4 live scene over real HAER ship drawings.
 - **`eval/`**: fixed-scenario evaluation harness against a checked-in baseline, plus a detection-latency benchmark.
 
@@ -104,7 +108,7 @@ flowchart LR
 
 `agent_core` broadcasts a WebSocket event at each stage of the graph — no configuration needed, it's a no-op until something connects. Open [`visualizer/`](visualizer/README.md) in Godot 4, run the main scene, then run [`visualizer/demo_broadcaster.py`](visualizer/demo_broadcaster.py) (no API key required) and watch work packages resolve through deconfliction, reasoning, and the Safety Review gate in real time — staged with real compartment names, deck levels, and frame positions from USCG Cutter ACUSHNET / ex-USS SHACKLE (ARS-9)'s public-domain HAER drawings, see [`docs/uscg-acushnet-ars9-source.md`](docs/uscg-acushnet-ars9-source.md). A separate static 3D blockout companion view (`visualizer/Main3D.tscn`) renders the same vessel's real compartment layout as a simplified hull — see [`visualizer/README.md`](visualizer/README.md#3d-blockout-companion-view-main3dtscn).
 
-The visualizer only shows *that* a package is flagged, deliberately never *why* (see `events.py`'s broadcast policy, ARCHITECTURE.md Section 8). For the actual human decision (reading the full brief, approving or rejecting, applying a suggested shift move, and reading the decision log) see [`reviewer/`](reviewer/README.md): `pip install -e ".[dev,reviewer]"`, `uvicorn reviewer.app:app --reload`, seed a run, and work the review queue.
+The visualizer only shows *that* a package is flagged, deliberately never *why* (see `events.py`'s broadcast policy, ARCHITECTURE.md Section 8). For the actual human decision (reading the full brief, approving or rejecting, applying a suggested shift move, and reading the decision log) see [`reviewer/`](reviewer/README.md): `pip install -e ".[dev,reviewer]"`, `uvicorn reviewer.app:app --reload`, seed the notional carrier demo, and work the review queue.
 
 ## Project Docs
 

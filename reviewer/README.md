@@ -28,13 +28,19 @@ pip install -e ".[dev,reviewer]"
 uvicorn reviewer.app:app --reload
 ```
 
-Open `http://127.0.0.1:8000/`. Click **"Seed a real ACUSHNET demo run"** —
-this runs the same real, sourced ACUSHNET compartment data
-(`agent_core/demo_fixtures.py`) through the real graph: real deconfliction,
-real reasoning (deterministic fallback unless `ANTHROPIC_API_KEY` is set),
-and a real `interrupt()` for every flagged package. Three packages will show
-up as pending review (two from a shared-compartment hot-work/confined-space
-conflict, one from an overlapping-frame-range vertical-stacking conflict).
+Open `http://127.0.0.1:8000/`. Click **"Seed the notional carrier demo run"**.
+This runs the notional carrier dataset (`case_data/carrier_notional_v1.json`,
+invented end to end) through the real graph: real deconfliction, judgment flags,
+certificate and schedule findings, real reasoning (deterministic fallback unless
+`ANTHROPIC_API_KEY` is set), and a real `interrupt()` for every flagged package.
+Nine of its eleven packages wait for review, each built to trigger one named rule
+(hazard pair, overhead work, a judgment flag routed to the notional Gas Free
+Engineer, a missing and an expiring certificate, a contractor outside its window).
+Two show crew-shift suggestions you can Apply.
+
+The second button seeds the older ACUSHNET demo (`agent_core/demo_fixtures.py`):
+compartments read off public-domain HAER drawings of a real cutter, so it is not
+notional, and it has no crew data. Three packages wait for review there.
 
 Click into a review, read the full brief and provenance tag, and hit Approve
 or Reject with an optional note and your name (recorded in the decision log;
@@ -46,6 +52,11 @@ why any earlier shift was rejected. **Apply schedule change** re-checks the move
 first, starts a new run with the moved times, supersedes this run's open reviews,
 and never approves anything: every moved package still needs a decision. The
 ACUSHNET demo has no crew data, so it never shows a suggestion.
+
+For a plain-text summary of the same checks, run
+`python -m agent_core.daily_brief --as-of 2027-03-15T06:00 --db <reviewer db>`.
+It prints the decision log's head hash; keep that line somewhere else and pass it
+back with `--anchor SEQ:HASH` to detect entries removed from the end of the log.
 
 `/log` lists every decision event (decisions, refused decisions, Applies,
 supersessions, crash recovery) with the hash-chain check. That decision genuinely resumes the graph
@@ -64,7 +75,7 @@ actual app instead of a single-process demo script.
   (same trust boundary the visualizer's undefended `ws://localhost:8081`
   already assumes) — not safe to expose beyond localhost as-is.
 - **No real work-package intake form.** The only way to create a pending
-  review right now is "seed the ACUSHNET demo." A real intake form (or an
+  review right now is seeding a demo (or `ReviewerService.seed_run` from code). A real intake form (or an
   API endpoint a scheduling system could POST to) is a natural next step,
   not built this session.
 - **No live-updating dashboard.** Refresh the page to see new state; no

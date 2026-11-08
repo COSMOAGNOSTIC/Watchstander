@@ -31,7 +31,7 @@ def test_dashboard_with_nothing_seeded_shows_empty_state(tmp_path):
 
 def test_seed_demo_creates_real_pending_reviews_from_the_real_graph(tmp_path):
     client = _client(tmp_path)
-    resp = client.post("/seed-demo", follow_redirects=False)
+    resp = client.post("/seed-acushnet-demo", follow_redirects=False)
     assert resp.status_code == 303
 
     dashboard = client.get("/")
@@ -47,7 +47,7 @@ def test_seed_demo_creates_real_pending_reviews_from_the_real_graph(tmp_path):
 
 def test_review_detail_page_shows_the_real_rationale_and_provenance(tmp_path):
     client = _client(tmp_path)
-    client.post("/seed-demo", follow_redirects=False)
+    client.post("/seed-acushnet-demo", follow_redirects=False)
     pending = app_module.service.list_pending_reviews()
     hw = next(r for r in pending if r.work_package_id == "HW-2201")
 
@@ -60,7 +60,7 @@ def test_review_detail_page_shows_the_real_rationale_and_provenance(tmp_path):
 
 def test_approving_one_package_leaves_the_others_pending(tmp_path):
     client = _client(tmp_path)
-    client.post("/seed-demo", follow_redirects=False)
+    client.post("/seed-acushnet-demo", follow_redirects=False)
     pending = app_module.service.list_pending_reviews()
     hw = next(r for r in pending if r.work_package_id == "HW-2201")
 
@@ -82,7 +82,7 @@ def test_approving_one_package_leaves_the_others_pending(tmp_path):
 
 def test_rejecting_a_package_records_not_cleared_for_execution(tmp_path):
     client = _client(tmp_path)
-    client.post("/seed-demo", follow_redirects=False)
+    client.post("/seed-acushnet-demo", follow_redirects=False)
     pending = app_module.service.list_pending_reviews()
     hw = next(r for r in pending if r.work_package_id == "HW-2201")
 
@@ -113,7 +113,7 @@ def test_a_hedge_worded_note_never_flips_or_corrupts_the_decision(tmp_path):
     even the literal word "reject" -- can change which disposition gets
     recorded for an Approve click."""
     client = _client(tmp_path)
-    client.post("/seed-demo", follow_redirects=False)
+    client.post("/seed-acushnet-demo", follow_redirects=False)
     pending = app_module.service.list_pending_reviews()
     hw = next(r for r in pending if r.work_package_id == "HW-2201")
 
@@ -153,7 +153,7 @@ def test_hitl_disposition_survives_a_fresh_checkpoint_reload_with_a_known_type(t
     client = _client(tmp_path)
     db_path = str(tmp_path / "test_reviewer.db")
 
-    client.post("/seed-demo", follow_redirects=False)
+    client.post("/seed-acushnet-demo", follow_redirects=False)
     pending = app_module.service.list_pending_reviews()
     hw = next(r for r in pending if r.work_package_id == "HW-2201")
 
