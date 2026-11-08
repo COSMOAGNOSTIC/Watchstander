@@ -31,7 +31,7 @@ Shipyard work packages (jobs, permits, tasks) carry spatial metadata (compartmen
 
 Case grounding comes from public OSHA/DOL records of real shipyard incidents (`case_data/cases_v1.json`). A work package tagged with `governing_installation` (e.g. `"PSNS"`) is also cited against that installation's governing procedure: currently the public-domain NAVSEA 8010 Manual (fire prevention/hot work only) for PSNS. This is deliberately not a universal Navy-wide ruleset. See `agent_core/procedural_lookup.py`.
 
-**About the data.** The default demo is a notional carrier (`case_data/carrier_notional_v1.json`): ship, compartments, crews, permits and projects are all invented, and each scenario is built to trigger one named rule. The roster in `case_data/roster_notional_v1.json` is invented too. The older ACUSHNET demo, still available as a labeled second option and used by the visualizer, takes compartment names and frame positions from that cutter's public-domain HAER drawings (see `docs/uscg-acushnet-ars9-source.md`). The OSHA cases are public records.
+**About the data.** The default demo is a notional carrier (`case_data/carrier_notional_v1.json`): ship, compartments, crews, permits and projects are all invented, and each scenario is built to trigger one named rule. The roster in `case_data/roster_notional_v1.json` is invented too. An earlier demo built from public drawings of a real cutter was deleted in Session 10. The OSHA cases are public records of real incidents and are case grounding, not demo data.
 
 **Daily brief.** `python -m agent_core.daily_brief --as-of 2027-03-15T06:00` prints a plain-text brief of the notional dataset: projects by priority, every package that needs a person with its rule and who to call, suggestions marked not applied, and (with `--db`) the decision log's head hash for checking later that nothing was cut off the end. Deterministic code only.
 
@@ -67,7 +67,7 @@ flowchart LR
     Deconf --> Events["events.py<br/>WebSocket broadcaster"]
     Reason --> Events
     Hitl --> Events
-    Events --> Viz["visualizer/<br/>Godot 4 live scene on real HAER drawings"]
+    Events --> Viz["visualizer/<br/>Godot 4 live scene, notional schematic"]
     class Events,Viz live
 
     Eval["eval/<br/>fixed-scenario harness vs. checked-in baseline"] -.->|"regression-tests"| Deconf
@@ -101,12 +101,12 @@ flowchart LR
 - **`agent_core/rules_config.py`** / **`agent_core/rules_audit.py`**: declarative hazard rules (`case_data/hazard_rules_v1.json`) and an append-only rule-change audit trail.
 - **`agent_core/carrier_demo.py`**: loads the notional carrier dataset (`case_data/carrier_notional_v1.json`), refusing anything not marked notional.
 - **`case_data/`**: OSHA/DOL cases, the PSNS NAVSEA 8010 ruleset, hazard rules, named rules, the notional roster and the notional carrier dataset.
-- **`agent_core/events.py`** / **`visualizer/`**: WebSocket events and the Godot 4 live scene over real HAER ship drawings.
+- **`agent_core/events.py`** / **`visualizer/`**: WebSocket events and the Godot 4 live scene on a notional schematic.
 - **`eval/`**: fixed-scenario evaluation harness against a checked-in baseline, plus a detection-latency benchmark.
 
 ## Watch It Live
 
-`agent_core` broadcasts a WebSocket event at each stage of the graph — no configuration needed, it's a no-op until something connects. Open [`visualizer/`](visualizer/README.md) in Godot 4, run the main scene, then run [`visualizer/demo_broadcaster.py`](visualizer/demo_broadcaster.py) (no API key required) and watch work packages resolve through deconfliction, reasoning, and the Safety Review gate in real time — staged with real compartment names, deck levels, and frame positions from USCG Cutter ACUSHNET / ex-USS SHACKLE (ARS-9)'s public-domain HAER drawings, see [`docs/uscg-acushnet-ars9-source.md`](docs/uscg-acushnet-ars9-source.md). A separate static 3D blockout companion view (`visualizer/Main3D.tscn`) renders the same vessel's real compartment layout as a simplified hull — see [`visualizer/README.md`](visualizer/README.md#3d-blockout-companion-view-main3dtscn).
+`agent_core` broadcasts a WebSocket event at each stage of the graph — no configuration needed, it's a no-op until something connects. Open [`visualizer/`](visualizer/README.md) in Godot 4, run the main scene, then run [`visualizer/demo_broadcaster.py`](visualizer/demo_broadcaster.py) (no API key required) and watch work packages resolve through deconfliction, reasoning, and the Safety Review gate in real time on a schematic of the notional carrier. The visualizer's Godot scene was updated in Session 10 without a Godot run; see [`visualizer/README.md`](visualizer/README.md).
 
 The visualizer only shows *that* a package is flagged, deliberately never *why* (see `events.py`'s broadcast policy, ARCHITECTURE.md Section 8). For the actual human decision (reading the full brief, approving or rejecting, applying a suggested shift move, and reading the decision log) see [`reviewer/`](reviewer/README.md): `pip install -e ".[dev,reviewer]"`, `uvicorn reviewer.app:app --reload`, seed the notional carrier demo, and work the review queue.
 

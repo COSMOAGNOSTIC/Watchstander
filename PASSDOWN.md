@@ -749,5 +749,16 @@ Tested `session-08-brief-apply` at `4b14cc19e8af755b553c3e81d053dfeadca99733` on
 
 **Found while building:** the first dataset draft double-booked two crews (WS-SC-004); the pinned-rule tests caught it. Mutation testing found `"notional": "yes"` loading as true; fixed with StrictBool in both the dataset and the Session 5 roster (same class), failing tests first.
 
-**Known gaps (Session 11 review):** the anchor only helps if someone records the head line outside the database; nothing does it automatically. The brief is pre-review (every flagged package reads pending). The visualizer still uses ACUSHNET. LangGraph's checkpoint deserialization warning (Known Debt) now also names CertificateKind.
+**Known gaps (Session 11 review):** the anchor only helps if someone records the head line outside the database; nothing does it automatically. The brief is pre-review (every flagged package reads pending). LangGraph's checkpoint deserialization warning (Known Debt) now also names CertificateKind.
 **Next up:** Session 11 -- independent review of the engine (strongest model), covering Sessions 9 and 10.
+
+## 42. Session Notes — 2026-11-08: real-ship demo deleted (Donnie: "1 delete")
+
+**Branch:** `session-10-carrier-brief` (follow-up commit, so the Session 11 review sees it). Not merged.
+**Donnie's decisions:** (1) delete ACUSHNET; (2) merge Sessions 9, docs-sync and 10 after the Session 11 review; (3) proceed to Session 11.
+
+**What was removed (ADR-049):** `agent_core/demo_fixtures.py`, the reviewer's ACUSHNET seed button and route, the HAER visualizer backgrounds, the 3D blockout (`Main3D.*`, `OrbitCamera.*`), and the ACUSHNET and Turner Joy source docs. Historical ADRs and phase notes are kept and marked superseded.
+**What replaced it:** the reviewer and `visualizer/demo_broadcaster.py` use the notional carrier; `Main.gd` draws on the generated schematic (`bg_blueprint.png`) with new frame and band calibration; "4th"/"5th" deck labels go to the hold band; the default marker color is light for the dark background.
+**Tests:** ACUSHNET reviewer tests ported to the notional carrier with the same assertions. New: a guard that fails on any real-ship reference in code, data or the visualizer (confirmed failing before the cleanup); a check that the broadcaster's scripted conflicts equal the real deconfliction on the dataset; the old seed route is gone. 521 passed; eval unchanged.
+**Not verified:** the Godot scene. Running a downloaded Godot binary was refused in this environment, so `Main.gd`'s edits were not run. Donnie: open `visualizer/` in Godot once and report anything off.
+**Next up:** Session 11 review (prompt in `reviews/review-04-session-11-prompt.md`).

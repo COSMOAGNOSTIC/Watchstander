@@ -31,38 +31,38 @@ def test_dashboard_with_nothing_seeded_shows_empty_state(tmp_path):
 
 def test_seed_demo_creates_real_pending_reviews_from_the_real_graph(tmp_path):
     client = _client(tmp_path)
-    resp = client.post("/seed-acushnet-demo", follow_redirects=False)
+    resp = client.post("/seed-demo", follow_redirects=False)
     assert resp.status_code == 303
 
     dashboard = client.get("/")
-    # HW-2201 and CS-2202 conflict on shared compartment_id + hazard pair;
-    # ALOFT-2203 also gets flagged via _vertically_stacked against HW-2201's
-    # overlapping frame range -- three real flagged packages, not staged.
-    assert "HW-2201" in dashboard.text
-    assert "CS-2202" in dashboard.text
-    assert "ALOFT-2203" in dashboard.text
-    # FALL-2204 never overlaps anything in frame range -- must not appear.
-    assert "FALL-2204" not in dashboard.text
+    # Session 10 notional carrier: HW-101 and CS-102 conflict on a shared
+    # compartment + hazard pair; ALOFT-105 is flagged as overhead work above
+    # DECK-106 -- real flagged packages from the real graph, not staged.
+    assert "HW-101" in dashboard.text
+    assert "CS-102" in dashboard.text
+    assert "ALOFT-105" in dashboard.text
+    # ELEC-111 is clean on every check -- must not appear.
+    assert "ELEC-111" not in dashboard.text
 
 
 def test_review_detail_page_shows_the_real_rationale_and_provenance(tmp_path):
     client = _client(tmp_path)
-    client.post("/seed-acushnet-demo", follow_redirects=False)
+    client.post("/seed-demo", follow_redirects=False)
     pending = app_module.service.list_pending_reviews()
-    hw = next(r for r in pending if r.work_package_id == "HW-2201")
+    hw = next(r for r in pending if r.work_package_id == "HW-101")
 
     detail = client.get(f"/review/{hw.thread_id}/{hw.interrupt_id}")
 
     assert detail.status_code == 200
-    assert "Electric &amp; Machine Shop" in detail.text or "Electric" in detail.text
+    assert "Aux Tank 3" in detail.text
     assert "DETERMINISTIC FALLBACK" in detail.text  # no live API key in CI -- real, not faked
 
 
 def test_approving_one_package_leaves_the_others_pending(tmp_path):
     client = _client(tmp_path)
-    client.post("/seed-acushnet-demo", follow_redirects=False)
+    client.post("/seed-demo", follow_redirects=False)
     pending = app_module.service.list_pending_reviews()
-    hw = next(r for r in pending if r.work_package_id == "HW-2201")
+    hw = next(r for r in pending if r.work_package_id == "HW-101")
 
     resp = client.post(
         f"/review/{hw.thread_id}/{hw.interrupt_id}",
@@ -72,28 +72,28 @@ def test_approving_one_package_leaves_the_others_pending(tmp_path):
     assert resp.status_code == 303
 
     still_pending = {r.work_package_id for r in app_module.service.list_pending_reviews()}
-    assert "HW-2201" not in still_pending
-    assert "CS-2202" in still_pending  # untouched -- real partial resume, not an all-or-nothing gate
+    assert "HW-101" not in still_pending
+    assert "CS-102" in still_pending  # untouched -- real partial resume, not an all-or-nothing gate
 
     decided = app_module.service.list_decided()
-    hw_decided = next(d for d in decided if d["work_package_id"] == "HW-2201")
+    hw_decided = next(d for d in decided if d["work_package_id"] == "HW-101")
     assert hw_decided["cleared_for_execution"] is True
 
 
 def test_rejecting_a_package_records_not_cleared_for_execution(tmp_path):
     client = _client(tmp_path)
-    client.post("/seed-acushnet-demo", follow_redirects=False)
+    client.post("/seed-demo", follow_redirects=False)
     pending = app_module.service.list_pending_reviews()
-    hw = next(r for r in pending if r.work_package_id == "HW-2201")
+    hw = next(r for r in pending if r.work_package_id == "HW-101")
 
     client.post(
         f"/review/{hw.thread_id}/{hw.interrupt_id}",
-        data={"decision": "reject", "note": "reschedule after CS-2202 clears"},
+        data={"decision": "reject", "note": "reschedule after CS-102 clears"},
         follow_redirects=False,
     )
 
     decided = app_module.service.list_decided()
-    hw_decided = next(d for d in decided if d["work_package_id"] == "HW-2201")
+    hw_decided = next(d for d in decided if d["work_package_id"] == "HW-101")
     assert hw_decided["cleared_for_execution"] is False
 
 
@@ -113,9 +113,9 @@ def test_a_hedge_worded_note_never_flips_or_corrupts_the_decision(tmp_path):
     even the literal word "reject" -- can change which disposition gets
     recorded for an Approve click."""
     client = _client(tmp_path)
-    client.post("/seed-acushnet-demo", follow_redirects=False)
+    client.post("/seed-demo", follow_redirects=False)
     pending = app_module.service.list_pending_reviews()
-    hw = next(r for r in pending if r.work_package_id == "HW-2201")
+    hw = next(r for r in pending if r.work_package_id == "HW-101")
 
     client.post(
         f"/review/{hw.thread_id}/{hw.interrupt_id}",
@@ -127,7 +127,7 @@ def test_a_hedge_worded_note_never_flips_or_corrupts_the_decision(tmp_path):
     )
 
     decided = app_module.service.list_decided()
-    hw_decided = next(d for d in decided if d["work_package_id"] == "HW-2201")
+    hw_decided = next(d for d in decided if d["work_package_id"] == "HW-101")
     assert hw_decided["disposition"] == "approved"
     assert hw_decided["cleared_for_execution"] is True
 
@@ -153,9 +153,9 @@ def test_hitl_disposition_survives_a_fresh_checkpoint_reload_with_a_known_type(t
     client = _client(tmp_path)
     db_path = str(tmp_path / "test_reviewer.db")
 
-    client.post("/seed-acushnet-demo", follow_redirects=False)
+    client.post("/seed-demo", follow_redirects=False)
     pending = app_module.service.list_pending_reviews()
-    hw = next(r for r in pending if r.work_package_id == "HW-2201")
+    hw = next(r for r in pending if r.work_package_id == "HW-101")
 
     client.post(
         f"/review/{hw.thread_id}/{hw.interrupt_id}",
@@ -167,7 +167,7 @@ def test_hitl_disposition_survives_a_fresh_checkpoint_reload_with_a_known_type(t
     live_state = app_module.service._graph.get_state(config)
     live_wp = next(
         wp for wp in live_state.values["reviewed_packages"]
-        if wp.work_package_id == "HW-2201"
+        if wp.work_package_id == "HW-101"
     )
     live_type = type(live_wp.hitl_disposition)
 
@@ -176,7 +176,7 @@ def test_hitl_disposition_survives_a_fresh_checkpoint_reload_with_a_known_type(t
     reloaded_state = fresh_service._graph.get_state(config)
     reloaded_wp = next(
         wp for wp in reloaded_state.values["reviewed_packages"]
-        if wp.work_package_id == "HW-2201"
+        if wp.work_package_id == "HW-101"
     )
     reloaded_type = type(reloaded_wp.hitl_disposition)
     fresh_service.close()

@@ -1,7 +1,7 @@
 # Watchstander — Architecture
 
 > **Status:** Living document. Update when a decision changes, a component is added/removed, or a migration phase completes.
-> **Last updated:** 2026-11-08 — Session 10 (notional carrier dataset, daily brief; ADR-048). 2026-11-07 — upgrade Sessions 1–9 (projects and the four-input status gate, certificates, named rules, judgment flags, crews and shift calendar, shift-aware suggester, brief and reviewer Apply, decision log) and reviews 01–03 recorded as ADR-035 to ADR-047; Known Debt brought up to date. Previously 2026-08-21 — reschedule suggestion, declarative hazard rules, perf benchmark (ADR-030 to ADR-034).
+> **Last updated:** 2026-11-08 — Session 10 (notional carrier dataset, daily brief, real-ship demo deleted; ADR-048, ADR-049). 2026-11-07 — upgrade Sessions 1–9 (projects and the four-input status gate, certificates, named rules, judgment flags, crews and shift calendar, shift-aware suggester, brief and reviewer Apply, decision log) and reviews 01–03 recorded as ADR-035 to ADR-047; Known Debt brought up to date. Previously 2026-08-21 — reschedule suggestion, declarative hazard rules, perf benchmark (ADR-030 to ADR-034).
 
 ## 1. Purpose and Scope
 
@@ -46,11 +46,10 @@ Out of scope for v1: Navy mishap data (classification/aggregation risk — delib
 | `case_data/cases_v1.json` | Sourced OSHA/DOL case histories, tagged by hazard category |
 | `case_data/navsea_8010_psns_v2014.json` | Site-scoped (PSNS) governing-procedure citations sourced from the public-domain NAVSEA 8010 Manual, hot_work only — see Section 6 |
 | `case_data/hazard_rules_v1.json` | Declarative hazard-pair and fire-watch-capacity rules, schema-validated by `rules_config.py` (ADR-032) |
-| `visualizer/` | Godot 4 2D spatial scene rendering work packages, conflicts, and HITL state directly on top of real USCG ACUSHNET HAER drawings, not a schematic — two switchable views (Inboard Profile default, Deck Plan alternate) (Section 8, ADR-025, ADR-027) |
+| `visualizer/` | Godot 4 2D spatial scene rendering work packages, conflicts, and HITL state on the notional carrier schematic (`assets/bg_blueprint.png`). The real-ship HAER backgrounds and 3D blockout were deleted in Session 10 (ADR-049); the scene change wasn't run in Godot |
 | `reviewer/` | Local FastAPI app reading real graph checkpoint state: approve/reject, Apply of a crew-shift suggestion (re-checks first, never approves), the `/log` decision-log page; one reviewer service per database (Section 8.5, ADR-044, ADR-046) |
-| `agent_core/carrier_demo.py` + `case_data/carrier_notional_v1.json` | The default demo (Session 10, ADR-048): a notional carrier with 11 packages, crews, a shift calendar, certificates and 4 projects. Invented end to end; the loader refuses data not marked `notional: true` (a real JSON `true`) and dangling references. Each scenario triggers one named rule, pinned by `tests/test_session10.py` |
+| `agent_core/carrier_demo.py` + `case_data/carrier_notional_v1.json` | The only demo dataset, used by the reviewer and the visualizer (Session 10, ADR-048): a notional carrier with 11 packages, crews, a shift calendar, certificates and 4 projects. Invented end to end; the loader refuses data not marked `notional: true` (a real JSON `true`) and dangling references. Each scenario triggers one named rule, pinned by `tests/test_session10.py` |
 | `agent_core/daily_brief.py` | Plain-text daily brief (Session 10, ADR-048): runs every deterministic check over a dataset and prints projects, packages needing a person with rule and contact, suggestions marked not applied, judgment flags with the named person, certificate and schedule findings, and the decision log's head hash and anchor check. No LLM. `python -m agent_core.daily_brief` |
-| `agent_core/demo_fixtures.py` | Real ACUSHNET-sourced `WorkPackageState` demo data, shared by `visualizer/demo_broadcaster.py` (flattened to raw event dicts) and `reviewer/` (run through the real graph) so both demo paths use identical data |
 | `eval/` | Fixed-scenario evaluation harness measuring `deconfliction.py`/`retrieval.py`/`reasoning.py`'s deterministic-fallback path against a checked-in baseline (Section 7) |
 | `eval/perf_benchmark.py` | Detection-latency benchmark, deliberately separate from `eval/run_eval.py` so wall-clock timing never touches the exact-match `baseline.json` regression gate — quotable numbers for `deconfliction.py`'s deterministic path at scale (ADR-033) |
 
@@ -86,7 +85,7 @@ flowchart LR
     Deconf --> Events["events.py<br/>WebSocket broadcaster"]
     Reason --> Events
     Hitl --> Events
-    Events --> Viz["visualizer/<br/>Godot 4 live scene on real HAER drawings"]
+    Events --> Viz["visualizer/<br/>Godot 4 live scene, notional schematic"]
     class Events,Viz live
 
     Eval["eval/<br/>fixed-scenario harness vs. checked-in baseline"] -.->|"regression-tests"| Deconf
@@ -166,6 +165,8 @@ Unlike cosmoai-adept's visualizer — an agent walking between abstract tool sta
 
 **Consistency with the established house rule:** speech-bubble-equivalent text (the safety brief panel) must hold long enough to read — same `clamp(text.length() / CHARS_PER_SECOND, MIN, MAX)` timing rule as both existing visualizers, not a fixed duration.
 
+**Session 10 (ADR-049): the 3D blockout, the HAER backgrounds and the real-ship demo data described in the next paragraphs were deleted; they're kept here as history.**
+
 **3D blockout companion view (2026-07-28, ADR-019).** A second, static, non-networked scene (`visualizer/Main3D.tscn`) renders the demo vessel — USCG Cutter ACUSHNET / ex-USS SHACKLE (ARS-9), sourced in `docs/uscg-acushnet-ars9-source.md` — as a simplified 3D hull with compartments extruded at their real frame positions. This does not supersede the 2D live view above; `Main.tscn` is still the only scene wired to `agent_core.events`. The 3D scene exists because a real drawing with printed frame numbers made a "greybox"-style blockout (straight hull, real compartment positions, no traced curvature) tractable in the same spirit as this section's own ADR-006 — get the real spatial data right, simplify the geometry deliberately and say so, rather than either importing licensed CAD or claiming false precision. Verified by an actual headless render (Godot 4.3 + Xvfb + software GL) during development, not just written and assumed to work.
 
 **Real HAER print as the 2D background, not a generated schematic (2026-08-08, ADR-025).** After watching the schematic 2D visualizer run live for the first time, Donnie asked directly to see the actual drawings instead of an abstraction of them — 2D or 3D, whichever was faster to deliver, "just looking for the best design decision for right now." `Main.gd`'s background swapped from the generated `bg_blueprint.png` to `bg_acushnet_deckplan.png`, a real capture of the Library of Congress's own copy of HAER AK-49 Sheet 5/10 ("Deck Plans" — Main Deck and Second Deck, with the sheet's own printed frame scale). Sourcing method: this sandbox's own network egress is allowlisted and blocks tile.loc.gov directly (same class of restriction documented for Hugging Face and osha.gov elsewhere in this project's history) — worked around by navigating to the image URL in a live, user-connected Chrome browser session (same technique ADR-007's OSHA sourcing used for verbatim text, applied here to an image instead) and capturing a screenshot, then cropping out the browser chrome in Python/PIL. This is a screen capture of the real drawing, not the raw master TIFF — acceptable for a background texture at the visualizer's display size, and disclosed as such rather than presented as a pixel-perfect archival copy.
@@ -240,7 +241,7 @@ different thread untouched — confirmed with a direct debugging script
 before building the UI around the assumption, then re-confirmed by
 `test_approving_one_package_leaves_the_others_pending`.
 
-**Data source: shared, not duplicated.** `agent_core/demo_fixtures.py`
+**Data source: shared, not duplicated.** (Session 10: now `case_data/carrier_notional_v1.json` via `agent_core/carrier_demo.py`; `demo_fixtures.py` was deleted.) `agent_core/demo_fixtures.py`
 (new) holds the real ACUSHNET compartment/frame data as actual
 `WorkPackageState` objects, meant to be run through the real graph.
 `visualizer/demo_broadcaster.py`'s scripted event-payload dicts are now
@@ -289,8 +290,8 @@ version will require rather than warn about.
 | `eval/perf_benchmark.py`'s synthetic-data docstring claims a conflict count that is "neither 0 nor n·(n-1)/2" at every scale | Independent Fable cross-review (AUD-16). False at n=10, the first row of the default benchmark — 0 packages flagged, so that row only exercises the fast-exit path the docstring says it avoids. Larger rows (n>=50) are fine |
 | ~~Fire-watch capacity branch of `suggest_reschedule()` had zero test coverage before AOSE Round 6~~ **CLOSED:** regression tests added in Round 6; single-package overloads also covered since review-01 (R09) | Independent Fable cross-review (AUD-19) — direct cause of AUD-10 (see ADR-034) shipping undetected. Two regression tests added closing this specific gap; broader coverage of the search function's edge cases (duplicate `work_package_id`s, non-positive `step`) remains open (AUD-17, AUD-18, Fable, unverified severity) |
 | 29 CFR citations in the named-rule catalogue are unverified | Every 29 CFR citation in `case_data/named_rules_v1.json` (1915.7, .12, .14, .77, .159, .503, .504) was added from general knowledge of Part 1915 and is `verified: false`; only the NAVSEA entries read against the primary source are verified. Someone should read each against eCFR before the Session 16 README (Session 4) |
-| ACUSHNET demo is still in the repo (mitigated, Session 10) | The reviewer's default demo is now the notional carrier. The ACUSHNET demo (public-domain HAER drawings of a real cutter) remains as a labeled second button and as the visualizer's scripted demo, which wasn't changed (no Godot here). Remove it or keep it labeled: Donnie's call |
-| Demo run never shows a crew-shift suggestion | `acushnet_demo_work_packages()` has no crews or calendar, so every brief says "no crew or shift calendar data" (Session 10) |
+| ~~Demo data isn't fully notional~~ **CLOSED, Session 10 (ADR-049)** | The real-ship demo data, HAER backgrounds, 3D blockout and source docs were deleted; `tests/test_session10.py` fails if a real-ship reference reappears in code, data or the visualizer |
+| ~~Demo run never shows a crew-shift suggestion~~ **CLOSED, Session 10** | The notional carrier demo has crews and a shift calendar; HW-101, ALOFT-105 and DECK-106 show suggestions |
 | WS-JF-001's 3-frame adjacency threshold is notional | A review-prompt threshold, not a sourced distance; should be site-configurable (Session 5) |
 | Shift suggester: a package starting late in one shift moves with that shift; only the target crew is ever moved | No "move the other crew instead" alternative and no weekend/overtime cost (Session 7) |
 | Decision log: truncation is caught only against a recorded anchor; actor names are self-declared | Session 10: the daily brief prints the head (seq, hash) and checks a passed-back `--anchor`. That only helps if someone records the head line outside the database and passes it back; nothing stores it automatically yet. There's no login (Session 9) |
@@ -358,6 +359,7 @@ Not everything below gets extracted — this is a candidates list, not a commitm
 | ADR-046 | 2026-11-07 | The reviewer is one service per database: an exclusive `flock` on a hidden file beside the database's real file, named by device and inode; recovery only under that lock; one in-service lock serializes Apply and decisions | Review-03 S08-01/02 over five rounds (claims, leases, then exclusive ownership; then symlink and TMPDIR aliasing). A lease can't prove an owner is dead; exclusive ownership can. Remaining aliasing paths accepted as Known Debt by Donnie |
 | ADR-047 | 2026-11-07 | Decisions are recorded in an append-only, hash-chained decision log in the reviewer database; triggers refuse UPDATE/DELETE | Decisions lived only in checkpoint state with no who/when/why. Enforced append-only, unlike `rules_audit.py` (AUD-15). Tail truncation needs an external head anchor (Known Debt) |
 | ADR-048 | 2026-11-08 | Session 10: a notional carrier dataset becomes the default demo, and a deterministic text daily brief prints every check's result plus the decision log's head | Rule 6 says demo data is notional; ACUSHNET wasn't. The dataset is JSON so it can't drift into code, and each scenario is pinned to the rule it triggers so the demo can't silently stop showing one. The brief calls the same check functions the graph's nodes do and no LLM (rule 7). Printing the log head gives Session 9's hash chain the outside anchor it needed to catch truncation. Mutation testing found pydantic coercing `"notional": "yes"` to true; both the dataset and the roster now use StrictBool |
+| ADR-049 | 2026-11-08 | Deleted the real-ship demo (ACUSHNET fixture, its HAER visualizer backgrounds and calibration, the 3D blockout, the ACUSHNET and Turner Joy source docs). The reviewer and visualizer both use the notional carrier; the 2D scene uses the generated schematic again | Donnie's decision under rule 6. Supersedes ADR-019, ADR-025 and ADR-027 (kept as history). A guard test scans code, data and the visualizer for real-ship references; another checks the visualizer's scripted conflicts against the real deconfliction on the dataset. The Godot change wasn't run in Godot (not allowed in the build environment) |
 
 ## 11. Maintenance Rules
 

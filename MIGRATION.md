@@ -161,6 +161,8 @@ Prompted by a real signal, not a hypothetical one: a Carrier-team GS-14 told Don
 
 ## Phase 5.97 — Real ship data for the visualizer demo: Turner Joy → USCG ACUSHNET, plus a 3D blockout companion view
 
+> **Superseded in upgrade Session 10 (ADR-049):** the real-ship demo data, HAER backgrounds and 3D blockout listed here were deleted under AGENTS.md rule 6. The demo is now the notional carrier. Kept below as history.
+
 Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s HAER drawings (real compartment names, but no printed frame numbers — `frame_start`/`frame_end` were synthetic placement values, flagged as such). Second pass found a strictly better source and replaced it.
 
 - [x] **Source swap: Turner Joy → USCG Cutter ACUSHNET / ex-USS SHACKLE (ARS-9), HAER AK-49, Sheet 5 ("Deck Plans").** Same public-domain footing (HABS/HAER/HALS, NPS-confirmed), but this sheet has real frame station numbers printed on it (AP at frame 110 to FP at the bow) — closes the exact "not read off the drawing" caveat the Turner Joy data carried. See `docs/uscg-acushnet-ars9-source.md` for the full sourcing chain, including the ±2-3 frame tick-proximity estimation caveat and the inferred (not printed) ~1.94 ft/frame spacing. Turner Joy source doc kept for history, no longer the active demo source.
@@ -196,6 +198,8 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
 
 ## Phase 7 — Real HITL reviewer web app
 
+> **Session 10 (ADR-049):** the ACUSHNET demo data named here was deleted; the reviewer now seeds the notional carrier. Kept below as history.
+
 - [x] `reviewer/graph_driver.py` — `ReviewerService`, wraps `build_graph()` with a persistent `SqliteSaver` so pending reviews survive across separate HTTP requests, not just within one process's memory
 - [x] `reviewer/app.py` — FastAPI app: dashboard listing pending reviews + recently decided packages, a detail page showing full description/conflict rationale/safety brief/provenance, a real Approve/Reject form
 - [x] Real, not simulated: submitting a decision calls `graph.invoke(Command(resume={interrupt_id: decision_text}), config=...)` against the actual graph, the same mechanism `tests/test_graph.py` exercises directly
@@ -214,6 +218,8 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
 
 ## Phase 8 — Real print as the 2D visualizer background
 
+> **Superseded in upgrade Session 10 (ADR-049):** the real-ship demo data, HAER backgrounds and 3D blockout listed here were deleted under AGENTS.md rule 6. The demo is now the notional carrier. Kept below as history.
+
 - [x] Sourced the real USCG ACUSHNET HAER deck-plan sheet (Library of Congress, public domain) via a live browser session, since this sandbox's own network blocks `tile.loc.gov` directly
 - [x] `visualizer/assets/bg_acushnet_deckplan.png` — cropped/resized capture of the real sheet, replacing the generated `bg_blueprint.png` as `Main.gd`'s background
 - [x] `Main.gd` recalibrated: `FRAME_MIN`/`FRAME_MAX` now match the vessel's real frame envelope (0-110, not the old generic 0-200), `X_MIN`/`X_MAX`/`BAND_*` constants measured off the real image's own printed scale and deck rows
@@ -227,6 +233,8 @@ Two rounds of real-drawing sourcing. First pass used USS Turner Joy (DD-951)'s H
 ---
 
 ## Phase 9 — WebSocket connectivity fix + Inboard Profile as default view + switchable views
+
+> **Superseded in upgrade Session 10 (ADR-049):** the real-ship demo data, HAER backgrounds and 3D blockout listed here were deleted under AGENTS.md rule 6. The demo is now the notional carrier. Kept below as history.
 
 - [x] Diagnosed and fixed a real "nothing happens" bug: `agent_core/events.py` and `Main.gd` both connected to the hostname `"localhost"`, which can resolve to a different address family on each side of a dual-stack machine (Windows in particular) — both sides pinned to the literal loopback address `127.0.0.1` instead. Regression test: `tests/test_events.py::test_default_host_is_the_literal_loopback_address_not_a_hostname`
 - [x] HUD status line now shows live connection state (orange "not connected -- retrying" / green "connected") instead of static unchanging text, so this class of bug is visible next time instead of looking identical to "nothing to show yet"

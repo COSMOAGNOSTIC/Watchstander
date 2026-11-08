@@ -109,9 +109,6 @@ def dashboard(msg: str = "") -> str:
         <form method="post" action="/seed-demo">
             <button type="submit">Seed the notional carrier demo run</button>
         </form>
-        <form method="post" action="/seed-acushnet-demo">
-            <button type="submit">Seed the ACUSHNET demo (public HAER drawings, not notional)</button>
-        </form>
         <h2>Awaiting review</h2>
         {cards}
         <h2>Recently decided</h2>
@@ -124,13 +121,6 @@ def dashboard(msg: str = "") -> str:
 def seed_demo() -> RedirectResponse:
     thread_id = f"reviewer-{uuid.uuid4().hex[:12]}"
     service.seed_demo(thread_id)
-    return RedirectResponse(url="/", status_code=303)
-
-
-@app.post("/seed-acushnet-demo")
-def seed_acushnet_demo() -> RedirectResponse:
-    thread_id = f"reviewer-{uuid.uuid4().hex[:12]}"
-    service.seed_acushnet_demo(thread_id)
     return RedirectResponse(url="/", status_code=303)
 
 

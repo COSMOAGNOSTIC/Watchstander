@@ -287,3 +287,52 @@ def test_roster_notional_must_be_a_real_true(value):
     from agent_core.judgment import RosterPerson
     with pytest.raises(ValueError):
         RosterPerson(person_id="NP-X", display_name="n", role="r", notional=value)
+
+
+# --- rule 6: no real-ship demo data left anywhere that runs or ships with the demo ------------
+
+_REAL_SHIP = re.compile(r"ACUSHNET|ARS-9|Turner Joy|DD-951|HAER|HABS/AK")
+_SCANNED = ["agent_core", "reviewer", "visualizer", "case_data", "eval"]
+
+
+def test_no_real_ship_data_in_code_data_or_visualizer():
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    hits = []
+    for d in _SCANNED:
+        for f in (root / d).rglob("*"):
+            if f.is_file() and "__pycache__" not in f.parts and ".godot" not in f.parts:
+                if "acushnet" in f.name.lower():
+                    hits.append(str(f.relative_to(root)))
+                    continue
+                try:
+                    text = f.read_text()
+                except (UnicodeDecodeError, OSError):
+                    continue
+                if _REAL_SHIP.search(text):
+                    hits.append(str(f.relative_to(root)))
+    assert hits == []
+
+
+def test_the_acushnet_seed_route_is_gone(tmp_path):
+    from fastapi.testclient import TestClient
+    from reviewer import app as app_module
+    app_module.service = ReviewerService(str(tmp_path / "ui.db"))
+    assert TestClient(app_module.app).post("/seed-acushnet-demo").status_code in (404, 405)
+
+
+def test_visualizer_broadcaster_uses_the_notional_carrier_and_real_conflicts():
+    import importlib.util
+    from pathlib import Path
+    from agent_core.deconfliction import deconfliction_node
+    path = Path(__file__).resolve().parent.parent / "visualizer" / "demo_broadcaster.py"
+    spec = importlib.util.spec_from_file_location("demo_broadcaster", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    ds = load_carrier_dataset()
+    assert [w["work_package_id"] for w in mod.WORK_PACKAGES] == [p.work_package_id for p in ds.packages]
+    real = {p.work_package_id: sorted(p.conflicts)
+            for p in deconfliction_node({"work_packages": ds.fresh_packages()})["work_packages"] if p.conflicts}
+    scripted = {c["work_package_id"]: sorted(c["conflicts_with"])
+                for name, payload in mod.SCRIPT if name == "deconfliction_result" for c in payload["conflicts"]}
+    assert scripted == real

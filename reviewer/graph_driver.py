@@ -30,7 +30,6 @@ from agent_core.certificates import Certificate
 from agent_core.crews import Crew, ShiftCalendar
 from agent_core.decision_log import DecisionLog
 from agent_core.carrier_demo import load_carrier_dataset
-from agent_core.demo_fixtures import acushnet_demo_work_packages
 from agent_core.graph import build_graph
 from agent_core.shift_suggester import suggest_crew_shift
 from agent_core.state import WorkPackageState
@@ -297,13 +296,6 @@ class ReviewerService:
         ds = load_carrier_dataset()
         self.seed_run(thread_id, ds.fresh_packages(), crews=ds.crews, calendar=ds.calendar,
                       certificates=ds.certificates, label="Notional carrier demo run")
-
-    def seed_acushnet_demo(self, thread_id: str) -> None:
-        """The pre-Session-10 demo: compartments read off public-domain HAER drawings of
-        a real cutter (not notional; see agent_core/demo_fixtures.py). No crew data, so
-        it never shows a crew-shift suggestion. Kept for the visualizer's demo and the
-        tests that pin its behavior."""
-        self.seed_run(thread_id, acushnet_demo_work_packages(), label="ACUSHNET demo run (public HAER drawings)")
 
     def _closed_to_decisions(self, thread_id: str) -> bool:
         """review-03 S08-02: a run being applied, or already superseded, takes no decisions."""

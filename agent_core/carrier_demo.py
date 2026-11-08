@@ -1,9 +1,9 @@
 """
 Notional carrier dataset (Session 10): the default demo, invented end to end.
 
-Replaces the ACUSHNET fixture as the default demo because AGENTS.md rule 6 says all
-demo data is notional, and ACUSHNET's compartments come from drawings of a real
-cutter. ACUSHNET stays available, clearly labeled, as `seed_acushnet_demo`.
+The only demo dataset. AGENTS.md rule 6 says all demo data is notional; the earlier
+real-ship demo (compartments read off public drawings of a real cutter) was deleted
+in Session 10 (ADR-049). The reviewer's seed button and the visualizer both use this.
 
 The data lives in `case_data/carrier_notional_v1.json`. The loader refuses it unless
 it is marked `notional: true`, and refuses any reference that doesn't resolve

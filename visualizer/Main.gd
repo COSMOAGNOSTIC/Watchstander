@@ -2,13 +2,11 @@ extends Node2D
 ##
 ## Real-time spatial visualizer for Watchstander.
 ##
-## Unlike cosmoai-adept's visualizer (an agent walking between abstract
-## tool stations), Watchstander's work packages already carry real
-## spatial metadata -- frame range and deck level -- so this scene
-## renders that data directly on top of real USCG Cutter ACUSHNET / ex-USS
-## SHACKLE (ARS-9) HAER drawings (Library of Congress HABS/AK-49, public
-## domain -- see docs/uscg-acushnet-ars9-source.md), not an abstraction or
-## a generated schematic. See ARCHITECTURE.md Section 8.
+## Watchstander's work packages carry spatial metadata -- frame range and
+## deck level -- so this scene places each package on a schematic of the
+## NOTIONAL carrier (case_data/carrier_notional_v1.json): a procedural
+## blueprint background (assets/gen_assets.py), not a drawing of any real
+## ship (AGENTS.md rule 6; ADR-049). See ARCHITECTURE.md Section 8.
 ##
 ## Connects to the WebSocket server agent_core.events opens on
 ## ws://127.0.0.1:8081 (a different port than cosmoai-adept's 8080, so
@@ -19,82 +17,39 @@ extends Node2D
 ## sockets open successfully and neither errors, but no data ever
 ## crosses. See agent_core/events.py and ARCHITECTURE.md ADR-026.
 ##
-## Two real sheets, switchable at runtime with the V key (ARCHITECTURE.md
-## ADR-027) -- cross-referencing a flagged conflict against more than one
-## angle of the actual ship was a direct ask, not a nice-to-have:
-##  - Inboard Profile (Sheet 3 of 10) -- the DEFAULT view. A genuine side
-##    cross-section with compartments stacked by real deck height and
-##    frame position, which is what this scene's ALOFT/MAIN DECK/2ND
-##    DECK/HOLD/WATERLINE band scheme was always conceptually describing.
-##  - Deck Plan (Sheet 5 of 10) -- a top-down floor-plan view, useful for
-##    seeing a compartment's footprint/adjacency rather than its height.
-##    Only Main Deck and Second Deck are drawn on this sheet, so the other
-##    three bands sit in the margin above/below it rather than on a real
-##    row -- disclosed the same way in visualizer/README.md.
-## Each view has its own independently-measured pixel calibration (see the
-## VIEWS constant below) -- the two sheets are different images at
-## different scales, not the same background swapped in and out.
+## One view today. VIEWS stays a list, and V still cycles it, so another
+## notional view can be added without touching the drawing code.
 
 const RECONNECT_INTERVAL := 2.0
 const MIN_BUBBLE_TIME := 3.0   # seconds - even a short status needs to be readable
 const MAX_BUBBLE_TIME := 7.0
 const CHARS_PER_SECOND := 12.0
 
-# Per-view pixel calibration. Both sheets share ACUSHNET's real frame
-# envelope (AP/stern = frame 110, FP/bow = frame 0 -- see
-# docs/uscg-acushnet-ars9-source.md), measured independently against each
-# image's own printed frame scale to the same approx-a-few-pixels
-# precision this project already accepts for frame ranges read off the
-# source drawings (±2-3 frames). On both sheets the bow is on the right
-# and the stern on the left (the low frame numbers/"FP" sit at the right
-# edge), the opposite of the old procedural schematic's left-to-right-
-# increasing convention -- x_min > x_max on both views on purpose, so the
-# real prints stay upright and readable (ship name, labels, frame-scale
-# text) instead of being mirrored to match the old axis direction.
-# _frame_to_x()'s linear interpolation handles either direction
-# identically.
+# Per-view pixel calibration. The schematic is 960x540 with deck lines at
+# y = 60/160/260/360/460 (assets/gen_assets.py); markers sit mid-band. The
+# notional carrier's frames run 0-260, laid out left to right after the band
+# labels. Positions are illustrative, not to scale.
 const VIEWS := [
 	{
-		"name": "Inboard Profile",
-		"texture": "res://assets/bg_acushnet_inboard_profile.png",
-		"bg_position": Vector2(150, 25),
-		"bg_size": Vector2(780, 499),
-		"frame_min": 0.0, "frame_max": 110.0,
-		"x_min": 837.0, "x_max": 278.0,
-		"band_aloft": 184.0,
-		"band_main_deck": 302.0,
-		"band_2nd_deck": 338.0,
-		"band_3rd_deck": 358.0,
-		"band_over_side": 377.0,
+		"name": "Notional schematic",
+		"texture": "res://assets/bg_blueprint.png",
+		"bg_position": Vector2(0, 0),
+		"bg_size": Vector2(960, 540),
+		"frame_min": 0.0, "frame_max": 260.0,
+		"x_min": 250.0, "x_max": 940.0,
+		"band_aloft": 110.0,
+		"band_main_deck": 210.0,
+		"band_2nd_deck": 310.0,
+		"band_3rd_deck": 410.0,
+		"band_over_side": 500.0,
 		"label_y": {
-			"ALOFT / STAGING": 169.0,
-			"MAIN DECK": 287.0,
-			"2ND DECK": 323.0,
-			"3RD DECK / HOLD": 343.0,
-			"OVER THE SIDE (WATERLINE)": 362.0,
+			"ALOFT / STAGING": 68.0,
+			"MAIN DECK": 168.0,
+			"2ND DECK": 268.0,
+			"3RD DECK / HOLD": 368.0,
+			"OVER THE SIDE (WATERLINE)": 468.0,
 		},
-		"review_station": Vector2(480, 410),
-	},
-	{
-		"name": "Deck Plan",
-		"texture": "res://assets/bg_acushnet_deckplan.png",
-		"bg_position": Vector2(150, 25),
-		"bg_size": Vector2(760, 509),
-		"frame_min": 0.0, "frame_max": 110.0,
-		"x_min": 857.0, "x_max": 237.0,
-		"band_aloft": 55.0,
-		"band_main_deck": 171.0,
-		"band_2nd_deck": 361.0,
-		"band_3rd_deck": 430.0,
-		"band_over_side": 520.0,
-		"label_y": {
-			"ALOFT / STAGING": 40.0,
-			"MAIN DECK": 156.0,
-			"2ND DECK": 346.0,
-			"3RD DECK / HOLD": 415.0,
-			"OVER THE SIDE (WATERLINE)": 505.0,
-		},
-		"review_station": Vector2(480, 500),
+		"review_station": Vector2(480, 488),
 	},
 ]
 
@@ -105,6 +60,8 @@ const VIEWS := [
 # which was tuned for the dark procedural schematic background and reads
 # poorly against the real print's white/cream paper -- reported directly
 # ("the color palette is wrong and hard to see on a white background").
+# ADR-049: the background is the dark schematic again; these hues still read
+# on it, and the default marker color was switched to light grey.
 const HAZARD_COLOR := {
 	"hot_work": Color("d55e00"),        # vermillion
 	"confined_space": Color("0072b2"),  # blue
@@ -112,7 +69,7 @@ const HAZARD_COLOR := {
 	"fall_protection": Color("e69f00"), # orange
 	"over_the_side": Color("cc79a7"),   # reddish purple
 }
-const DEFAULT_MARKER_COLOR := Color("3a3a3a")  # dark charcoal, not light blue -- legible on white
+const DEFAULT_MARKER_COLOR := Color("d8e2ec")  # light grey: legible on the dark schematic
 const CONFLICT_COLOR := Color("d0021b")  # saturated safety red, distinct from the vermillion above
 
 var active_view := 0
@@ -141,7 +98,7 @@ var review_pulsing := false
 var review_pulse_t := 0.0
 
 # Replayed on view toggle so switching angles mid-scene re-lays-out the
-# same real data against the new view's calibration instead of losing it.
+# same data against the new view's calibration instead of losing it.
 var last_work_packages: Array = []
 var last_conflicts: Array = []
 var hitl_awaiting_id := ""
@@ -163,7 +120,7 @@ func _current_view() -> Dictionary:
 
 
 func _build_background() -> void:
-	# The real HAER sheet for the active view, at its natural pixel size
+	# The background for the active view, at its natural pixel size
 	# (pre-scaled once when the asset was prepared, not resized at
 	# runtime, so there's no distortion between this and the calibration
 	# constants above). Positioned with margin on all sides for the band
@@ -462,7 +419,7 @@ func _band_y_for(wp: Dictionary) -> float:
 	var deck: String = str(wp.get("deck_level", "")).to_lower()
 	if deck.find("2nd") != -1 or deck.find("second") != -1:
 		return view["band_2nd_deck"]
-	if deck.find("3rd") != -1 or deck.find("third") != -1 or deck.find("hold") != -1:
+	if deck.find("3rd") != -1 or deck.find("third") != -1 or deck.find("hold") != -1 or deck.find("4th") != -1 or deck.find("5th") != -1:
 		return view["band_3rd_deck"]
 	return view["band_main_deck"]
 

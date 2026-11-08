@@ -13,8 +13,8 @@ into that dict would make the regression gate flaky by construction. This
 script's output is meant to be read and quoted, not diffed byte-for-byte.
 
 Synthetic data only, generated here with a fixed seed for reproducibility
--- not sourced case data (case_data/) and not the real-ship demo fixtures
-(agent_core/demo_fixtures.py). Keeping this distinction explicit matches
+-- not sourced case data (case_data/) and not the notional carrier demo
+dataset (case_data/carrier_notional_v1.json). Keeping this distinction explicit matches
 the "two kinds of data sourcing" convention ARCHITECTURE.md's Section 4
 already documents for case citations.
 

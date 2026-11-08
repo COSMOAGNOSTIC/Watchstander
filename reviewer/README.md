@@ -38,10 +38,6 @@ Nine of its eleven packages wait for review, each built to trigger one named rul
 Engineer, a missing and an expiring certificate, a contractor outside its window).
 Two show crew-shift suggestions you can Apply.
 
-The second button seeds the older ACUSHNET demo (`agent_core/demo_fixtures.py`):
-compartments read off public-domain HAER drawings of a real cutter, so it is not
-notional, and it has no crew data. Three packages wait for review there.
-
 Click into a review, read the full brief and provenance tag, and hit Approve
 or Reject with an optional note and your name (recorded in the decision log;
 there is no login yet, so a blank name is recorded as "unidentified reviewer").
@@ -50,8 +46,8 @@ If the run was seeded with crews and a shift calendar (`ReviewerService.seed_run
 a flagged package's brief also shows a deterministic crew-shift suggestion and
 why any earlier shift was rejected. **Apply schedule change** re-checks the move
 first, starts a new run with the moved times, supersedes this run's open reviews,
-and never approves anything: every moved package still needs a decision. The
-ACUSHNET demo has no crew data, so it never shows a suggestion.
+and never approves anything: every moved package still needs a decision. A run
+seeded without crew data never shows a suggestion.
 
 For a plain-text summary of the same checks, run
 `python -m agent_core.daily_brief --as-of 2027-03-15T06:00 --db <reviewer db>`.
