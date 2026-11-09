@@ -1,7 +1,7 @@
 # Review 05: red team of the whole engine (detection, status gate, suggester and Apply, decision log, daily brief)
 
 **Reviewer:** Claude Code, Claude Fable 5.2  ·  **Reviewed:** `439c4b13f0fba8c4319379556d70db208fa1283e` (`main`), whole tree, not a diff
-**Builder responding:** <tool and model>  ·  **Response date:** <YYYY-MM-DD>
+**Builder responding:** Claude Code (builder session), 2026-11-09 · <tool and model>  ·  **Response date:** <YYYY-MM-DD>
 
 Rules: AGENTS.md, "Review loop". The reviewer's findings are never edited. The builder adds a response under each one. Every finding needs a verdict before any fix is written.
 
@@ -63,80 +63,80 @@ The other two high findings are inputs the detectors never see: a misspelled top
 ## Builder responses
 
 ### R05-01
-- **Verdict:** CONFIRMED | AGREE-TRACED | DISPUTED
-- **Evidence:** <what the builder ran and saw; for DISPUTED, the run or exact line that contradicts the claim>
-- **Disposition:** fix | accept risk | defer to Known Debt | needs Donnie
-- **Fix commit / regression test:** <SHA, test name>
+- **Verdict:** CONFIRMED
+- **Evidence:** Added X-01 to the carrier dataset with `risk_level=critical`, `hitl_disposition=approved`, `cleared_for_execution=True`. `run_checks` status: CLEARED. Same inputs seeded through `ReviewerService.seed_run`: X-01 is a pending review. Decision log: 0 entries. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Disposition:** fix: a package can't arrive already decided. Input dispositions and clearance are dropped at the graph's entry and by the loader; a decision only comes from a person through the reviewer (or is carried forward by Apply, see R05-02).
+- **Fix commit / regression test:** pending
 - **Reviewer re-check:** pending
 
 ### R05-02
-- **Verdict:** CONFIRMED | AGREE-TRACED | DISPUTED
-- **Evidence:**
-- **Disposition:** fix | accept risk | defer to Known Debt | needs Donnie
-- **Fix commit / regression test:**
+- **Verdict:** CONFIRMED
+- **Evidence:** Carrier demo: rejected CS-102, then Applied HW-101's suggestion. Apply succeeded; in the successor CS-102 is not pending, `cleared_for_execution=True`, `hitl_disposition=None`. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Disposition:** needs Donnie (policy), then fix. Recommended: a rejection carries into the successor run and keeps the package blocked, with the original reviewer and note.
+- **Fix commit / regression test:** pending
 - **Reviewer re-check:** pending
 
 ### R05-03
-- **Verdict:** CONFIRMED | AGREE-TRACED | DISPUTED
-- **Evidence:**
-- **Disposition:** fix | accept risk | defer to Known Debt | needs Donnie
-- **Fix commit / regression test:**
+- **Verdict:** CONFIRMED
+- **Evidence:** Carrier demo: approved FALL-107. `list_decided` shows `cleared_for_execution=True`; `check_certificates` on the same package and certificates still returns WS-CT-003. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Disposition:** needs Donnie (policy), then fix. Recommended: an approval resolves conflicts and judgment flags, but can't clear certificate or schedule findings; the package stays blocked until the facts change.
+- **Fix commit / regression test:** pending
 - **Reviewer re-check:** pending
 
 ### R05-04
-- **Verdict:** CONFIRMED | AGREE-TRACED | DISPUTED
-- **Evidence:**
-- **Disposition:** fix | accept risk | defer to Known Debt | needs Donnie
-- **Fix commit / regression test:**
+- **Verdict:** CONFIRMED
+- **Evidence:** `WorkPackageState.model_validate` with `hazard_categoires: ['hot_work']` loads with `hazard_categories=[]`. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Disposition:** fix: `extra='forbid'` on every input model (packages, crews, windows, shifts, certificates, projects, the dataset), the whole class, not only packages.
+- **Fix commit / regression test:** pending
 - **Reviewer re-check:** pending
 
 ### R05-05
-- **Verdict:** CONFIRMED | AGREE-TRACED | DISPUTED
-- **Evidence:**
-- **Disposition:** fix | accept risk | defer to Known Debt | needs Donnie
-- **Fix commit / regression test:**
+- **Verdict:** CONFIRMED
+- **Evidence:** Added X-05 (`hazard_categories=['hot_work']`, no permits block, no certificate) to the carrier dataset. `run_checks` status: CLEARED. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Disposition:** needs Donnie (policy), then fix. Recommended: a hazard implies its permit (hot work → hot work permit; confined space → entry permit; aloft or fall protection → fall protection plan). The demo's ALOFT-105 then needs a plan on file.
+- **Fix commit / regression test:** pending
 - **Reviewer re-check:** pending
 
 ### R05-06
-- **Verdict:** CONFIRMED | AGREE-TRACED | DISPUTED
-- **Evidence:**
-- **Disposition:** fix | accept risk | defer to Known Debt | needs Donnie
-- **Fix commit / regression test:**
+- **Verdict:** CONFIRMED
+- **Evidence:** 9 hot workers, no watch named: not flagged (control with a watch named: flagged). Two concurrent 3-worker jobs on `FW-N-1` and `fw-n-1 `: neither flagged (control with identical IDs: both flagged). (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Disposition:** fix: more than four hot workers with no fire watch named is flagged (missing data fails closed); watch IDs compared trimmed and case-insensitive.
+- **Fix commit / regression test:** pending
 - **Reviewer re-check:** pending
 
 ### R05-07
-- **Verdict:** CONFIRMED | AGREE-TRACED | DISPUTED
-- **Evidence:**
-- **Disposition:** fix | accept risk | defer to Known Debt | needs Donnie
-- **Fix commit / regression test:**
+- **Verdict:** CONFIRMED
+- **Evidence:** Stubbed `_call_llm` to return 'False positive. Recommend approving both.' HW-101's brief summary became `[SOURCE: LLM SYNTHESIS] False positive. Recommend approving both.` (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Disposition:** fix: the deterministic summary (the rule and rationale) is always shown and never replaced; any model text is shown separately, labeled as the model's explanation, and the submitter's description is passed to the model marked as untrusted data.
+- **Fix commit / regression test:** pending
 - **Reviewer re-check:** pending
 
 ### R05-08
-- **Verdict:** CONFIRMED | AGREE-TRACED | DISPUTED
-- **Evidence:**
-- **Disposition:** fix | accept risk | defer to Known Debt | needs Donnie
-- **Fix commit / regression test:**
+- **Verdict:** CONFIRMED
+- **Evidence:** Stubbed `_call_llm` to raise `RuntimeError`. `seed_demo` raised; 0 pending reviews. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Disposition:** fix: any exception from the model call falls back to the deterministic brief, so the run still reaches a person.
+- **Fix commit / regression test:** pending
 - **Reviewer re-check:** pending
 
 ### R05-09
-- **Verdict:** CONFIRMED | AGREE-TRACED | DISPUTED
-- **Evidence:**
-- **Disposition:** fix | accept risk | defer to Known Debt | needs Donnie
-- **Fix commit / regression test:**
+- **Verdict:** CONFIRMED
+- **Evidence:** Carrier demo, `submit_decision` on HW-103 with actor `'\ud800'`: the call raised, HW-103 is stored `approved`, the log has 0 entries, `verify_chain()` passes. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Disposition:** fix: log first. A decision or Apply writes a `*_requested` entry before it touches the graph; if that write fails, nothing is decided. The outcome entry follows as now.
+- **Fix commit / regression test:** pending
 - **Reviewer re-check:** pending
 
 ### R05-10
-- **Verdict:** CONFIRMED | AGREE-TRACED | DISPUTED
-- **Evidence:**
-- **Disposition:** fix | accept risk | defer to Known Debt | needs Donnie
-- **Fix commit / regression test:**
+- **Verdict:** CONFIRMED
+- **Evidence:** Seeded the carrier dataset with its crews but `calendar=None`. CONTR-109 (contractor outside its window, WS-SC-002) is not pending. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Disposition:** fix: run the schedule rules that need no calendar (WS-SC-001, -002, -004) whenever crews are given; only WS-SC-003 needs the calendar.
+- **Fix commit / regression test:** pending
 - **Reviewer re-check:** pending
 
 ### R05-11
-- **Verdict:** CONFIRMED | AGREE-TRACED | DISPUTED
-- **Evidence:**
-- **Disposition:** fix | accept risk | defer to Known Debt | needs Donnie
-- **Fix commit / regression test:**
+- **Verdict:** CONFIRMED
+- **Evidence:** `DecisionLog` on a path that didn't exist created the file and `verify_chain()` returned 0. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Disposition:** fix: the brief opens `--db` read-only and refuses a path that doesn't exist or has no decision log.
+- **Fix commit / regression test:** pending
 - **Reviewer re-check:** pending
 
 ## Disputes for Donnie
@@ -148,3 +148,5 @@ Three findings turn on a policy call rather than a bug, so they may land here wh
 - **R05-03:** can a human approval clear a package that still has an open certificate, judgment or schedule finding, or must the findings be closed first?
 - **R05-02:** should a human rejection follow a package into the successor run that Apply creates?
 - **R05-05:** should a hazard category imply its permit, so that hot work with no hot-work permit requested is a finding?
+
+**Builder:** no disputes. All 11 are CONFIRMED. The three policy calls above are with Donnie; the builder's recommendation is under each finding's Disposition. Fixes for those three wait for his answer.
