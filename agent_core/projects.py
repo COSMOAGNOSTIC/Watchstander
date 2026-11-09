@@ -37,7 +37,7 @@ from enum import Enum
 from collections.abc import Collection
 from typing import Iterable, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agent_core.state import HitlDisposition, RiskLevel, WorkPackageState
 from agent_core.validation import NonBlankStr, instant, require_comparable
@@ -67,6 +67,7 @@ _SEVERITY = list(PackageStatus)  # worst first
 
 
 class Project(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # review-05 R05-04
     project_id: NonBlankStr
     name: str
     priority: Priority = Priority.ROUTINE
@@ -153,11 +154,13 @@ def package_status(
         pkg.requires_hitl_review or pkg.risk_level == RiskLevel.CRITICAL
     ):
         return PackageStatus.PENDING_REVIEW
+    has_findings = any(pid in _ids_of(f) for group in (certificate_findings, judgment_flags, schedule_findings)
+                       for f in group)
     if not pkg.cleared_for_execution:
-        return PackageStatus.BLOCKED
-    for group in (certificate_findings, judgment_flags, schedule_findings):
-        if any(pid in _ids_of(f) for f in group):
-            return PackageStatus.HAS_FINDINGS
+        # review-05 R05-03: approved but still held by a finding reads as HAS_FINDINGS.
+        return PackageStatus.HAS_FINDINGS if has_findings else PackageStatus.BLOCKED
+    if has_findings:
+        return PackageStatus.HAS_FINDINGS
     if pkg.scheduled_start is None or pkg.scheduled_end is None:
         return PackageStatus.UNSCHEDULED
     return PackageStatus.CLEARED

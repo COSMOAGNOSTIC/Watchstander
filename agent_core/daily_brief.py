@@ -22,6 +22,7 @@ entries being cut off (Session 9's known limit): pass it back as `anchor`.
 from __future__ import annotations
 
 import argparse
+import sqlite3
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -34,6 +35,7 @@ from agent_core.crews import ScheduleFinding, check_schedule_constraints
 from agent_core.decision_log import DecisionLog, LogTamperError
 from agent_core.deconfliction import conflict_rule_ids, deconfliction_node
 from agent_core.findings_gate import findings_node
+from agent_core.intake import intake
 from agent_core.judgment import JudgmentFlag, judgment_flags, judgment_node
 from agent_core.projects import PackageStatus, ProjectRollup, package_status, rollup_project, sort_projects
 from agent_core.shift_suggester import CrewShiftOutcome, suggest_crew_shift
@@ -81,7 +83,7 @@ def run_checks(ds: CarrierDataset, as_of: Optional[datetime] = None) -> CheckedR
     calendar = ds.calendar
     run_inputs = {"certificates": [c.model_dump() for c in ds.certificates],
                   "crews": [c.model_dump() for c in ds.crews], "calendar": calendar.model_dump()}
-    state = deconfliction_node({"work_packages": ds.fresh_packages()})
+    state = deconfliction_node({"work_packages": intake(ds.fresh_packages())})  # review-05 R05-01
     state = judgment_node(state)
     state = findings_node({**state, "run_inputs": run_inputs})
     packages = state["work_packages"]
@@ -212,7 +214,12 @@ def main(argv: Optional[list[str]] = None) -> None:
     ap.add_argument("--db", default=None, help="reviewer database, to include its decision log")
     ap.add_argument("--anchor", type=_anchor, default=None, help="SEQ:HASH from an earlier brief")
     a = ap.parse_args(argv)
-    log = DecisionLog(a.db) if a.db else None
+    # review-05 R05-11: read-only, and a missing file or a database with no log is an error,
+    # never a freshly created empty log that "verifies".
+    try:
+        log = DecisionLog(a.db, read_only=True) if a.db else None
+    except (FileNotFoundError, LookupError, sqlite3.Error) as e:
+        raise SystemExit(f"daily_brief: can't read the decision log: {e}")
     try:
         print(render(load_carrier_dataset(a.dataset), as_of=a.as_of, decision_log=log, anchor=a.anchor), end="")
     finally:

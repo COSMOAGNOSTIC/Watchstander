@@ -30,8 +30,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-KINDS = frozenset({"decision", "decision_refused", "decision_failed", "apply", "apply_refused", "apply_failed",
-                   "superseded", "recovered"})  # *_failed: review-04 S11-01/S11-02
+KINDS = frozenset({"decision_requested", "decision", "decision_refused", "decision_failed",
+                   "apply_requested", "apply", "apply_refused", "apply_failed",
+                   "superseded", "recovered"})  # *_failed: review-04; *_requested: review-05 R05-09
+_OUTCOMES = {"decision_requested": {"decision", "decision_refused", "decision_failed"},
+             "apply_requested": {"apply", "apply_refused", "apply_failed"}}
 _GENESIS = "GENESIS"
 
 
@@ -62,8 +65,20 @@ def _hash(prev_hash: str, canonical: str) -> str:
 
 
 class DecisionLog:
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str, read_only: bool = False) -> None:
         self.db_path = db_path
+        if read_only:
+            # review-05 R05-11: a reader never creates, migrates or writes the database.
+            from pathlib import Path
+            if not Path(db_path).is_file():
+                raise FileNotFoundError(f"no database at {db_path}")
+            self._conn = sqlite3.connect(f"{Path(db_path).resolve().as_uri()}?mode=ro", uri=True,
+                                         check_same_thread=False, isolation_level=None)
+            has = self._conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='decision_log'").fetchone()
+            if not has:
+                self._conn.close()
+                raise LookupError(f"{db_path} has no decision log")
+            return
         self._conn = sqlite3.connect(db_path, check_same_thread=False, isolation_level=None)
         self._conn.executescript("""
             CREATE TABLE IF NOT EXISTS decision_log (
@@ -114,6 +129,20 @@ class DecisionLog:
             "FROM decision_log ORDER BY seq").fetchall()
         return [LogEntry(r[0], datetime.fromisoformat(r[1]), r[2], r[3], r[4], r[5], json.loads(r[6]), r[7], r[8])
                 for r in rows]
+
+    def open_requests(self) -> list[LogEntry]:
+        """review-05 R05-09: requests with no outcome entry after them (same run and interrupt).
+        One here means the outcome couldn't be logged: check that package in the graph."""
+        entries = self.entries()
+        out = []
+        for i, e in enumerate(entries):
+            if e.kind not in _OUTCOMES:
+                continue
+            key = (e.run_id, e.detail.get("interrupt_id"))
+            if not any(x.kind in _OUTCOMES[e.kind] and (x.run_id, x.detail.get("interrupt_id")) == key
+                       for x in entries[i + 1:]):
+                out.append(e)
+        return out
 
     def head(self) -> Optional[tuple[int, str]]:
         """(seq, hash) of the newest entry, or None for an empty log. Session 10: record

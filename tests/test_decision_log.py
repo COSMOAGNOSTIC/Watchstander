@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent_core.crews import Crew, ShiftCalendar
+from notional_permits import permits_on_file
 from agent_core.decision_log import DecisionLog, LogTamperError
 from agent_core.state import HazardCategory as H, SpatialCoordinates as SC, WorkPackageState as W
 from reviewer import app as app_module
@@ -43,7 +44,7 @@ def svc(tmp_path):
 
 
 def seed(s):
-    s.seed_run("T1", pair(), crews=CREWS, calendar=CAL, certificates=[])
+    s.seed_run("T1", pair(), crews=CREWS, calendar=CAL, certificates=permits_on_file(pair()))  # review-05
     return {r.work_package_id: r for r in s.list_pending_reviews() if r.thread_id == "T1"}
 
 
@@ -113,7 +114,7 @@ def test_the_log_survives_a_restart(svc):
     svc.submit_decision("T1", pend["TANK-ENTRY"].interrupt_id, "approve", actor="Casey Sample")
     svc.close()
     s2 = ReviewerService(svc.db_path)
-    assert [e.kind for e in s2.decision_log.entries()] == ["decision"]
+    assert [e.kind for e in s2.decision_log.entries()] == ["decision_requested", "decision"]  # review-05 R05-09
     s2.close()
 
 
@@ -194,7 +195,7 @@ def test_the_log_page_lists_entries_and_reports_the_chain(tmp_path):
     app_module.service.submit_decision("T1", pend["TANK-ENTRY"].interrupt_id, "approve", actor="Casey Sample")
     page = client.get("/log").text
     assert "Casey Sample" in page and "TANK-ENTRY" in page and "approved" in page
-    assert "Chain verified: 1 entries" in page
+    assert "Chain verified: 2 entries" in page  # request + decision (review-05 R05-09)
 
 
 def test_known_limit_truncating_the_newest_entries_is_not_detected_by_the_chain_alone(tmp_path):

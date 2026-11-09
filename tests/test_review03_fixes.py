@@ -8,6 +8,7 @@ from datetime import date, datetime as dt, time
 import pytest
 from fastapi.testclient import TestClient
 
+from notional_permits import permits_on_file
 from agent_core.certificates import Certificate, CertificateKind as K
 from agent_core.crews import Crew, ShiftCalendar
 from agent_core.state import HazardCategory as H, HitlDisposition, SafetyPermitsRequired, SpatialCoordinates as SC, WorkPackageState as W
@@ -43,8 +44,10 @@ def svc(tmp_path):
     s.close()
 
 
-def seed(s, pkgs=None, certs=()):
-    s.seed_run("T1", pkgs or pair(), crews=CREWS, calendar=CAL, certificates=list(certs))
+def seed(s, pkgs=None, certs=None):
+    pkgs = pkgs or pair()
+    certs = permits_on_file(pkgs) if certs is None else certs  # review-05: hazards imply permits
+    s.seed_run("T1", pkgs, crews=CREWS, calendar=CAL, certificates=list(certs))
     return {r.work_package_id: r for r in s.list_pending_reviews() if r.thread_id == "T1"}
 
 

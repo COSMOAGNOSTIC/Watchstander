@@ -105,11 +105,14 @@ def test_llm_recommendation_is_never_used(monkeypatch):
     assert b.recommended_action == f"{expected} {reasoning.describe_shift_outcome(None)}"
 
 
-def test_llm_may_still_phrase_the_summary(monkeypatch):
+def test_llm_text_is_kept_apart_from_the_summary(monkeypatch):
+    # review-05 R05-07 changed this: the model's words never replace the deterministic
+    # summary; they appear in their own labeled field.
     monkeypatch.setattr(reasoning, "_call_llm", lambda ctx: {
         "executive_summary": "Model summary.", "precedent_context": "Model precedent."})
     b = generate_safety_brief(_flagged_pair())
-    assert "Model summary." in b.executive_summary and b.source == "llm"
+    assert "Model summary." not in b.executive_summary and b.source == "llm"
+    assert (b.model_explanation, b.model_precedent_context) == ("Model summary.", "Model precedent.")
 
 
 def test_llm_is_not_asked_for_a_recommendation():

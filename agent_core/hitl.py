@@ -87,6 +87,9 @@ def _extract_decision(raw) -> tuple[HitlDisposition, str | None]:
 
 
 def _needs_review(wp: WorkPackageState) -> bool:
+    # review-05 R05-02: a rejection carried by Apply is already decided; it stays rejected.
+    if wp.hitl_disposition is not None:
+        return False
     return wp.requires_hitl_review or wp.risk_level == RiskLevel.CRITICAL
 
 
@@ -143,7 +146,11 @@ def hitl_gate_single_node(state: HitlSingleState) -> dict:
 
     disposition, note = _extract_decision(decision)
     wp.hitl_disposition = disposition
-    wp.cleared_for_execution = disposition == HitlDisposition.APPROVED
+    # review-05 R05-03 (Donnie): approval resolves a conflict or a judgment flag, but can't
+    # clear an open certificate or schedule finding.
+    #   approved ──┐
+    #   no open certificate/schedule finding ──[AND]──► cleared
+    wp.cleared_for_execution = disposition == HitlDisposition.APPROVED and not wp.open_findings
 
     events.emit(
         "hitl_decided",
@@ -155,6 +162,8 @@ def hitl_gate_single_node(state: HitlSingleState) -> dict:
     rationale_suffix = f" | HITL decision: {disposition.value}"
     if note:
         rationale_suffix += f" (note: {note})"
+    if disposition == HitlDisposition.APPROVED and wp.open_findings:
+        rationale_suffix += f" (still blocked by {', '.join(wp.open_findings)})"
     rationale_suffix += f" (cleared_for_execution={wp.cleared_for_execution})"
     wp.conflict_rationale = (wp.conflict_rationale or "") + rationale_suffix
 

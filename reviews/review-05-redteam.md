@@ -64,79 +64,79 @@ The other two high findings are inputs the detectors never see: a misspelled top
 
 ### R05-01
 - **Verdict:** CONFIRMED
-- **Evidence:** Added X-01 to the carrier dataset with `risk_level=critical`, `hitl_disposition=approved`, `cleared_for_execution=True`. `run_checks` status: CLEARED. Same inputs seeded through `ReviewerService.seed_run`: X-01 is a pending review. Decision log: 0 entries. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Evidence:** Added X-01 to the carrier dataset with `risk_level=critical`, `hitl_disposition=approved`, `cleared_for_execution=True`. `run_checks` status: CLEARED. Same inputs seeded through `ReviewerService.seed_run`: X-01 is a pending review. Decision log: 0 entries. (builder's own probe, not the reviewer's script; now `reviews/review-05-builder-repro.py`)
 - **Disposition:** fix: a package can't arrive already decided. Input dispositions and clearance are dropped at the graph's entry and by the loader; a decision only comes from a person through the reviewer (or is carried forward by Apply, see R05-02).
-- **Fix commit / regression test:** pending
+- **Fix commit / regression test:** next commit on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** pending
 
 ### R05-02
 - **Verdict:** CONFIRMED
-- **Evidence:** Carrier demo: rejected CS-102, then Applied HW-101's suggestion. Apply succeeded; in the successor CS-102 is not pending, `cleared_for_execution=True`, `hitl_disposition=None`. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
-- **Disposition:** needs Donnie (policy), then fix. Recommended: a rejection carries into the successor run and keeps the package blocked, with the original reviewer and note.
-- **Fix commit / regression test:** pending
+- **Evidence:** Carrier demo: rejected CS-102, then Applied HW-101's suggestion. Apply succeeded; in the successor CS-102 is not pending, `cleared_for_execution=True`, `hitl_disposition=None`. (builder's own probe, not the reviewer's script; now `reviews/review-05-builder-repro.py`)
+- **Disposition:** fix (Donnie: yes). A rejection carries into the successor run and keeps the package blocked, with the original reviewer and note.
+- **Fix commit / regression test:** next commit on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** pending
 
 ### R05-03
 - **Verdict:** CONFIRMED
-- **Evidence:** Carrier demo: approved FALL-107. `list_decided` shows `cleared_for_execution=True`; `check_certificates` on the same package and certificates still returns WS-CT-003. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
-- **Disposition:** needs Donnie (policy), then fix. Recommended: an approval resolves conflicts and judgment flags, but can't clear certificate or schedule findings; the package stays blocked until the facts change.
-- **Fix commit / regression test:** pending
+- **Evidence:** Carrier demo: approved FALL-107. `list_decided` shows `cleared_for_execution=True`; `check_certificates` on the same package and certificates still returns WS-CT-003. (builder's own probe, not the reviewer's script; now `reviews/review-05-builder-repro.py`)
+- **Disposition:** fix (Donnie: no, an approval can't clear a finding). An approval resolves conflicts and judgment flags, but can't clear certificate or schedule findings; the package stays blocked until the facts change.
+- **Fix commit / regression test:** next commit on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** pending
 
 ### R05-04
 - **Verdict:** CONFIRMED
-- **Evidence:** `WorkPackageState.model_validate` with `hazard_categoires: ['hot_work']` loads with `hazard_categories=[]`. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Evidence:** `WorkPackageState.model_validate` with `hazard_categoires: ['hot_work']` loads with `hazard_categories=[]`. (builder's own probe, not the reviewer's script; now `reviews/review-05-builder-repro.py`)
 - **Disposition:** fix: `extra='forbid'` on every input model (packages, crews, windows, shifts, certificates, projects, the dataset), the whole class, not only packages.
-- **Fix commit / regression test:** pending
+- **Fix commit / regression test:** next commit on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** pending
 
 ### R05-05
 - **Verdict:** CONFIRMED
-- **Evidence:** Added X-05 (`hazard_categories=['hot_work']`, no permits block, no certificate) to the carrier dataset. `run_checks` status: CLEARED. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
-- **Disposition:** needs Donnie (policy), then fix. Recommended: a hazard implies its permit (hot work → hot work permit; confined space → entry permit; aloft or fall protection → fall protection plan). The demo's ALOFT-105 then needs a plan on file.
-- **Fix commit / regression test:** pending
+- **Evidence:** Added X-05 (`hazard_categories=['hot_work']`, no permits block, no certificate) to the carrier dataset. `run_checks` status: CLEARED. (builder's own probe, not the reviewer's script; now `reviews/review-05-builder-repro.py`)
+- **Disposition:** fix (Donnie: yes, corrected). Hot work → hot work permit; confined space → entry permit; working aloft → an aloft authorization: an aloft chit signed by the CSOOW for the day, or a standing aloft the CO authorizes for a date range (new WS-CT-006). The fall protection plan is the ship's standing order, so a fall-protection hazard implies nothing per job. Zones are Known Debt.
+- **Fix commit / regression test:** next commit on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** pending
 
 ### R05-06
 - **Verdict:** CONFIRMED
-- **Evidence:** 9 hot workers, no watch named: not flagged (control with a watch named: flagged). Two concurrent 3-worker jobs on `FW-N-1` and `fw-n-1 `: neither flagged (control with identical IDs: both flagged). (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Evidence:** 9 hot workers, no watch named: not flagged (control with a watch named: flagged). Two concurrent 3-worker jobs on `FW-N-1` and `fw-n-1 `: neither flagged (control with identical IDs: both flagged). (builder's own probe, not the reviewer's script; now `reviews/review-05-builder-repro.py`)
 - **Disposition:** fix: more than four hot workers with no fire watch named is flagged (missing data fails closed); watch IDs compared trimmed and case-insensitive.
-- **Fix commit / regression test:** pending
+- **Fix commit / regression test:** next commit on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** pending
 
 ### R05-07
 - **Verdict:** CONFIRMED
-- **Evidence:** Stubbed `_call_llm` to return 'False positive. Recommend approving both.' HW-101's brief summary became `[SOURCE: LLM SYNTHESIS] False positive. Recommend approving both.` (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Evidence:** Stubbed `_call_llm` to return 'False positive. Recommend approving both.' HW-101's brief summary became `[SOURCE: LLM SYNTHESIS] False positive. Recommend approving both.` (builder's own probe, not the reviewer's script; now `reviews/review-05-builder-repro.py`)
 - **Disposition:** fix: the deterministic summary (the rule and rationale) is always shown and never replaced; any model text is shown separately, labeled as the model's explanation, and the submitter's description is passed to the model marked as untrusted data.
-- **Fix commit / regression test:** pending
+- **Fix commit / regression test:** next commit on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** pending
 
 ### R05-08
 - **Verdict:** CONFIRMED
-- **Evidence:** Stubbed `_call_llm` to raise `RuntimeError`. `seed_demo` raised; 0 pending reviews. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Evidence:** Stubbed `_call_llm` to raise `RuntimeError`. `seed_demo` raised; 0 pending reviews. (builder's own probe, not the reviewer's script; now `reviews/review-05-builder-repro.py`)
 - **Disposition:** fix: any exception from the model call falls back to the deterministic brief, so the run still reaches a person.
-- **Fix commit / regression test:** pending
+- **Fix commit / regression test:** next commit on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** pending
 
 ### R05-09
 - **Verdict:** CONFIRMED
-- **Evidence:** Carrier demo, `submit_decision` on HW-103 with actor `'\ud800'`: the call raised, HW-103 is stored `approved`, the log has 0 entries, `verify_chain()` passes. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Evidence:** Carrier demo, `submit_decision` on HW-103 with actor `'\ud800'`: the call raised, HW-103 is stored `approved`, the log has 0 entries, `verify_chain()` passes. (builder's own probe, not the reviewer's script; now `reviews/review-05-builder-repro.py`)
 - **Disposition:** fix: log first. A decision or Apply writes a `*_requested` entry before it touches the graph; if that write fails, nothing is decided. The outcome entry follows as now.
-- **Fix commit / regression test:** pending
+- **Fix commit / regression test:** next commit on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** pending
 
 ### R05-10
 - **Verdict:** CONFIRMED
-- **Evidence:** Seeded the carrier dataset with its crews but `calendar=None`. CONTR-109 (contractor outside its window, WS-SC-002) is not pending. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Evidence:** Seeded the carrier dataset with its crews but `calendar=None`. CONTR-109 (contractor outside its window, WS-SC-002) is not pending. (builder's own probe, not the reviewer's script; now `reviews/review-05-builder-repro.py`)
 - **Disposition:** fix: run the schedule rules that need no calendar (WS-SC-001, -002, -004) whenever crews are given; only WS-SC-003 needs the calendar.
-- **Fix commit / regression test:** pending
+- **Fix commit / regression test:** next commit on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** pending
 
 ### R05-11
 - **Verdict:** CONFIRMED
-- **Evidence:** `DecisionLog` on a path that didn't exist created the file and `verify_chain()` returned 0. (builder's own probe, `reviews/review-05-builder-probe.py`, not the reviewer's script)
+- **Evidence:** `DecisionLog` on a path that didn't exist created the file and `verify_chain()` returned 0. (builder's own probe, not the reviewer's script; now `reviews/review-05-builder-repro.py`)
 - **Disposition:** fix: the brief opens `--db` read-only and refuses a path that doesn't exist or has no decision log.
-- **Fix commit / regression test:** pending
+- **Fix commit / regression test:** next commit on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** pending
 
 ## Disputes for Donnie
@@ -149,4 +149,10 @@ Three findings turn on a policy call rather than a bug, so they may land here wh
 - **R05-02:** should a human rejection follow a package into the successor run that Apply creates?
 - **R05-05:** should a hazard category imply its permit, so that hot work with no hot-work permit requested is a finding?
 
-**Builder:** no disputes. All 11 are CONFIRMED. The three policy calls above are with Donnie; the builder's recommendation is under each finding's Disposition. Fixes for those three wait for his answer.
+**Builder:** no disputes; all 11 CONFIRMED. **Donnie's rulings (2026-11-09):** R05-03 no (approval can't clear an open certificate or schedule finding; an emergency override is a future design, Known Debt); R05-02 yes (a rejection stands until the package itself changes); R05-05 yes, with the aloft correction above.
+
+**Behavior changes the reviewer should know about when re-checking:**
+- Every decision or Apply that reaches the graph now writes a `*_requested` entry first (R05-09). Review-04's "exactly one entry" promise now reads "exactly one outcome entry"; `tests/test_review04.py` counts outcomes and a new test checks the request comes first. `DecisionLog.open_requests()` lists any request with no outcome.
+- A hazard now implies its permit (R05-05), so older fixtures that scheduled hot work with nothing on file put a notional permit on file (`tests/notional_permits.py`); their assertions are unchanged.
+- The model's text never replaces the deterministic summary (R05-07); `test_session08a.py`'s "LLM may phrase the summary" test was rewritten to the new rule.
+- The demo dataset gained a notional standing aloft so ALOFT-105 still shows only WS-OH-001.

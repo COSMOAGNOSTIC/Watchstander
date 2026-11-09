@@ -11,6 +11,7 @@ import pytest
 from agent_core.certificates import Certificate, CertificateKind as K
 from agent_core.crews import Crew, ShiftCalendar, Window
 from agent_core.shift_suggester import suggest_crew_shift
+from notional_permits import permits_on_file
 from agent_core.state import HazardCategory as H, SafetyPermitsRequired, SpatialCoordinates as SC, WorkPackageState as W
 
 PATTERN = [("DAY", time(7), time(15, 30)), ("SWING", time(15, 30), time(0)), ("MID", time(0), time(7))]
@@ -38,7 +39,7 @@ def tank_entry(start=day(7), end=day(15), pid="TANK-ENTRY"):
 def run(pkgs, target="WELD-1", **kw):
     kw.setdefault("crews", CREWS)
     kw.setdefault("calendar", CAL)
-    kw.setdefault("certificates", [])
+    kw.setdefault("certificates", permits_on_file(pkgs))  # review-05: hazards imply permits
     return suggest_crew_shift(pkgs, target, **kw)
 
 
@@ -99,7 +100,7 @@ def test_certificate_that_does_not_cover_the_new_shift_rejects_it():
     block = [wp("WELD-1", [H.HOT_WORK], day(7), day(11), permits_required=SafetyPermitsRequired(hot_work_permit=True))]
     permit = Certificate(certificate_id="HW-1", work_package_id="WELD-1", kind=K.HOT_WORK_PERMIT,
                          valid_from=day(6), valid_until=day(15, 30))
-    out = run(block + [tank_entry()], certificates=[permit], max_shifts=2)
+    out = run(block + [tank_entry()], certificates=[permit] + permits_on_file([tank_entry()]), max_shifts=2)
     assert out.suggestion is None
     # review-02 S07-05: prove both candidates were assessed before checking why.
     assert [r.shift_id for r in out.rejected] == ["20270112-SWING", "20270113-MID"]

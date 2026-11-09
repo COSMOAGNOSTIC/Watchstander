@@ -61,6 +61,8 @@ def test_every_rule_has_a_contact_role_and_at_least_one_citation_or_a_note():
 # review-01 R16: the old check only rejected digits and "@", so a person's name
 # ("Riley Example") passed. Contacts must come from this explicit role set.
 ALLOWED_ROLES = {
+    # review-05 (Donnie): aloft is authorized by the CSOOW (chit) or the CO (standing aloft).
+    "Combat Systems Officer of the Watch (CSOOW)", "Commanding Officer",
     "Gas Free Engineer", "Safety Officer", "Fire Safety Coordinator", "Competent Person",
     "Production Planner", "Ship Superintendent",
 }

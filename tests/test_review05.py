@@ -1,0 +1,395 @@
+"""review-05 (Fable red team) regressions. Real graph, real ReviewerService, temp sqlite.
+All data notional. Each block names the finding it pins.
+"""
+
+import os
+import sqlite3
+import sys
+import types
+from datetime import datetime as dt
+
+import pytest
+from pydantic import ValidationError
+
+from agent_core import certificates as certs_mod
+from agent_core import daily_brief, deconfliction
+from agent_core.carrier_demo import CarrierDataset, load_carrier_dataset
+from agent_core.certificates import Certificate, CertificateKind, check_certificates
+from agent_core.crews import Crew, Shift, Window, check_schedule_constraints
+from agent_core.decision_log import DecisionLog
+from agent_core.projects import PackageStatus, Project, package_status
+from agent_core.state import WorkPackageState as W
+from reviewer.graph_driver import ReviewerService
+
+AS_OF = dt(2027, 3, 15, 6)
+BASE = dict(description="notional", scheduled_start="2027-03-15T12:00:00", scheduled_end="2027-03-15T14:00:00",
+            spatial={"compartment_id": "Notional Berthing 260", "deck_level": "Notional 2nd Deck",
+                     "frame_start": 258, "frame_end": 259}, crew_id="CR-DECK")
+
+
+@pytest.fixture(autouse=True)
+def _no_llm(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+
+@pytest.fixture
+def svc(tmp_path):
+    s = ReviewerService(str(tmp_path / "r.db"))
+    s.seed_demo("T")
+    yield s
+    s.close()
+
+
+def _pending(s, pid):
+    return next((r for r in s.list_pending_reviews() if r.work_package_id == pid), None)
+
+
+def _with(ds, data):
+    ds.packages.append(W.model_validate(data))
+    ds.projects[-1].work_package_ids.append(data["work_package_id"])
+    return ds
+
+
+def _state_pkg(s, thread, pid):
+    v = s._graph.get_state({"configurable": {"thread_id": thread}}).values
+    return next(p for p in v.get("reviewed_packages", []) + v["work_packages"] if p.work_package_id == pid)
+
+
+# --- R05-01: a package can't arrive already decided ---------------------------------------------
+
+
+def test_r05_01_preset_approval_is_dropped_in_the_brief():
+    ds = _with(load_carrier_dataset(), {**BASE, "work_package_id": "X-01", "risk_level": "critical",
+                                        "hitl_disposition": "approved", "cleared_for_execution": True})
+    status = daily_brief.run_checks(ds, AS_OF).status_by_package()["X-01"]
+    assert status == PackageStatus.PENDING_REVIEW
+    assert "X-01" in daily_brief.render(ds, as_of=AS_OF).split("NEEDS A PERSON")[1].split("JUDGMENT FLAGS")[0]
+
+
+def test_r05_01_preset_approval_is_dropped_in_the_graph(tmp_path):
+    ds = _with(load_carrier_dataset(), {**BASE, "work_package_id": "X-01", "requires_hitl_review": True,
+                                        "hitl_disposition": "approved", "cleared_for_execution": True})
+    s = ReviewerService(str(tmp_path / "g.db"))
+    s.seed_run("T", ds.fresh_packages(), crews=ds.crews, calendar=ds.calendar, certificates=ds.certificates)
+    assert _pending(s, "X-01") is not None
+    s.close()
+
+
+# --- R05-02: a rejection follows the package into Apply's successor run --------------------------
+
+
+def test_r05_02_rejection_survives_apply_on_a_neighbour(svc):
+    svc.submit_decision("T", _pending(svc, "CS-102").interrupt_id, "reject", "notional: do not enter", actor="Casey Sample")
+    res = svc.apply_shift_suggestion("T", _pending(svc, "HW-101").interrupt_id, actor="Riley Example")
+    assert res.applied
+    cs = _state_pkg(svc, res.new_thread_id, "CS-102")
+    assert cs.hitl_disposition == "rejected" and cs.cleared_for_execution is False
+    assert "Casey Sample" in cs.conflict_rationale and "do not enter" in cs.conflict_rationale
+    assert _pending(svc, "CS-102") is None  # held, not silently re-queued or cleared
+    applied = next(e for e in svc.decision_log.entries() if e.kind == "apply")
+    assert applied.detail["carried_rejections"] == ["CS-102"]
+
+
+def test_r05_02_unrejected_neighbours_are_not_marked_rejected(svc):
+    res = svc.apply_shift_suggestion("T", _pending(svc, "HW-101").interrupt_id)
+    cs = _state_pkg(svc, res.new_thread_id, "CS-102")
+    assert cs.hitl_disposition is None
+
+
+# --- R05-03: approval can't clear an open certificate or schedule finding ------------------------
+
+
+def test_r05_03_approval_with_an_open_certificate_finding_stays_blocked(svc):
+    svc.submit_decision("T", _pending(svc, "FALL-107").interrupt_id, "approve", actor="Casey Sample")
+    d = next(x for x in svc.list_decided() if x["work_package_id"] == "FALL-107")
+    assert d["disposition"] == "approved" and d["cleared_for_execution"] is False
+    p = _state_pkg(svc, "T", "FALL-107")
+    assert "WS-CT-003" in p.open_findings
+    assert "still blocked by WS-CT-003" in p.conflict_rationale
+    entry = next(e for e in svc.decision_log.entries() if e.kind == "decision")
+    assert entry.detail["cleared_for_execution"] is False and entry.detail["blocked_by"] == ["WS-CT-003"]
+
+
+def test_r05_03_approval_with_an_open_schedule_finding_stays_blocked(svc):
+    svc.submit_decision("T", _pending(svc, "CONTR-109").interrupt_id, "approve")
+    assert next(x for x in svc.list_decided() if x["work_package_id"] == "CONTR-109")["cleared_for_execution"] is False
+
+
+def test_r05_03_approval_still_clears_a_conflict_or_judgment_flag(svc):
+    svc.submit_decision("T", _pending(svc, "HW-103").interrupt_id, "approve")  # WS-JF-001 only
+    assert next(x for x in svc.list_decided() if x["work_package_id"] == "HW-103")["cleared_for_execution"] is True
+
+
+def test_r05_03_status_of_approved_but_blocked_is_has_findings():
+    p = W.model_validate({**BASE, "work_package_id": "P"})
+    p.hitl_disposition, p.cleared_for_execution = "approved", False
+    f = types.SimpleNamespace(work_package_id="P")
+    assert package_status(p, certificate_findings=[f], judgment_flags=[], schedule_findings=[]) == PackageStatus.HAS_FINDINGS
+
+
+# --- R05-04: misspelled keys are refused on every input model -----------------------------------
+
+
+@pytest.mark.parametrize("model,data", [
+    (W, {**BASE, "work_package_id": "P", "hazard_categoires": ["hot_work"]}),
+    (W, {**BASE, "work_package_id": "P", "hot_workers": 6}),
+    (W, {**BASE, "work_package_id": "P", "risk": "critical"}),
+    (W, {**BASE, "work_package_id": "P", "lock": True}),
+    (Crew, {"crew_id": "C", "name": "n", "contractor": True}),
+    (Window, {"start": "2027-03-15T07:00:00", "end": "2027-03-15T08:00:00", "until": "x"}),
+    (Shift, {"shift_id": "S", "name": "n", "start": "2027-03-15T07:00:00", "end": "2027-03-15T08:00:00", "crew": "x"}),
+    (Certificate, {"certificate_id": "C", "work_package_id": "P", "kind": "hot_work_permit",
+                   "valid_from": "2027-03-15T07:00:00", "valid_until": "2027-03-15T08:00:00", "valid_till": "x"}),
+    (Project, {"project_id": "P", "name": "n", "priorty": "urgent"}),
+])
+def test_r05_04_unknown_keys_are_refused(model, data):
+    with pytest.raises(ValidationError, match="xtra"):
+        model.model_validate(data)
+
+
+def test_r05_04_dataset_with_an_unknown_key_is_refused(tmp_path):
+    import json
+    from agent_core import carrier_demo
+    raw = json.loads(carrier_demo.DEFAULT_PATH.read_text())
+    raw["packges"] = []
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps(raw))
+    with pytest.raises(ValueError):
+        load_carrier_dataset(bad)
+
+
+# --- R05-05: a hazard implies its authorization -------------------------------------------------
+
+
+def _kinds(pkg, certs=()):
+    return [f.rule_id for f in check_certificates(W.model_validate(pkg), list(certs))]
+
+
+def test_r05_05_hot_work_needs_a_hot_work_permit_without_asking():
+    assert _kinds({**BASE, "work_package_id": "P", "hazard_categories": ["hot_work"]}) == ["WS-CT-001"]
+
+
+def test_r05_05_confined_space_needs_an_entry_permit_without_asking():
+    assert _kinds({**BASE, "work_package_id": "P", "hazard_categories": ["confined_space"]}) == ["WS-CT-002"]
+
+
+def test_r05_05_work_aloft_needs_an_aloft_authorization():
+    assert _kinds({**BASE, "work_package_id": "P", "hazard_categories": ["working_aloft"]}) == ["WS-CT-006"]
+    assert _kinds({**BASE, "work_package_id": "P", "spatial": {**BASE["spatial"], "is_aloft": True}}) == ["WS-CT-006"]
+
+
+def test_r05_05_an_aloft_chit_for_the_day_covers_it():
+    chit = Certificate(certificate_id="N-CHIT", work_package_id="P", kind="aloft_authorization", form="chit",
+                       valid_from="2027-03-15T07:00:00", valid_until="2027-03-15T16:00:00")
+    assert _kinds({**BASE, "work_package_id": "P", "hazard_categories": ["working_aloft"]}, [chit]) == []
+
+
+def test_r05_05_a_standing_aloft_covers_every_package_in_its_dates():
+    standing = Certificate(certificate_id="N-STANDING", work_package_id=None, kind="aloft_authorization", form="standing",
+                           valid_from="2027-03-14T00:00:00", valid_until="2027-03-18T00:00:00")
+    assert _kinds({**BASE, "work_package_id": "P", "hazard_categories": ["working_aloft"]}, [standing]) == []
+
+
+def test_r05_05_a_chit_that_ends_early_is_a_finding():
+    chit = Certificate(certificate_id="N-CHIT", work_package_id="P", kind="aloft_authorization", form="chit",
+                       valid_from="2027-03-15T07:00:00", valid_until="2027-03-15T13:00:00")
+    assert _kinds({**BASE, "work_package_id": "P", "hazard_categories": ["working_aloft"]}, [chit]) == ["WS-CT-006"]
+
+
+@pytest.mark.parametrize("data", [
+    {"work_package_id": None, "kind": "aloft_authorization", "form": "chit"},        # a chit names its job
+    {"work_package_id": "P", "kind": "aloft_authorization", "form": "standing"},     # a standing aloft is ship-wide
+    {"work_package_id": "P", "kind": "aloft_authorization"},                          # form is required
+    {"work_package_id": "P", "kind": "hot_work_permit", "form": "chit"},              # only aloft has a form
+    {"work_package_id": None, "kind": "hot_work_permit"},                             # only a standing aloft omits its job
+])
+def test_r05_05_certificate_shapes_are_strict(data):
+    with pytest.raises(ValidationError):
+        Certificate(certificate_id="N", valid_from="2027-03-15T07:00:00", valid_until="2027-03-15T13:00:00", **data)
+
+
+def test_r05_05_fall_protection_hazard_does_not_imply_a_per_job_plan():
+    # Donnie: the fall protection plan is a ship's standing order, not a per-job permit.
+    assert _kinds({**BASE, "work_package_id": "P", "hazard_categories": ["fall_protection"]}) == []
+
+
+def test_r05_05_hot_work_with_no_permits_block_is_not_cleared():
+    ds = _with(load_carrier_dataset(), {**BASE, "work_package_id": "X-05", "hazard_categories": ["hot_work"]})
+    assert daily_brief.run_checks(ds, AS_OF).status_by_package()["X-05"] != PackageStatus.CLEARED
+
+
+# --- R05-06: fire-watch capacity with no watch named, and watch IDs compared loosely ------------
+
+
+def _flagged(pkgs):
+    return {p.work_package_id: bool(p.conflicts or p.conflict_rationale)
+            for p in deconfliction.deconfliction_node({"work_packages": pkgs})["work_packages"]}
+
+
+def test_r05_06_over_four_hot_workers_with_no_watch_named_is_flagged():
+    p = W.model_validate({**BASE, "work_package_id": "X", "hazard_categories": ["hot_work"], "hot_worker_count": 9})
+    out = deconfliction.deconfliction_node({"work_packages": [p]})["work_packages"][0]
+    assert out.requires_hitl_review and "WS-FW-001" in out.conflict_rationale
+
+
+def test_r05_06_four_or_fewer_with_no_watch_named_is_not_flagged_by_this_rule():
+    p = W.model_validate({**BASE, "work_package_id": "X", "hazard_categories": ["hot_work"], "hot_worker_count": 4})
+    assert _flagged([p]) == {"X": False}
+
+
+def test_r05_06_watch_ids_match_ignoring_case_and_spaces():
+    a = W.model_validate({**BASE, "work_package_id": "Y1", "hazard_categories": ["hot_work"], "hot_worker_count": 3,
+                          "fire_watch_id": "FW-N-1"})
+    b = W.model_validate({**BASE, "work_package_id": "Y2", "hazard_categories": ["hot_work"], "hot_worker_count": 3,
+                          "fire_watch_id": "fw-n-1 ", "spatial": {"compartment_id": "Notional other", "frame_start": 10, "frame_end": 11}})
+    assert _flagged([a, b]) == {"Y1": True, "Y2": True}
+
+
+# --- R05-07: the model never replaces the deterministic summary ---------------------------------
+
+
+def _fake_llm(monkeypatch, text, seen=None):
+    import agent_core.reasoning as rz
+
+    def fake(ctx):
+        if seen is not None:
+            seen.append(ctx)
+        return {"executive_summary": text, "precedent_context": "n"}
+    monkeypatch.setattr(rz, "_call_llm", fake)
+
+
+def test_r05_07_model_text_is_separate_and_labeled(monkeypatch):
+    import agent_core.reasoning as rz
+    _fake_llm(monkeypatch, "False positive. Recommend approving both.")
+    st = rz.reasoning_node(deconfliction.deconfliction_node({"work_packages": load_carrier_dataset().fresh_packages()[:2]}))
+    b = next(p.safety_brief for p in st["work_packages"] if p.work_package_id == "HW-101")
+    assert "False positive" not in b.executive_summary and "HW-101" in b.executive_summary
+    assert b.model_explanation == "False positive. Recommend approving both."
+
+
+def test_r05_07_submitter_text_reaches_the_model_marked_untrusted(monkeypatch):
+    import agent_core.reasoning as rz
+    seen = []
+    _fake_llm(monkeypatch, "n", seen)
+    rz.reasoning_node(deconfliction.deconfliction_node({"work_packages": load_carrier_dataset().fresh_packages()[:2]}))
+    ctx = seen[0]
+    assert "description" not in ctx
+    assert ctx["untrusted_submitter_text"]["description"].startswith("Notional:")
+
+
+def test_r05_07_reviewer_page_labels_model_text(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from reviewer import app as app_module
+    _fake_llm(monkeypatch, "Model says hello.")
+    app_module.service = ReviewerService(str(tmp_path / "ui.db"))
+    app_module.service.seed_demo("T")
+    hw = _pending(app_module.service, "HW-101")
+    page = TestClient(app_module.app).get(f"/review/T/{hw.interrupt_id}").text
+    assert "Model explanation (not a decision)" in page and "Model says hello." in page
+
+
+# --- R05-08: a model API failure falls back, never aborts the run -------------------------------
+
+
+def test_r05_08_api_exception_falls_back_to_deterministic(monkeypatch, tmp_path):
+    import agent_core.reasoning as rz
+
+    class Boom:
+        def __init__(self, *a, **k):
+            self.messages = types.SimpleNamespace(create=self._create)
+
+        def _create(self, *a, **k):
+            raise RuntimeError("api down")
+
+    monkeypatch.setitem(sys.modules, "anthropic", types.SimpleNamespace(Anthropic=Boom))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+    assert rz._call_llm({"work_package_id": "x"}) is None
+    s = ReviewerService(str(tmp_path / "f.db"))
+    s.seed_demo("T")
+    assert _pending(s, "HW-101") is not None
+    s.close()
+
+
+# --- R05-09: log first; no stored decision or Apply without a record ---------------------------
+
+
+def test_r05_09_unloggable_decision_changes_nothing(svc):
+    hw = _pending(svc, "HW-103")
+    with pytest.raises(Exception):
+        svc.submit_decision("T", hw.interrupt_id, "approve", actor="\ud800")
+    assert _pending(svc, "HW-103") is not None
+    assert not [x for x in svc.list_decided() if x["work_package_id"] == "HW-103"]
+
+
+def test_r05_09_a_normal_decision_logs_request_then_outcome(svc):
+    svc.submit_decision("T", _pending(svc, "HW-103").interrupt_id, "approve", actor="a")
+    assert [e.kind for e in svc.decision_log.entries()] == ["decision_requested", "decision"]
+    assert svc.decision_log.open_requests() == []
+
+
+def test_r05_09_unloggable_apply_changes_nothing(svc, monkeypatch):
+    hw = _pending(svc, "HW-101")
+    real = svc.decision_log.append
+
+    def picky(**kw):
+        if kw["kind"] == "apply_requested":
+            raise sqlite3.OperationalError("disk full (injected)")
+        return real(**kw)
+
+    monkeypatch.setattr(svc.decision_log, "append", picky)
+    with pytest.raises(Exception):
+        svc.apply_shift_suggestion("T", hw.interrupt_id)
+    monkeypatch.undo()
+    assert _pending(svc, "HW-101") is not None
+    assert not [t for t in __import__("reviewer.registry", fromlist=["x"]).list_thread_ids(svc.db_path) if t != "T"]
+
+
+def test_r05_09_a_request_with_no_outcome_is_visible(tmp_path):
+    log = DecisionLog(str(tmp_path / "l.db"))
+    log.append(kind="decision_requested", actor="a", run_id="T", work_package_id="P", detail={"interrupt_id": "i1"})
+    log.append(kind="decision_requested", actor="a", run_id="T", work_package_id="Q", detail={"interrupt_id": "i2"})
+    log.append(kind="decision", actor="a", run_id="T", work_package_id="Q", detail={"interrupt_id": "i2", "disposition": "approved"})
+    assert [e.work_package_id for e in log.open_requests()] == ["P"]
+
+
+# --- R05-10: schedule rules that need no calendar still run -------------------------------------
+
+
+def test_r05_10_contractor_window_checked_without_a_calendar(tmp_path):
+    ds = load_carrier_dataset()
+    s = ReviewerService(str(tmp_path / "n.db"))
+    s.seed_run("T", ds.fresh_packages(), crews=ds.crews, calendar=None, certificates=ds.certificates)
+    assert _pending(s, "CONTR-109") is not None
+    s.close()
+
+
+def test_r05_10_rules_without_a_calendar_skip_only_the_calendar_rule():
+    ds = load_carrier_dataset()
+    pkgs = ds.fresh_packages() + [W.model_validate({**BASE, "work_package_id": "GHOST", "crew_id": "CR-NONE"})]
+    rules = {f.rule_id for f in check_schedule_constraints(pkgs, ds.crews, None)}
+    assert {"WS-SC-001", "WS-SC-002"} <= rules and "WS-SC-003" not in rules
+
+
+# --- R05-11: the brief never creates or empties a database --------------------------------------
+
+
+def test_r05_11_brief_refuses_a_missing_db(tmp_path):
+    missing = tmp_path / "typo.db"
+    with pytest.raises(SystemExit):
+        daily_brief.main(["--as-of", "2027-03-15T06:00", "--db", str(missing)])
+    assert not missing.exists()
+
+
+def test_r05_11_brief_refuses_a_db_without_a_decision_log(tmp_path):
+    other = tmp_path / "other.db"
+    sqlite3.connect(other).execute("CREATE TABLE t (x)").connection.close()
+    with pytest.raises(SystemExit):
+        daily_brief.main(["--as-of", "2027-03-15T06:00", "--db", str(other)])
+
+
+def test_r05_11_read_only_log_cannot_write(tmp_path):
+    path = str(tmp_path / "ro.db")
+    DecisionLog(path).close()
+    ro = DecisionLog(path, read_only=True)
+    with pytest.raises(sqlite3.OperationalError):
+        ro.append(kind="decision", actor="a", run_id="T", work_package_id="P", detail={})

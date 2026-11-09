@@ -67,6 +67,7 @@ class ApplyResult:
     message: str
     new_thread_id: str | None = None
     moves: tuple = ()  # Session 9: the moves applied, for the decision log
+    carried_rejections: tuple = ()  # review-05 R05-02: rejections kept in the successor
 
 
 UNIDENTIFIED = "unidentified reviewer"
@@ -140,7 +141,7 @@ class ReviewerService:
         self._lock_file.close()
 
     def seed_run(self, thread_id: str, packages: list[WorkPackageState], *, crews=None,
-                 calendar=None, certificates=None, label: str = "run") -> None:
+                 calendar=None, certificates=None, label: str = "run", carried_rejections=None) -> None:
         """
         Session 8b: run `packages` through the real graph, keeping an untouched copy of
         the inputs in state (`run_inputs`) so reasoning can suggest crew-shift moves and
@@ -151,6 +152,8 @@ class ReviewerService:
             "crews": [c.model_dump() for c in crews] if crews else [],
             "calendar": calendar.model_dump() if calendar else None,
             "certificates": [c.model_dump() for c in certificates] if certificates else [],
+            # review-05 R05-02: {package_id: {run, actor, note}} kept rejected by intake.
+            "carried_rejections": dict(carried_rejections or {}),
         }
         config = {"configurable": {"thread_id": thread_id}}
         self._graph.invoke(
@@ -173,10 +176,16 @@ class ReviewerService:
             try:
                 wp_id = next((r.work_package_id for r in self._pending_for(thread_id)
                               if r.interrupt_id == interrupt_id), None)
-                result = self._apply_locked(thread_id, interrupt_id)
+                def before_change() -> None:
+                    # review-05 R05-09: log first. If this can't be written, nothing changes.
+                    self.decision_log.append(kind="apply_requested", actor=_actor(actor), run_id=thread_id,
+                                             work_package_id=wp_id, detail={"interrupt_id": interrupt_id})
+
+                result = self._apply_locked(thread_id, interrupt_id, before_change)
                 if result.applied:
                     self.decision_log.append(kind="apply", actor=_actor(actor), run_id=thread_id, work_package_id=wp_id,
                                              detail={"successor": result.new_thread_id, "moves": list(result.moves),
+                                                     "carried_rejections": list(result.carried_rejections),
                                                      "interrupt_id": interrupt_id})
                 else:
                     self.decision_log.append(kind="apply_refused", actor=_actor(actor), run_id=thread_id,
@@ -202,7 +211,7 @@ class ReviewerService:
                                                      "apply_marker_left": left, "note": note})
                 raise
 
-    def _apply_locked(self, thread_id: str, interrupt_id: str) -> ApplyResult:
+    def _apply_locked(self, thread_id: str, interrupt_id: str, before_change=lambda: None) -> ApplyResult:
         """
         Session 8b. Re-run the crew-shift suggester against this run's inputs. Only if
         it returns exactly the move the brief showed:
@@ -233,6 +242,7 @@ class ReviewerService:
                 or self._closed_to_decisions(thread_id):
             return ApplyResult(False, f"Not applied: {review.work_package_id}'s review was decided, or its run "
                                       "superseded, while Apply was starting. Nothing was changed.")
+        before_change()  # review-05 R05-09: the request is on record before anything changes
         # The marker records an Apply in progress, for crash recovery and to close the run.
         if not registry.acquire_lock(self.db_path, thread_id, "apply", time.time(), successor=new_thread):
             return ApplyResult(False, f"Not applied: an Apply on run {thread_id} is already in progress.")
@@ -263,9 +273,10 @@ class ReviewerService:
                             cleared_for_execution=False)
             new_packages.append(WorkPackageState.model_validate(data))
 
+        carried = self._rejections_to_carry(thread_id, moved_ids=set(moved))
         try:
             self.seed_run(new_thread, new_packages, crews=crews, calendar=calendar, certificates=certificates,
-                          label=f"schedule change applied from {thread_id}")
+                          label=f"schedule change applied from {thread_id}", carried_rejections=carried)
         except Exception:
             # Nothing has changed yet, so reopen the old run rather than leave it closed.
             if not self.run_inputs(new_thread):
@@ -280,7 +291,27 @@ class ReviewerService:
             f"the reviews in run {thread_id} were superseded.",
             new_thread,
             tuple(m.model_dump() for m in fresh.suggestion.moves),
+            tuple(sorted(carried)),
         )
+
+    def _rejections_to_carry(self, thread_id: str, moved_ids: set[str]) -> dict:
+        """review-05 R05-02 (Donnie): a rejection stands until the package itself changes.
+        Every package rejected in the old run that Apply doesn't move keeps its rejection,
+        reviewer and note in the successor. A moved package always gets a fresh review."""
+        state = self._graph.get_state({"configurable": {"thread_id": thread_id}}).values
+        rejected = {wp.work_package_id for wp in state.get("reviewed_packages", [])
+                    if str(getattr(wp.hitl_disposition, "value", wp.hitl_disposition)) == "rejected"}
+        carried_before = (state.get("run_inputs") or {}).get("carried_rejections") or {}
+        out = {}
+        for pid in sorted(rejected - moved_ids):
+            if pid in carried_before:
+                out[pid] = carried_before[pid]
+                continue
+            entry = next((e for e in reversed(self.decision_log.entries())
+                          if e.kind == "decision" and e.run_id == thread_id and e.work_package_id == pid), None)
+            out[pid] = {"run": thread_id, "actor": entry.actor if entry else "unknown",
+                        "note": entry.detail.get("note") if entry else None}
+        return out
 
     def _close_superseded_reviews(self, thread_id: str, successor: str) -> None:
         """Reject every still-pending review in the old run, record the supersession,
@@ -433,17 +464,24 @@ class ReviewerService:
                               "(unknown, or already decided)")
                     log("decision_refused", {"reason": reason, "requested": decision, "interrupt_id": interrupt_id})
                     raise ValueError(reason)
+                # review-05 R05-09: log first. If the request can't be recorded, the graph is untouched.
+                self.decision_log.append(kind="decision_requested", actor=_actor(actor), run_id=thread_id,
+                                         work_package_id=wp_id,
+                                         detail={"requested": decision, "note": note, "interrupt_id": interrupt_id})
                 self._resume(thread_id, interrupt_id, decision, note)
                 # Session 9: record the disposition the graph actually stored, not the request.
-                disposition = next(
-                    (str(getattr(wp.hitl_disposition, "value", wp.hitl_disposition))
-                     for wp in self._graph.get_state({"configurable": {"thread_id": thread_id}}).values.get("reviewed_packages", [])
+                stored = next(
+                    (wp for wp in self._graph.get_state({"configurable": {"thread_id": thread_id}}).values.get("reviewed_packages", [])
                      if wp.work_package_id == wp_id and wp.hitl_disposition is not None),
                     None)
-                if disposition is None:
+                if stored is None:
                     # review-04 S11-01: a `decision` entry always names a stored disposition.
                     raise RuntimeError(f"the graph stored no disposition for {wp_id} after the decision was submitted")
-                log("decision", {"disposition": disposition, "note": note, "interrupt_id": interrupt_id})
+                log("decision", {"disposition": str(getattr(stored.hitl_disposition, "value", stored.hitl_disposition)),
+                                 "note": note, "interrupt_id": interrupt_id,
+                                 # review-05 R05-03: an approval doesn't clear open certificate/schedule findings.
+                                 "cleared_for_execution": stored.cleared_for_execution,
+                                 "blocked_by": list(stored.open_findings)})
             except Exception as e:
                 if not logged:
                     self.decision_log.append(kind="decision_failed", actor=_actor(actor), run_id=thread_id,

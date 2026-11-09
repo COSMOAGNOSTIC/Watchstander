@@ -25,6 +25,7 @@ from typing import Annotated, TypedDict
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, StateGraph
 
+from agent_core.intake import intake_node
 from agent_core.deconfliction import deconfliction_node
 from agent_core.hitl import hitl_gate_single_node, hitl_prepare_node, hitl_route
 from agent_core.findings_gate import findings_node
@@ -47,6 +48,7 @@ class GraphState(TypedDict):
 def build_graph(checkpointer: SqliteSaver | None = None):
     graph = StateGraph(GraphState)
 
+    graph.add_node("intake", intake_node)  # review-05 R05-01/02: nothing arrives decided
     graph.add_node("deconfliction", deconfliction_node)
     graph.add_node("judgment", judgment_node)  # review-03 S08-04
     graph.add_node("findings", findings_node)  # certificates + schedule rules reach review
@@ -54,7 +56,8 @@ def build_graph(checkpointer: SqliteSaver | None = None):
     graph.add_node("hitl_prepare", hitl_prepare_node)
     graph.add_node("hitl_gate_single", hitl_gate_single_node)
 
-    graph.set_entry_point("deconfliction")
+    graph.set_entry_point("intake")
+    graph.add_edge("intake", "deconfliction")
     graph.add_edge("deconfliction", "judgment")
     graph.add_edge("judgment", "findings")
     graph.add_edge("findings", "reasoning")

@@ -19,7 +19,7 @@ from datetime import date, time
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel, Field, StrictBool, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from agent_core.certificates import Certificate
 from agent_core.crews import Crew, ShiftCalendar
@@ -31,12 +31,14 @@ SCHEMA_VERSION = 1
 
 
 class ShiftPatternEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # review-05 R05-04
     name: str
     start: time
     end: time
 
 
 class CarrierDataset(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # review-05 R05-04
     schema_version: int
     notional: StrictBool  # Session 10: "yes" must not coerce to True
     source_note: str
@@ -65,7 +67,7 @@ class CarrierDataset(BaseModel):
             if missing:
                 raise ValueError(f"project {pr.project_id} names unknown packages: {missing}")
         for c in self.certificates:
-            if c.work_package_id not in known:
+            if c.work_package_id is not None and c.work_package_id not in known:
                 raise ValueError(f"certificate {c.certificate_id} names unknown package {c.work_package_id}")
         return self
 

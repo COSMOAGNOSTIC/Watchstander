@@ -25,9 +25,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Iterable
+from typing import Iterable, Literal, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from agent_core import named_rules
 from agent_core.intervals import uncovered
@@ -43,6 +43,9 @@ class CertificateKind(str, Enum):
     FALL_PROTECTION_PLAN = "fall_protection_plan"
     MARINE_CHEMIST_CERTIFICATE = "marine_chemist_certificate"
     COMPETENT_PERSON_INSPECTION = "competent_person_inspection"
+    # review-05 R05-05 (Donnie): working aloft is legal on an aloft chit signed by the CSOOW
+    # for the day, or a standing aloft the CO authorizes for a date range. Zones: Known Debt.
+    ALOFT_AUTHORIZATION = "aloft_authorization"
 
 
 class CertificateIssue(str, Enum):
@@ -52,11 +55,31 @@ class CertificateIssue(str, Enum):
 
 
 class Certificate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # review-05 R05-04
+
     certificate_id: NonBlankStr
-    work_package_id: NonBlankStr
+    work_package_id: Optional[NonBlankStr] = None  # None only for a ship-wide standing aloft
     kind: CertificateKind
+    form: Optional[Literal["chit", "standing"]] = None  # aloft authorization only
     valid_from: datetime
     valid_until: datetime
+
+    @model_validator(mode="after")
+    def _shape(self) -> "Certificate":
+        aloft = self.kind == CertificateKind.ALOFT_AUTHORIZATION
+        if aloft and self.form is None:
+            raise ValueError(f"{self.certificate_id}: an aloft authorization is a 'chit' or a 'standing' aloft")
+        if not aloft and self.form is not None:
+            raise ValueError(f"{self.certificate_id}: only an aloft authorization has a form")
+        standing = aloft and self.form == "standing"
+        if standing and self.work_package_id is not None:
+            raise ValueError(f"{self.certificate_id}: a standing aloft is ship-wide; it names no package")
+        if not standing and self.work_package_id is None:
+            raise ValueError(f"{self.certificate_id}: names no work package")
+        return self
+
+    def covers_package(self, pid: str) -> bool:
+        return self.work_package_id is None or self.work_package_id == pid
 
     @model_validator(mode="after")
     def _window_is_ordered(self) -> "Certificate":
@@ -83,6 +106,31 @@ def _fmt(t: datetime) -> str:
     return fmt_time(t)  # review-01 R14: seconds shown when they matter
 
 
+def required_kinds(pkg: WorkPackageState) -> set[CertificateKind]:
+    """
+    review-05 R05-05 (Donnie's call): a hazard implies its authorization, so leaving the
+    permits block out can't let hazardous work through with nothing on file.
+
+        permits_required flag ----------------------------------+
+        hot work (hazard) ------------> hot work permit --------+
+        confined space (hazard or spatial flag) -> entry permit +--[OR]--> required
+        working aloft (hazard or spatial flag) --> aloft auth --+
+
+    A fall-protection hazard implies nothing per job: the fall protection plan is the
+    ship's standing order (Donnie), so it's required only when a package asks for it.
+    """
+    from agent_core.state import HazardCategory as H
+    hz = set(pkg.hazard_categories)
+    req = {k for k in CertificateKind if getattr(pkg.permits_required, k.value)}
+    if H.HOT_WORK in hz or H.HOT_WORK.value in hz:
+        req.add(CertificateKind.HOT_WORK_PERMIT)
+    if H.CONFINED_SPACE in hz or H.CONFINED_SPACE.value in hz or pkg.spatial.is_enclosed_or_confined:
+        req.add(CertificateKind.CONFINED_SPACE_ENTRY_PERMIT)
+    if H.WORKING_ALOFT in hz or H.WORKING_ALOFT.value in hz or pkg.spatial.is_aloft:
+        req.add(CertificateKind.ALOFT_AUTHORIZATION)
+    return req
+
+
 def check_certificates(
     pkg: WorkPackageState, certificates: Iterable[Certificate]
 ) -> list[CertificateFinding]:
@@ -101,8 +149,8 @@ def check_certificates(
         seen.add(c.certificate_id)
 
     start, end = pkg.scheduled_start, pkg.scheduled_end
-    required = {k for k in CertificateKind if getattr(pkg.permits_required, k.value)}
-    mine = [c for c in certs if c.work_package_id == pkg.work_package_id and c.kind in required]
+    required = required_kinds(pkg)
+    mine = [c for c in certs if c.covers_package(pkg.work_package_id) and c.kind in required]
     # Re-check R13: check every time this call could compare *before* any sort.
     # Re-check 2 N07: only certificates of required kinds -- the only ones compared.
     require_comparable([("scheduled_start", start), ("scheduled_end", end)]
@@ -110,10 +158,10 @@ def check_certificates(
                        + [(f"{c.certificate_id}.valid_until", c.valid_until) for c in mine])
     findings: list[CertificateFinding] = []
     for kind in CertificateKind:
-        if not getattr(pkg.permits_required, kind.value):
+        if kind not in required:
             continue
         matching = sorted(
-            (c for c in certs if c.work_package_id == pkg.work_package_id and c.kind == kind),
+            (c for c in certs if c.covers_package(pkg.work_package_id) and c.kind == kind),
             key=lambda c: (instant(c.valid_from), c.certificate_id),
         )
         ids = [c.certificate_id for c in matching]

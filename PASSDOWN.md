@@ -798,3 +798,12 @@ Tested `fix-review-04` at `2cde436ff5322e09de29807139cb919dae964f8f` on `review-
 **Why:** Donnie: dates and status across the docs didn't match the repo. GitHub's per-file dates are last-commit dates and will always differ; the problem was stale text inside the docs.
 **Fixed:** README opening still described "real HAER ship drawings" (deleted in Session 10); added a README "Current status" block as the one place to check; MIGRATION header (said Sessions 1–10), Phase 4 status (said in progress; actually paused since 2026-07-24), case counts dated; ARCHITECTURE header; AOSE status said "Proposed" though it has run four review rounds.
 **Kept from recurring:** AGENTS.md rule 8 now includes the README status block; `tests/test_docs_status.py` fails if the README's date falls behind the newest PASSDOWN entry, or if the README mentions the deleted real-ship visuals.
+
+## 48. Session Notes — 2026-11-09: review-05 (Fable red team) triaged and fixed
+
+**Review:** Fable 5.2 in a separate session, `main` @ `439c4b1`, report on `review-05-redteam` @ `61d5c7c`: 11 findings (5 high, 6 medium), all reproduced by the reviewer. 548 passed, eval baseline.
+**Builder:** all 11 **CONFIRMED** with an independent probe. Fixed on `fix-review-05`.
+**Donnie's rulings:** R05-03 an approval can't clear an open certificate or schedule finding (emergency override → Known Debt). R05-02 a rejection carries into Apply's successor. R05-05 a hazard implies its authorization; aloft is an aloft chit (CSOOW, for the day) or a standing aloft (CO, date range), not the fall protection plan, which is a ship's standing order. Zones, over-the-side and site prerequisite documents are logged as Known Debt / tabled.
+**What changed:** new `agent_core/intake.py` (graph entry); `open_findings` on packages; WS-CT-006 and `aloft_authorization`; `extra="forbid"` on every input model; fire-watch key; model text kept apart (`model_explanation`); `_call_llm` catches API failures; `*_requested` log entries and `open_requests()`; crew rules without a calendar; read-only log for the brief.
+**Tests:** `tests/test_review05.py` (written failing first); older fixtures given permits via `tests/notional_permits.py`; review-04 tests count outcome entries. 596 passed; eval unchanged. Each fix mutation-tested (14 mutations, all caught). `reviews/review-05-builder-repro.py`: FIXED ×11 here, REPRODUCED/ERROR ×11 on `main`.
+**Next up:** cheaper-model re-check → merge on Donnie's go → Session 13.

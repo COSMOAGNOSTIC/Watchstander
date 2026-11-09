@@ -13,6 +13,7 @@ from agent_core.crews import Crew, ShiftCalendar
 from agent_core.reasoning import reasoning_node
 from agent_core.deconfliction import deconfliction_node
 from agent_core.state import HazardCategory as H, HitlDisposition, SpatialCoordinates as SC, WorkPackageState as W
+from notional_permits import permits_on_file
 from reviewer import app as app_module
 from reviewer import graph_driver, registry
 from reviewer.graph_driver import ReviewerService
@@ -48,7 +49,8 @@ def svc(tmp_path):
 
 
 def _seed(svc, thread="T1", pkgs=None):
-    svc.seed_run(thread, pkgs or packages(), crews=CREWS, calendar=CAL, certificates=[], label="notional run")
+    pkgs = pkgs or packages()
+    svc.seed_run(thread, pkgs, crews=CREWS, calendar=CAL, certificates=permits_on_file(pkgs), label="notional run")
     return {r.work_package_id: r for r in svc.list_pending_reviews() if r.thread_id == thread}
 
 
@@ -73,7 +75,8 @@ def test_brief_explains_when_there_is_no_suggestion(svc):
     pkgs[0] = pkgs[0].model_copy(update={"permits_required": SafetyPermitsRequired(hot_work_permit=True)})
     cert = Certificate(certificate_id="HW-1", work_package_id="WELD-1", kind=CertificateKind.HOT_WORK_PERMIT,
                        valid_from=d(7), valid_until=d(11))
-    svc.seed_run("T1", pkgs, crews=CREWS, calendar=CAL, certificates=[cert], label="notional run")
+    svc.seed_run("T1", pkgs, crews=CREWS, calendar=CAL, certificates=[cert] + permits_on_file(pkgs, exclude={"WELD-1"}),
+                 label="notional run")
     weld = next(r for r in svc.list_pending_reviews() if r.work_package_id == "WELD-1")
     assert weld.safety_brief["shift_outcome"]["suggestion"] is None
     ra = weld.safety_brief["recommended_action"]

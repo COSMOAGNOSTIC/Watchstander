@@ -304,8 +304,9 @@ def _fire_watch_capacity_conflicts(
     """
     by_watch: dict[str, list[WorkPackageState]] = defaultdict(list)
     for wp in packages:
-        if wp.fire_watch_id and HazardCategory.HOT_WORK in wp.hazard_categories:
-            by_watch[wp.fire_watch_id].append(wp)
+        key = watch_key(wp)
+        if key and HazardCategory.HOT_WORK in wp.hazard_categories:
+            by_watch[key].append(wp)
 
     violations: list[tuple[WorkPackageState, WorkPackageState, str]] = []
     for watch_id, group in by_watch.items():
@@ -378,6 +379,16 @@ def find_all_conflicts(packages: list[WorkPackageState]) -> list[WorkPackageStat
     for a, b, rationale in _fire_watch_capacity_conflicts(packages):
         _record_conflict(a, b.work_package_id, rationale)
         _record_conflict(b, a.work_package_id, rationale)
+    # review-05 R05-06: more hot workers than one watch may cover, and no watch named, is
+    # missing data that would otherwise read as safe. It routes to a person.
+    for wp in packages:
+        if (HazardCategory.HOT_WORK in wp.hazard_categories and watch_key(wp) is None
+                and wp.hot_worker_count > MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH):
+            _record_rationale(wp, (
+                f"{wp.work_package_id} has {wp.hot_worker_count} hot workers and no fire watch named; one "
+                f"watch covers at most {MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH} "
+                f"({named_rules.rule_for_fire_watch_capacity().rule_id}, NAVSEA8010-4.4.3)."
+            ))
     for watch_id, peak, overloaded in fire_watch_overloads(packages):
         for wp in overloaded:
             if not wp.conflict_rationale or f"Fire watch '{watch_id}'" not in wp.conflict_rationale:
@@ -390,9 +401,16 @@ def find_all_conflicts(packages: list[WorkPackageState]) -> list[WorkPackageStat
     return packages
 
 
+def watch_key(wp: WorkPackageState) -> str | None:
+    """review-05 R05-06: 'FW-N-1' and 'fw-n-1 ' are the same watch."""
+    k = (wp.fire_watch_id or "").strip().casefold()
+    return k or None
+
+
 def _watch_group(packages: list[WorkPackageState], watch_id: str) -> list[WorkPackageState]:
+    key = (watch_id or "").strip().casefold()
     return [wp for wp in packages
-            if wp.fire_watch_id == watch_id and HazardCategory.HOT_WORK in wp.hazard_categories]
+            if watch_key(wp) == key and HazardCategory.HOT_WORK in wp.hazard_categories]
 
 
 def _package_loads(group: list[WorkPackageState]) -> dict[int, int]:
@@ -437,8 +455,12 @@ def fire_watch_overloads(
     reports pairs, this also reports a single package that overloads its
     own fire watch. Sorted by watch ID, then package ID.
     """
-    watch_ids = sorted({wp.fire_watch_id for wp in packages
-                        if wp.fire_watch_id and HazardCategory.HOT_WORK in wp.hazard_categories})
+    # Matched by watch_key; reported with the ID as entered (first spelling, sorted).
+    spellings: dict[str, set[str]] = defaultdict(set)
+    for wp in packages:
+        if watch_key(wp) and HazardCategory.HOT_WORK in wp.hazard_categories:
+            spellings[watch_key(wp)].add(wp.fire_watch_id.strip())
+    watch_ids = sorted(min(v) for v in spellings.values())
     out = []
     for watch_id in watch_ids:
         group = _watch_group(packages, watch_id)

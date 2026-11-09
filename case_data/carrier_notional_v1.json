@@ -77,6 +77,8 @@
      "valid_from": "2027-03-15T07:00:00", "valid_until": "2027-03-15T15:30:00"},
     {"certificate_id": "N-CSE-104", "work_package_id": "CS-104", "kind": "confined_space_entry_permit",
      "valid_from": "2027-03-15T07:00:00", "valid_until": "2027-03-15T15:30:00"},
+    {"certificate_id": "N-STANDING-ALOFT", "kind": "aloft_authorization", "form": "standing",
+     "valid_from": "2027-03-14T00:00:00", "valid_until": "2027-03-18T00:00:00"},
     {"certificate_id": "N-FPP-107", "work_package_id": "FALL-107", "kind": "fall_protection_plan",
      "valid_from": "2027-03-15T07:00:00", "valid_until": "2027-03-15T12:00:00"}
   ],

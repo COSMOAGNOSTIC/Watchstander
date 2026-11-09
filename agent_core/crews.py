@@ -33,7 +33,7 @@ from enum import Enum
 from itertools import combinations
 from typing import Iterable, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import ConfigDict, BaseModel, Field, model_validator
 
 from agent_core import named_rules
 from agent_core.intervals import uncovered
@@ -42,6 +42,7 @@ from agent_core.state import WorkPackageState
 
 
 class Window(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # review-05 R05-04
     start: datetime
     end: datetime
 
@@ -54,6 +55,7 @@ class Window(BaseModel):
 
 
 class Shift(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # review-05 R05-04
     shift_id: NonBlankStr
     name: str
     start: datetime
@@ -68,6 +70,7 @@ class Shift(BaseModel):
 
 
 class ShiftCalendar(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # review-05 R05-04
     shifts: list[Shift]
 
     @model_validator(mode="after")
@@ -105,6 +108,7 @@ class ShiftCalendar(BaseModel):
 
 
 class Crew(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # review-05 R05-04
     crew_id: NonBlankStr
     name: str
     is_contractor: bool = False
@@ -157,9 +161,10 @@ def _finding(rid, issue, ids, crew_id, detail, gaps=()) -> ScheduleFinding:
 
 
 def check_schedule_constraints(
-    packages: Iterable[WorkPackageState], crews: Iterable[Crew], calendar: ShiftCalendar
+    packages: Iterable[WorkPackageState], crews: Iterable[Crew], calendar: Optional[ShiftCalendar]
 ) -> list[ScheduleFinding]:
-    """Report-only. Sorted by (rule_id, package IDs). Raises on duplicate crew or package IDs."""
+    """Report-only. Sorted by (rule_id, package IDs). Raises on duplicate crew or package IDs.
+    review-05 R05-10: with no calendar, only WS-SC-003 (needs the calendar) is skipped."""
     crew_list, pkgs = list(crews), sorted(packages, key=lambda p: p.work_package_id)
     for label, ids in (("crew_id", [c.crew_id for c in crew_list]),
                        ("work_package_id", [p.work_package_id for p in pkgs])):
@@ -167,7 +172,7 @@ def check_schedule_constraints(
         if dupes:
             raise ValueError(f"duplicate {label}: {dupes}")
     by_id = {c.crew_id: c for c in crew_list}
-    shift_windows = [(s.start, s.end) for s in calendar.shifts]
+    shift_windows = [(s.start, s.end) for s in calendar.shifts] if calendar is not None else None
     out: list[ScheduleFinding] = []
 
     for p in pkgs:
@@ -191,7 +196,7 @@ def check_schedule_constraints(
                     out.append(_finding("WS-SC-002", ScheduleIssue.OUTSIDE_CONTRACTOR_WINDOW, [pid], cid,
                                         f"outside contractor windows for {_spans(gaps)}.", gaps))
 
-        if scheduled:
+        if scheduled and shift_windows is not None:
             gaps = uncovered(p.scheduled_start, p.scheduled_end, shift_windows)
             if gaps:
                 out.append(_finding("WS-SC-003", ScheduleIssue.OUTSIDE_SHIFT_CALENDAR, [pid], cid,

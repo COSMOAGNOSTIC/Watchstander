@@ -32,6 +32,12 @@ def _route(wp, note: str) -> None:
         wp.conflict_rationale = f"{wp.conflict_rationale} | {note}"
 
 
+def _hold(wp, rule_id: str) -> None:
+    """review-05 R05-03: an open certificate or schedule finding blocks clearance even after approval."""
+    if rule_id not in wp.open_findings:
+        wp.open_findings.append(rule_id)
+
+
 def findings_node(state: dict) -> dict:
     packages = state["work_packages"]
     inputs = state.get("run_inputs") or {}
@@ -43,14 +49,18 @@ def findings_node(state: dict) -> dict:
         for f in check_certificates(wp, certificates):
             rule = named_rules.get_rule(f.rule_id)
             _route(wp, f"Finding {f.rule_id}: {f.message}. Contact: {rule.contact_role}.")
+            _hold(wp, f.rule_id)
             routed = True
 
-    if inputs.get("calendar"):
+    # review-05 R05-10: crew rules (unknown crew, contractor windows, double booking) need no
+    # calendar, so they run whenever the run has crew data; only WS-SC-003 needs the calendar.
+    if inputs.get("calendar") or inputs.get("crews"):
         crews = [Crew.model_validate(c) for c in inputs.get("crews") or []]
-        calendar = ShiftCalendar.model_validate(inputs["calendar"])
+        calendar = ShiftCalendar.model_validate(inputs["calendar"]) if inputs.get("calendar") else None
         for f in check_schedule_constraints(packages, crews, calendar):
             for pid in f.work_package_ids:
                 _route(by_id[pid], f"Finding {f.message}")
+                _hold(by_id[pid], f.rule_id)
             routed = True
 
     return {

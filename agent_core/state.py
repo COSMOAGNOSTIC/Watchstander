@@ -149,6 +149,7 @@ class SafetyPermitsRequired(BaseModel):
     fall_protection_plan: bool = False
     marine_chemist_certificate: bool = False
     competent_person_inspection: bool = False
+    aloft_authorization: bool = False  # review-05: aloft chit or standing aloft
 
 
 class SafetyBrief(BaseModel):
@@ -176,6 +177,13 @@ class SafetyBrief(BaseModel):
         "package (agent_core/shift_suggester.py, CrewShiftOutcome dumped), or None when the "
         "run carried no crew/shift calendar data. Never applied by the brief.",
     )
+    model_explanation: Optional[str] = Field(
+        default=None,
+        description="review-05 R05-07: the model's own summary, shown apart and labeled. It never "
+        "replaces executive_summary, which is always the deterministic rule and rationale.",
+    )
+    model_precedent_context: Optional[str] = Field(
+        default=None, description="review-05 R05-07: the model's account of the cited case, shown apart.")
     source: str = Field(
         description="How this brief was generated: 'llm', 'deterministic-fallback' (LLM "
         "unavailable), or 'deterministic-template' (LLM deliberately not used)"
@@ -267,6 +275,12 @@ class WorkPackageState(BaseModel):
         description="Structured record of the human reviewer's decision. "
         "None means no HITL review has happened yet for this package.",
     )
+    open_findings: list[str] = Field(
+        default_factory=list,
+        description="review-05 R05-03: certificate and schedule rule IDs still open on this package, "
+        "set by findings_node. A person's approval can't clear these (a signature doesn't make a "
+        "permit cover hours it doesn't cover); the package stays blocked until the facts change.",
+    )
     cleared_for_execution: bool = Field(
         default=True,
         description="False only when a required HITL review resulted in a "
@@ -275,7 +289,7 @@ class WorkPackageState(BaseModel):
         "must check this field before acting on a work package.",
     )
 
-    model_config = ConfigDict(use_enum_values=True)
+    model_config = ConfigDict(use_enum_values=True, extra="forbid")  # review-05 R05-04
 
     @model_validator(mode="after")
     def _fail_closed_pending_review(self) -> "WorkPackageState":

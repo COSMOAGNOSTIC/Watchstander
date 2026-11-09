@@ -30,8 +30,14 @@ def _pending(s, pid):
     return next(r for r in s.list_pending_reviews() if r.work_package_id == pid)
 
 
+def _outcomes(s):
+    # review-05 R05-09: a "*_requested" entry now precedes any attempt that reaches the graph;
+    # the review-04 promise is about outcomes: exactly one per attempt.
+    return [e for e in s.decision_log.entries() if not e.kind.endswith("_requested")]
+
+
 def _kinds(s):
-    return [e.kind for e in s.decision_log.entries()]
+    return [e.kind for e in _outcomes(s)]
 
 
 # --- S11-01: every submit_decision outcome is logged as what actually happened ---------------
@@ -40,7 +46,7 @@ def _kinds(s):
 def test_s11_01_unknown_interrupt_is_refused_and_logged(svc):
     with pytest.raises(ValueError, match="no pending review"):
         svc.submit_decision("T", "no-such-interrupt", "approve", actor="Casey Sample")
-    [e] = svc.decision_log.entries()
+    [e] = _outcomes(svc)
     assert e.kind == "decision_refused" and e.actor == "Casey Sample"
     assert "no pending review" in e.detail["reason"]
 
@@ -60,7 +66,7 @@ def test_s11_01_a_graph_error_is_logged_as_failed_and_reraised(svc, monkeypatch)
     monkeypatch.setattr(ReviewerService, "_resume", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("injected")))
     with pytest.raises(RuntimeError, match="injected"):
         svc.submit_decision("T", hw.interrupt_id, "approve", actor="Casey Sample")
-    [e] = svc.decision_log.entries()
+    [e] = _outcomes(svc)
     assert e.kind == "decision_failed" and e.work_package_id == "HW-101" and "injected" in e.detail["error"]
 
 
@@ -100,7 +106,7 @@ def test_s11_02_apply_exception_is_logged_and_survives_restart(svc, monkeypatch)
     with pytest.raises(RuntimeError, match="injected"):
         svc.apply_shift_suggestion("T", hw.interrupt_id, actor="Riley Example")
     monkeypatch.undo()
-    [e] = svc.decision_log.entries()
+    [e] = _outcomes(svc)
     assert e.kind == "apply_failed" and e.actor == "Riley Example" and e.work_package_id == "HW-101"
     assert "injected" in e.detail["error"] and e.detail["apply_marker_left"] is False
     db = svc.db_path
@@ -119,7 +125,7 @@ def test_s11_02_apply_failure_after_the_successor_exists_says_recovery_will_fini
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("crash")))
     with pytest.raises(RuntimeError):
         s.apply_shift_suggestion("T", hw.interrupt_id)
-    [e] = s.decision_log.entries()
+    [e] = _outcomes(s)
     assert e.kind == "apply_failed" and e.detail["apply_marker_left"] is True
     monkeypatch.undo()
     s.close()
@@ -190,7 +196,7 @@ def test_recheck_any_decision_fault_logs_exactly_one_failed_entry(svc, monkeypat
     except Exception:
         pass
     monkeypatch.undo()
-    entries = svc.decision_log.entries()
+    entries = _outcomes(svc)
     assert len(entries) == 1, [e.kind for e in entries]
     if entries[0].kind != "decision":  # a fault in a step the path never reached is fine
         assert entries[0].kind in ("decision_failed", "decision_refused") and entries[0].actor == "Casey Sample"
@@ -222,7 +228,17 @@ def test_recheck_first_read_failure_is_logged_and_survives_restart(svc, monkeypa
     db = svc.db_path
     svc.close()
     s2 = ReviewerService(db)
-    [e] = s2.decision_log.entries()
+    [e] = _outcomes(s2)
     assert e.kind == ("decision_failed" if op == "decide" else "apply_failed")
     assert "injected" in e.detail["error"] and e.detail["interrupt_id"] == hw.interrupt_id
     s2.close()
+
+
+def test_r05_09_every_attempt_that_reached_the_graph_has_its_request_first(svc):
+    # review-05: the request entry precedes the outcome for a decision and an Apply.
+    svc.submit_decision("T", _pending(svc, "HW-103").interrupt_id, "approve", actor="a")
+    svc.apply_shift_suggestion("T", _pending(svc, "HW-101").interrupt_id, actor="b")
+    kinds = [e.kind for e in svc.decision_log.entries()]
+    assert kinds.index("decision_requested") < kinds.index("decision")
+    assert kinds.index("apply_requested") < kinds.index("apply")
+    assert svc.decision_log.open_requests() == []
