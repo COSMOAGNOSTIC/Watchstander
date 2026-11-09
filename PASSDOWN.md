@@ -773,3 +773,7 @@ Tested `session-08-brief-apply` at `4b14cc19e8af755b553c3e81d053dfeadca99733` on
 **Tests:** `tests/test_review04.py` (11, failing first), 532 passed, eval unchanged. Each fix mutation-tested: undoing any one fails the tests. `reviews/review-04-builder-repro.py` prints FIXED/REPRODUCED/ERROR per finding (the reviewer's own script now stops at the new refusal by design).
 **Donnie's calls this session:** showcase = one-page carrier mockup from real check results, screenshots reviewed before the full build; Godot stays as an optional demo.
 **Next up:** cheaper-model re-check of these fixes → merge Sessions 9, docs-sync, 10 and these fixes (Donnie's go) → Session 12 mockup.
+
+## Review 04 re-check
+
+Tested `fix-review-04` at `2cde436ff5322e09de29807139cb919dae964f8f` on `review-04-recheck`. S11-03 confirmed fixed. S11-01 and S11-02 reopened for a shared initial checkpoint-read exception path that leaves decision and Apply attempts unlogged. Independently reproduced through restart with the log still operational. All 532 tests passed, eval matched the baseline, and the builder probes passed their original scenarios. Details are under each **Reviewer re-check** line in `reviews/review-04-session-11.md`. Hold for triage.
