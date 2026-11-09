@@ -73,7 +73,33 @@ def s11_03():
     return "isolation boundary" in text and "Electrical Supervisor" in text
 
 
-for name, fn in [("S11-01", s11_01), ("S11-02", s11_02), ("S11-03", s11_03)]:
+def _first_read_fault(op):
+    db = f"{D}/first-{op}.db"
+    s = ReviewerService(db); s.seed_demo("T")
+    hw = pending(s, "HW-101")
+    real = s._graph.get_state
+
+    def boom(*a, **k):
+        raise OSError("injected first-read failure")
+
+    s._graph.get_state = boom
+    try:
+        if op == "decide":
+            s.submit_decision("T", hw.interrupt_id, "approve", actor="a")
+        else:
+            s.apply_shift_suggestion("T", hw.interrupt_id, actor="a")
+    except OSError:
+        pass
+    finally:
+        s._graph.get_state = real
+    s.close()
+    s2 = ReviewerService(db); kinds = [e.kind for e in s2.decision_log.entries()]; s2.close()
+    return kinds == ["decision_failed" if op == "decide" else "apply_failed"]
+
+
+for name, fn in [("S11-01", s11_01), ("S11-02", s11_02), ("S11-03", s11_03),
+                 ("S11-01 re-check (first read fails)", lambda: _first_read_fault("decide")),
+                 ("S11-02 re-check (first read fails)", lambda: _first_read_fault("apply"))]:
     try:
         print(name, "FIXED" if fn() else "REPRODUCED")
     except Exception as e:  # never read an exception as a fix
