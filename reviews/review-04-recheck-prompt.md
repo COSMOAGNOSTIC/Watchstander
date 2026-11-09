@@ -15,3 +15,15 @@ Re-check the builder's fixes for review-04 in the Watchstander repo (https://git
 4. Read only the fix diff. For each finding, confirm fixed or reopen with a concrete scenario. Look especially for any `submit_decision` or `apply_shift_suggestion` outcome that still writes no log entry, writes two, or writes a kind that doesn't match what happened.
 
 Write your result under each finding's **Reviewer re-check** line in `reviews/review-04-session-11.md` (do not edit the builder's text), on a branch `review-04-recheck` cut from `fix-review-04`, and push it.
+
+
+---
+
+## Re-check 2 (S11-01 and S11-02 only)
+
+Same rules, cheaper model. **Fix under re-check:** `fix-review-04` at `a9d30e0`. Read only `git diff e084084 a9d30e0 -- reviewer/graph_driver.py tests/test_review04.py`.
+
+1. `pytest -q`, `python -m eval.run_eval`: counts and failures only.
+2. `python reviews/review-04-builder-repro.py`: all five lines should print FIXED, including the two "first read fails" scenarios.
+3. Re-run your own `get_state` OSError injection for both operations and confirm exactly one entry after restart.
+4. Confirm fixed or reopen, under each finding's **Reviewer re-check** line, on branch `review-04-recheck2` cut from `fix-review-04`.
