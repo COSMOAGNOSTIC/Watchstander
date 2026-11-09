@@ -782,3 +782,13 @@ Tested `session-08-brief-apply` at `4b14cc19e8af755b553c3e81d053dfeadca99733` on
 **Tests:** `tests/test_showcase.py` checks the snapshot equals the real checks and the page inlines exactly that snapshot. `showcase*` added to pyproject packages (plain-pytest blind spot). 534 passed.
 **Checked:** rendered in Chromium at 1280px light/dark and 400px; no console errors, no sideways scroll.
 **Next up:** Donnie reviews the mockup → full build (Sessions 13–15). Review-04 re-check still pending.
+## Review 04 re-check
+
+Tested `fix-review-04` at `2cde436ff5322e09de29807139cb919dae964f8f` on `review-04-recheck`. S11-03 confirmed fixed. S11-01 and S11-02 reopened for a shared initial checkpoint-read exception path that leaves decision and Apply attempts unlogged. Independently reproduced through restart with the log still operational. All 532 tests passed, eval matched the baseline, and the builder probes passed their original scenarios. Details are under each **Reviewer re-check** line in `reviews/review-04-session-11.md`. Hold for triage.
+
+## 45. Session Notes — 2026-11-09: review-04 re-check: S11-03 fixed, S11-01/02 reopened and fixed again
+
+**Re-check** (cheaper model at `2cde436`, pushed `review-04-recheck` @ `e084084`): 532 passed, eval baseline, all builder probes FIXED. S11-03 confirmed fixed. S11-01 and S11-02 **reopened**: a fault in the first checkpoint read, before the per-step guards, left the decision or Apply unlogged.
+**Builder:** CONFIRMED independently (OSError injected into `get_state`). Fix on `fix-review-04`: one guard wraps the whole body of each operation, so every outcome writes exactly one entry. Tests now inject a fault at six internal steps for both operations. Mutation-tested. Same lesson as reviews 01–03: the signal has to cover every path, not the reported one.
+**Donnie:** the mockup's look is approved as the base for Sessions 13–15.
+**Next up:** cheaper-model re-check 2 of S11-01/02 → merge (Donnie's go) → Session 13.

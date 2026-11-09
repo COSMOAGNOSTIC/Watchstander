@@ -165,3 +165,64 @@ def test_s11_03_every_package_needing_a_person_shows_a_rule_or_a_reason(ds_facto
     assert blocks
     for b in blocks:
         assert "WS-" in b or "Why:" in b, b
+
+
+# --- re-check: an exception at ANY step, including the first read, is logged exactly once -----
+
+_FAULT_POINTS = ["_pending_for", "_closed_to_decisions", "get_pending_review", "run_inputs", "_resume"]
+
+
+def _inject(monkeypatch, svc, point):
+    def boom(*a, **k):
+        raise OSError(f"injected at {point}")
+    if point == "get_state":
+        monkeypatch.setattr(svc._graph, "get_state", boom)
+    else:
+        monkeypatch.setattr(ReviewerService, point, boom)
+
+
+@pytest.mark.parametrize("point", ["get_state"] + _FAULT_POINTS)
+def test_recheck_any_decision_fault_logs_exactly_one_failed_entry(svc, monkeypatch, point):
+    hw = _pending(svc, "HW-101")
+    _inject(monkeypatch, svc, point)
+    try:
+        svc.submit_decision("T", hw.interrupt_id, "approve", actor="Casey Sample")
+    except Exception:
+        pass
+    monkeypatch.undo()
+    entries = svc.decision_log.entries()
+    assert len(entries) == 1, [e.kind for e in entries]
+    if entries[0].kind != "decision":  # a fault in a step the path never reached is fine
+        assert entries[0].kind in ("decision_failed", "decision_refused") and entries[0].actor == "Casey Sample"
+
+
+@pytest.mark.parametrize("point", ["get_state"] + _FAULT_POINTS)
+def test_recheck_any_apply_fault_logs_exactly_one_entry(svc, monkeypatch, point):
+    hw = _pending(svc, "HW-101")
+    _inject(monkeypatch, svc, point)
+    try:
+        svc.apply_shift_suggestion("T", hw.interrupt_id, actor="Casey Sample")
+    except Exception:
+        pass
+    monkeypatch.undo()
+    attempts = [e for e in svc.decision_log.entries() if e.kind in ("apply", "apply_refused", "apply_failed")]
+    assert len(attempts) == 1 and attempts[0].actor == "Casey Sample", [e.kind for e in svc.decision_log.entries()]
+
+
+@pytest.mark.parametrize("op", ["decide", "apply"])
+def test_recheck_first_read_failure_is_logged_and_survives_restart(svc, monkeypatch, op):
+    hw = _pending(svc, "HW-101")
+    _inject(monkeypatch, svc, "get_state")
+    with pytest.raises(OSError):
+        if op == "decide":
+            svc.submit_decision("T", hw.interrupt_id, "approve", actor="Casey Sample")
+        else:
+            svc.apply_shift_suggestion("T", hw.interrupt_id, actor="Casey Sample")
+    monkeypatch.undo()
+    db = svc.db_path
+    svc.close()
+    s2 = ReviewerService(db)
+    [e] = s2.decision_log.entries()
+    assert e.kind == ("decision_failed" if op == "decide" else "apply_failed")
+    assert "injected" in e.detail["error"] and e.detail["interrupt_id"] == hw.interrupt_id
+    s2.close()
