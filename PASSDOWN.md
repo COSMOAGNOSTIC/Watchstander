@@ -784,3 +784,10 @@ Tested `fix-review-04` at `2cde436ff5322e09de29807139cb919dae964f8f` on `review-
 **Builder:** CONFIRMED independently (OSError injected into `get_state`). Fix on `fix-review-04`: one guard wraps the whole body of each operation, so every outcome writes exactly one entry. Tests now inject a fault at six internal steps for both operations. Mutation-tested. Same lesson as reviews 01–03: the signal has to cover every path, not the reported one.
 **Donnie:** the mockup's look is approved as the base for Sessions 13–15.
 **Next up:** cheaper-model re-check 2 of S11-01/02 → merge (Donnie's go) → Session 13.
+
+## 46. Session Notes — 2026-11-09: review-04 closed; Sessions 9–11 merged to main
+
+**Re-check 2** (cheaper model at `78d2a64`, pushed `review-04-recheck2` @ `cf2a57c`): S11-01 and S11-02 confirmed fixed; first-read faults leave exactly one `decision_failed` / `apply_failed` entry after restart. 546 passed, eval 14/14 and 7/7, all five builder probes FIXED. **Review 04 closed.**
+**Merge:** per Donnie's standing go ("merge after 11 review"), `main` fast-forwarded to this commit after CI passed on it: Session 9 (decision log), docs-sync, Session 10 (notional carrier, daily brief, real-ship demo deleted), and the review-04 fixes. `session-12-showcase` is not merged (unreviewed UI work; rolls into the next review).
+**Fable 5.2:** included in Pro/Team weekly limits through Nov 16. Plan: use it as a separate reviewer session (red team of the safety engine), never as this builder.
+**Next up:** Fable red-team review (separate session) → Session 13 (live showcase).

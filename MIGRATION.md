@@ -304,8 +304,8 @@ A second build road, run as short sessions under AGENTS.md's rules (tests first,
 | 8 | Suggestions in the brief and reviewer; Apply that re-checks | ✅ 2026-11-07 | review-03 closed after five rounds (ADR-042 to ADR-046) |
 | 9 | Decision log | ✅ 2026-11-07 | ADR-047; reviewed at Session 11 |
 | 10 | Notional carrier dataset and a text daily brief | ✅ 2026-11-08 | ADR-048; now the reviewer's default demo. Reviewed at Session 11 |
-| 11 | Independent review of the engine | ⬜ next | Covers Sessions 9–10 too (review cost policy) |
-| 12–15 | Lean web UI | ⬜ | Red-team pass after these |
+| 11 | Independent review of the engine | ✅ 2026-11-09 | review-04: 3 medium findings, 2 reopened once, all confirmed fixed (ADR-050) | Covers Sessions 9–10 too (review cost policy) |
+| 12–15 | Lean web UI | 🟡 12 mockup approved (branch `session-12-showcase`) | Red-team pass after these |
 | 16 | Final review and README for recruiters | ⬜ | |
 
 ## Phase status
