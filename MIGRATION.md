@@ -3,7 +3,7 @@
 > **Goal:** From a deterministic rules-engine scaffold to a fully case-grounded, HITL-reviewed multi-agent safety system — building each phase on a verified previous phase, never freelancing ahead of the plan.
 > **Companion doc:** PASSDOWN.md covers team roles and session continuity; this file is the build road.
 > **Rule of the road:** one phase per sitting where practical, each phase ends with tests passing. Never start a phase with the previous one's Definition of Done unmet.
-> **Last updated:** 2026-11-08 (upgrade Sessions 1–10 done; see "Upgrade plan" below). Previously 2026-07-25.
+> **Last updated:** 2026-11-09 (upgrade Sessions 1–11 done and merged to `main`; Session 12 in progress; see "Upgrade plan" below). The README's "Current status" block is the short version.
 
 Phase ordering logic: **prove the deterministic core → wire it to real case data → add reasoning on top → expand coverage → make it presentable/lockable.**
 
@@ -61,7 +61,7 @@ Phase ordering logic: **prove the deterministic core → wire it to real case da
 
 ## Phase 4 — Case data expansion (in progress)
 
-- [ ] Round out to 5-10 cases per **core civilian hazard domain** — **status as of 2026-07-24: confined_space=1, hot_work=2, working_aloft=1, fall_protection=3 (7 cases across the 4 core domains, plus over_the_side=0, now explicitly out of scope — see amendment below). Not yet at target for any domain.**
+- [ ] Round out to 5-10 cases per **core civilian hazard domain** — **status as of 2026-07-24, unchanged as of 2026-11-09 (case expansion paused during the upgrade sessions): confined_space=1, hot_work=2, working_aloft=1, fall_protection=3 (7 cases across the 4 core domains, plus over_the_side=0, now explicitly out of scope — see amendment below). Not yet at target for any domain.**
 - [x] First expansion pass added 2 new verified cases: `HW-ASHTABULA-2024` (hot_work — South Marine Systems LLC, Port of Ashtabula OH, fire during welding/paint removal in a cargo hold) and `ALOFT-GUAMSHIPYARD-2022` (working_aloft — Guam Shipyard, rigger fatally struck when an overloaded crane's cable snapped). Both sourced directly from OSHA/DOL press releases, not press-summary sites.
 - [x] Continue public OSHA/DOL sourcing only — no Navy data (see PASSDOWN.md Section 7)
 - [x] **DoD amendment (architecture review, 2026-07-24):** `over_the_side` is dropped as a standalone case-citation target. Under civilian shipyard employment (29 CFR 1915), over-water fall hazards are legally captured under *Fall Protection* (Subpart I / 1915.73), not a separate OSHA case classification — standalone "over-the-side" program tracking is an underway Naval/NSTM operational convention (confirmed independently by Donnie as SME), not a civilian OSHA case pattern. Future over-water staging cases get sourced and tagged as `fall_protection`, same as any other elevated/edge-guarding case. The `OVER_THE_SIDE` flag stays in `SpatialCoordinates`/`HazardCategory` for deconfliction geometry (it's still a physically distinct condition worth flagging for spatial overlap purposes) — only the case-citation dataset's target category was dropped.
@@ -316,7 +316,7 @@ A second build road, run as short sessions under AGENTS.md's rules (tests first,
 | 1 — Case-data grounding | ✅ | 2026-07-23 |
 | 2 — Reasoning layer | ✅ | 2026-07-24 |
 | 3 — Real retrieval (RAG) | ✅ | 2026-07-24 |
-| 4 — Case data expansion | 🟡 in progress (7 cases across 4 core domains, target 5-10/domain; `over_the_side` out of scope) | |
+| 4 — Case data expansion | ⏸ paused since 2026-07-24 for the upgrade sessions (7 cases across 4 core domains, target 5-10/domain; `over_the_side` out of scope) | |
 | 5 — Digital twin readiness / live visualizer | ✅ (JSON export artifact still open) | 2026-07-25 |
 | 5.5 — External review response (graph import + HITL disposition) | ✅ | 2026-07-25 |
 | 5.75 — Evaluation harness | ✅ | 2026-07-25 |

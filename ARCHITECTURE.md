@@ -1,7 +1,7 @@
 # Watchstander — Architecture
 
 > **Status:** Living document. Update when a decision changes, a component is added/removed, or a migration phase completes.
-> **Last updated:** 2026-11-08 — Session 10 (notional carrier dataset, daily brief, real-ship demo deleted; ADR-048, ADR-049). 2026-11-07 — upgrade Sessions 1–9 (projects and the four-input status gate, certificates, named rules, judgment flags, crews and shift calendar, shift-aware suggester, brief and reviewer Apply, decision log) and reviews 01–03 recorded as ADR-035 to ADR-047; Known Debt brought up to date. Previously 2026-08-21 — reschedule suggestion, declarative hazard rules, perf benchmark (ADR-030 to ADR-034).
+> **Last updated:** 2026-11-09 — review-04 closed (ADR-050), Sessions 1–11 on `main`. 2026-11-08 — Session 10 (notional carrier dataset, daily brief, real-ship demo deleted; ADR-048, ADR-049). 2026-11-07 — upgrade Sessions 1–9 (projects and the four-input status gate, certificates, named rules, judgment flags, crews and shift calendar, shift-aware suggester, brief and reviewer Apply, decision log) and reviews 01–03 recorded as ADR-035 to ADR-047; Known Debt brought up to date. Previously 2026-08-21 — reschedule suggestion, declarative hazard rules, perf benchmark (ADR-030 to ADR-034).
 
 ## 1. Purpose and Scope
 

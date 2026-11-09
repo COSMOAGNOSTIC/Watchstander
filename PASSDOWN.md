@@ -791,3 +791,10 @@ Tested `fix-review-04` at `2cde436ff5322e09de29807139cb919dae964f8f` on `review-
 **Merge:** per Donnie's standing go ("merge after 11 review"), `main` fast-forwarded to this commit after CI passed on it: Session 9 (decision log), docs-sync, Session 10 (notional carrier, daily brief, real-ship demo deleted), and the review-04 fixes. `session-12-showcase` is not merged (unreviewed UI work; rolls into the next review).
 **Fable 5.2:** included in Pro/Team weekly limits through Nov 16. Plan: use it as a separate reviewer session (red team of the safety engine), never as this builder.
 **Next up:** Fable red-team review (separate session) → Session 13 (live showcase).
+
+## 47. Session Notes — 2026-11-09: docs status sync
+
+**Branch:** `docs-status`, from `main` @ `96b207a`. Docs and one test; no engine code. Not merged.
+**Why:** Donnie: dates and status across the docs didn't match the repo. GitHub's per-file dates are last-commit dates and will always differ; the problem was stale text inside the docs.
+**Fixed:** README opening still described "real HAER ship drawings" (deleted in Session 10); added a README "Current status" block as the one place to check; MIGRATION header (said Sessions 1–10), Phase 4 status (said in progress; actually paused since 2026-07-24), case counts dated; ARCHITECTURE header; AOSE status said "Proposed" though it has run four review rounds.
+**Kept from recurring:** AGENTS.md rule 8 now includes the README status block; `tests/test_docs_status.py` fails if the README's date falls behind the newest PASSDOWN entry, or if the README mentions the deleted real-ship visuals.

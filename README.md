@@ -7,7 +7,20 @@ A LangGraph-based multi-agent system for **OSHA 1915 (Shipyard Employment)** spa
 
 ![Work packages placed on a schematic deck plan by frame range and deck level, a flagged conflict linking two overlapping packages in red, and the Safety Review station pulsing while a human HITL decision is pending](docs/visualizer-demo.gif)
 
-Every deconfliction check, safety-brief synthesis, and HITL gate pause is broadcast as a WebSocket event ([`agent_core/events.py`](agent_core/events.py)) and rendered live in a 2D scene over real HAER ship drawings ([`visualizer/`](visualizer/README.md)) built in Godot 4 — work packages appear where their real frame range and deck level place them, conflicts draw as red links, and a flagged package visibly waits at the Safety Review station until a human decides. See [ARCHITECTURE.md](ARCHITECTURE.md) Section 8 (ADR-025, ADR-027) for how the real HAER drawings are used. The demo GIF above predates that change and still shows the earlier generated schematic.
+Every deconfliction check, safety-brief synthesis, and HITL gate pause is broadcast as a WebSocket event ([`agent_core/events.py`](agent_core/events.py)). An optional Godot 4 scene ([`visualizer/`](visualizer/README.md)) places work packages on a notional schematic by frame range and deck level, draws conflicts as red links, and shows a flagged package waiting at the Safety Review station until a person decides. The GIF above is that schematic.
+
+## Current status
+
+> **As of 2026-11-09.** This block is the one place to check where the project stands; other docs carry their own history.
+
+| | |
+|---|---|
+| On `main` | Upgrade Sessions 1–11: named rules, the four-input status gate, certificates, judgment flags, crews and shifts, the shift suggester, Apply that re-checks, the decision log, the notional carrier dataset and daily brief. 546 tests. |
+| Reviews | Four independent reviews (01–04), every finding fixed and re-checked. Details in [`reviews/`](reviews/). |
+| In progress | Session 12 web showcase (branch `session-12-showcase`, mockup approved). A red-team review of `main` is planned. |
+| Next | Sessions 13–15 make the showcase live; Session 16 is the final review and this README's rewrite. Plan and status: [MIGRATION.md](MIGRATION.md#upgrade-plan--16-sessions-started-2026-11-04). |
+| Separate | [`retrieval/`](retrieval/README.md) is a standalone hybrid-retrieval subproject, last worked on 2026-08-21, not wired into the graph. |
+
 
 ## What it does
 

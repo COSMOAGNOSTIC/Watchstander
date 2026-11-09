@@ -1,6 +1,6 @@
 # Adversarial Operational Systems Engineering (AOSE)
 
-**Status:** Proposed / Living Engineering Practice
+**Status:** In use since 2026-07 (living practice). Four review rounds under the AGENTS.md review loop so far; see `reviews/`.
 **Author:** Donnie Langford
 
 > **Operating checklist (read this first; history below).**

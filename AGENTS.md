@@ -11,7 +11,7 @@ Read this before doing anything else, every session, whatever the tool (Claude C
 5. **The model that finds a bug never writes its fix.** Reviews happen in a separate session from the build.
 6. **All demo data is notional.** No real ship, yard, or personnel data. Contacts are roles; roster names are invented and marked `notional: true`.
 7. **The LLM layer explains, never decides or suggests.** Detection, judgment flags, and fix suggestions stay deterministic.
-8. **Update `PASSDOWN.md` at the end of every session.**
+8. **Update `PASSDOWN.md` at the end of every session,** and the README's "Current status" block (its "As of" date and anything that changed). Touch a doc's "Last updated" line only when you change that doc. `tests/test_docs_status.py` fails if the README's date falls behind the newest PASSDOWN entry.
 
 ## Review loop: findings are input, not authority
 
