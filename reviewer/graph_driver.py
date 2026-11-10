@@ -26,6 +26,7 @@ from pathlib import Path
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
+from agent_core.hitl import MODEL_TEXT_FIELDS
 from agent_core.certificates import Certificate
 from agent_core.crews import Crew, ShiftCalendar
 from agent_core.decision_log import DecisionLog
@@ -396,7 +397,9 @@ class ReviewerService:
                             hazard_categories=list(value.get("hazard_categories", [])),
                             risk_level=str(value.get("risk_level", "")),
                             conflict_rationale=value.get("conflict_rationale"),
-                            safety_brief=value.get("safety_brief"),
+                            # review-05 R05-07: second guard; nothing from the model before the decision.
+                            safety_brief={k: v for k, v in (value.get("safety_brief") or {}).items()
+                                          if k not in MODEL_TEXT_FIELDS} if value.get("safety_brief") else None,
                             safety_brief_provenance=value.get("safety_brief_provenance"),
                             prompt=value.get("prompt", ""),
                         )
@@ -429,6 +432,8 @@ class ReviewerService:
                             # review-03 re-check: an approval on a replaced schedule never reads as cleared.
                             "cleared_for_execution": wp.cleared_for_execution and superseded is None,
                             "superseded_by": superseded,
+                            # review-05 R05-07: the model's words, for the record, after the decision.
+                            "model_explanation": wp.safety_brief.model_explanation if wp.safety_brief else None,
                         }
                     )
         return decided

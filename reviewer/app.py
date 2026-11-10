@@ -96,6 +96,8 @@ def dashboard(msg: str = "") -> str:
             f'&mdash; {html.escape(str(d["disposition"]))} '
             f'(cleared_for_execution={d["cleared_for_execution"]})'
             + (f' &mdash; superseded by run {html.escape(d["superseded_by"])}' if d.get("superseded_by") else "")
+            + (f'<div class="model-after"><em>Model explanation, shown after the decision (not a decision):</em> '
+               f'{html.escape(d["model_explanation"])}</div>' if d.get("model_explanation") else "")
             + '</div>'
             for d in decided
         )
@@ -143,13 +145,7 @@ def review_detail(thread_id: str, interrupt_id: str) -> HTMLResponse:
             <p><strong>Precedent context:</strong> {html.escape(b.get('precedent_context', ''))}</p>
             <p><strong>Recommended action:</strong> {html.escape(b.get('recommended_action', ''))}</p>
         """
-        if b.get("model_explanation") or b.get("model_precedent_context"):
-            # review-05 R05-07: model text sits apart from the deterministic brief, labeled.
-            brief_html += f"""
-            <div class="card" style="border-left:4px solid #999">
-              <p><strong>Model explanation (not a decision):</strong> {html.escape(b.get('model_explanation') or '')}</p>
-              <p><em>Model's account of the precedent:</em> {html.escape(b.get('model_precedent_context') or '')}</p>
-            </div>"""
+        # review-05 R05-07 (Donnie, option A): no model text before the decision.
         rejected = (b.get("shift_outcome") or {}).get("rejected") or []
         if rejected:
             # review-03 S08-05: show the evidence, not just a count.

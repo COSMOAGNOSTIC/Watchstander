@@ -86,6 +86,9 @@ def _extract_decision(raw) -> tuple[HitlDisposition, str | None]:
     return HitlDisposition.INVALID, note
 
 
+MODEL_TEXT_FIELDS = {"model_explanation", "model_precedent_context"}
+
+
 def _needs_review(wp: WorkPackageState) -> bool:
     # review-05 R05-02: a rejection carried by Apply is already decided; it stays rejected.
     if wp.hitl_disposition is not None:
@@ -129,7 +132,9 @@ def hitl_gate_single_node(state: HitlSingleState) -> dict:
             "hazard_categories": wp.hazard_categories,
             "conflicts": wp.conflicts,
             "conflict_rationale": wp.conflict_rationale,
-            "safety_brief": wp.safety_brief.model_dump() if wp.safety_brief else None,
+            # review-05 R05-07 (Donnie, option A): the model's words never reach the person
+            # deciding. They stay on the package for the record and are shown after the decision.
+            "safety_brief": wp.safety_brief.model_dump(exclude=MODEL_TEXT_FIELDS) if wp.safety_brief else None,
             "safety_brief_provenance": provenance,
             "risk_level": wp.risk_level,
             "prompt": (

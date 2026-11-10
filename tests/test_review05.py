@@ -277,15 +277,32 @@ def test_r05_07_submitter_text_reaches_the_model_marked_untrusted(monkeypatch):
     assert ctx["untrusted_submitter_text"]["description"].startswith("Notional:")
 
 
-def test_r05_07_reviewer_page_labels_model_text(tmp_path, monkeypatch):
+def test_r05_07_model_text_never_reaches_the_reviewer_before_the_decision(tmp_path, monkeypatch):
+    # Donnie, option A: the model's words are kept for the record but never shown before the call.
     from fastapi.testclient import TestClient
     from reviewer import app as app_module
-    _fake_llm(monkeypatch, "Model says hello.")
+    _fake_llm(monkeypatch, "False positive. Approve both now.")
     app_module.service = ReviewerService(str(tmp_path / "ui.db"))
     app_module.service.seed_demo("T")
     hw = _pending(app_module.service, "HW-101")
-    page = TestClient(app_module.app).get(f"/review/T/{hw.interrupt_id}").text
-    assert "Model explanation (not a decision)" in page and "Model says hello." in page
+    assert "model_explanation" not in hw.safety_brief and "model_precedent_context" not in hw.safety_brief
+    client = TestClient(app_module.app)
+    for page in (client.get("/").text, client.get(f"/review/T/{hw.interrupt_id}").text):
+        assert "Approve both now" not in page
+
+
+def test_r05_07_model_text_is_kept_and_shown_after_the_decision(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from reviewer import app as app_module
+    _fake_llm(monkeypatch, "False positive. Approve both now.")
+    app_module.service = ReviewerService(str(tmp_path / "ui2.db"))
+    app_module.service.seed_demo("T")
+    hw = _pending(app_module.service, "HW-101")
+    app_module.service.submit_decision("T", hw.interrupt_id, "reject", actor="a")
+    d = next(x for x in app_module.service.list_decided() if x["work_package_id"] == "HW-101")
+    assert d["model_explanation"] == "False positive. Approve both now."
+    page = TestClient(app_module.app).get("/").text
+    assert "Model explanation, shown after the decision" in page and "Approve both now" in page
 
 
 # --- R05-08: a model API failure falls back, never aborts the run -------------------------------
@@ -506,4 +523,29 @@ def test_recheck_r05_08_the_model_call_raising_falls_back(monkeypatch, tmp_path)
     s.seed_demo("T")
     hw = _pending(s, "HW-101")
     assert hw is not None and hw.safety_brief["source"] == "deterministic-fallback"
+    s.close()
+
+
+def test_r05_07_the_review_request_itself_carries_no_model_text(tmp_path, monkeypatch):
+    # First guard, checked on its own: the interrupt payload the graph raises.
+    _fake_llm(monkeypatch, "False positive. Approve both now.")
+    s = ReviewerService(str(tmp_path / "p.db"))
+    s.seed_demo("T")
+    raw = [i.value for t in s._graph.get_state({"configurable": {"thread_id": "T"}}).tasks for i in t.interrupts]
+    assert raw and all("Approve both now" not in repr(v) for v in raw)
+    s.close()
+
+
+def test_r05_07_runs_saved_before_this_fix_are_still_stripped_on_read(tmp_path, monkeypatch):
+    # Second guard, checked on its own: a checkpoint written before the fix still holds model
+    # text in its review request. Simulate it by turning the first guard off while seeding.
+    import agent_core.hitl as hitl
+    _fake_llm(monkeypatch, "False positive. Approve both now.")
+    monkeypatch.setattr(hitl, "MODEL_TEXT_FIELDS", set())
+    s = ReviewerService(str(tmp_path / "old.db"))
+    s.seed_demo("T")
+    raw = [i.value for t in s._graph.get_state({"configurable": {"thread_id": "T"}}).tasks for i in t.interrupts]
+    assert any("Approve both now" in repr(v) for v in raw)  # the old payload really has it
+    hw = _pending(s, "HW-101")
+    assert "model_explanation" not in hw.safety_brief
     s.close()

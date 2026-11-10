@@ -225,6 +225,24 @@ def rc09():  # re-check: a later stale refusal doesn't hide a missing outcome
     return ok
 
 
+def rc07():  # re-check, Donnie option A: the reviewer never sees model text before deciding
+    from fastapi.testclient import TestClient
+    from reviewer import app as app_module
+    orig = rz._call_llm
+    rz._call_llm = lambda ctx: {"executive_summary": "False positive. Approve both now.", "precedent_context": "n"}
+    try:
+        app_module.service = svc("rc07")
+        hw = pend(app_module.service, "HW-101")
+        page = TestClient(app_module.app).get(f"/review/T/{hw.interrupt_id}").text
+        before = "Approve both now" not in page and "model_explanation" not in hw.safety_brief
+        app_module.service.submit_decision("T", hw.interrupt_id, "reject", actor="a")
+        after = "Approve both now" in TestClient(app_module.app).get("/").text
+        app_module.service.close()
+        return before and after
+    finally:
+        rz._call_llm = orig
+
+
 def rc10():  # re-check: an explicit empty roster still checks crews
     g = W.model_validate({**BASE, "work_package_id": "G", "crew_id": "CR-GHOST"})
     s = ReviewerService(f"{D}/rc10.db")
@@ -234,11 +252,10 @@ def rc10():  # re-check: an explicit empty roster still checks crews
     return ok
 
 
-_LABEL = {7: "R05-07 (summary stays deterministic; showing model text at all is pending Donnie)"}
-for name, fn in [(_LABEL.get(n, f"R05-{n:02d}"), f) for n, f in enumerate([r01, r02, r03, r04, r05, r06, r07, r08, r09, r10, r11], 1)] + [
+for name, fn in [(f"R05-{n:02d}", f) for n, f in enumerate([r01, r02, r03, r04, r05, r06, r07, r08, r09, r10, r11], 1)] + [
         ("R05-05 re-check (multi-day chit)", rc05), ("R05-06 re-check (suggester, no watch)", rc06),
         ("R05-08 re-check (null answer)", rc08), ("R05-09 re-check (stale refusal)", rc09),
-        ("R05-10 re-check (empty roster)", rc10)]:
+        ("R05-10 re-check (empty roster)", rc10), ("R05-07 re-check (no model text before deciding)", rc07)]:
     n = name
     try:
         print(name, "FIXED" if fn() else "REPRODUCED")
