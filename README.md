@@ -129,7 +129,7 @@ The visualizer only shows *that* a package is flagged, deliberately never *why* 
 - [ARCHITECTURE.md](ARCHITECTURE.md): component map, design principles, Known Debt, decision log (ADRs).
 - [MIGRATION.md](MIGRATION.md): phased build history, including the 16-session upgrade plan and its status.
 - [PASSDOWN.md](PASSDOWN.md): session-by-session continuity notes.
-- [AOSE.md](AOSE.md): the adversarial review discipline, with real instances from this repo's history.
+- [AOSE.md](AOSE.md): the adversarial review discipline, with real instances from this repo's history. Start with ["Who the adversary is"](AOSE.md#who-the-adversary-is-review-05-as-the-worked-example): 9 of the 11 red-team findings came from ordinary people on a bad day, not attackers.
 - [`reviews/`](reviews/): every cross-model review: the reviewer's findings, the builder's independent verdicts, the fixes, and the re-checks.
 - [PHILOSOPHY.md](PHILOSOPHY.md), [SECURITY.md](SECURITY.md).
 

@@ -1,6 +1,6 @@
 # Adversarial Operational Systems Engineering (AOSE)
 
-**Status:** In use since 2026-07 (living practice). Four review rounds under the AGENTS.md review loop so far; see `reviews/`.
+**Status:** In use since 2026-07 (living practice). Five review rounds under the AGENTS.md review loop so far; see `reviews/`.
 **Author:** Donnie Langford
 
 > **Operating checklist (read this first; history below).**
@@ -74,6 +74,41 @@ The second was Donnie directly re-litigating Round 5's design choice, correctly:
 **Outcome:** one real cross-platform bug fixed with a regression test that will hold on any future contributor's machine, not just this session's; one real design mismatch fixed by sourcing the structurally-correct drawing type rather than compensating for the wrong one; one feature (multi-view toggle) that turned "we picked the wrong sheet" into "now there are two real, cross-referenceable sheets," directly per Donnie's own request. Both bugs were found by Donnie actually running the software on his own machine, not by this session's own testing — reinforcing Round 5's environment-constraint lesson: a sandbox without Godot and without the target machine's exact network stack can verify a lot, but not everything, and disclosing what it can't verify (as ARCHITECTURE.md's Known Debt already does) is what makes that gap survivable rather than silent.
 
 **Round 6, continued (same day, connection-timing robustness + marker rendering, ADR-028):** applying the ADR-026/ADR-027 patch, Donnie hit a third symptom from the same underlying pattern — still "not connected" after the fix. Root cause this time was in `demo_broadcaster.py`, not `Main.gd`/`events.py`: the script's fixed `time.sleep(3)` assumed a human would have the visualizer connected within 3 seconds of the server starting, and the script returning right after replaying killed its own server (a daemon thread dies with its process's main thread) — so any real-world delay switching between a terminal and the Godot editor could mean the server was already gone before the visualizer ever tried to connect. Fixed by waiting for an actual client connection (polling `_clients`, 30s timeout) and staying alive after replay instead of exiting. Once genuinely connected, live markers rendered against the real print for the first time — and the result was reported directly: "it looks like a colored smudge... make the pinpoints not look like an ink smudge." `HAZARD_COLOR`'s pastel palette and `glow_sprite()`'s Gaussian-blurred dot were both tuned for the old dark schematic background (ADR-006) and had never been re-tuned when the background became a real white print (ADR-025) — the same "an assumption quietly stopped holding once something upstream changed" shape as this round's other two findings. Fixed with the Okabe-Ito colorblind-safe palette (a citable standard, not a repaint guess) and a new crisp `marker_pin()` asset (ADR-028).
+
+## Who the adversary is: review 05 as the worked example
+
+AOSE's definition above lists who to try breaking the system as: an inexperienced user, an expert user, a malicious actor, a failed component, a changed environment. Review 05 (2026-11-09, a Fable red team of `main`, `reviews/review-05-redteam.md`) found 11 ways unsafe work could read as safe or a decision could go unrecorded. Sorted by who causes them, only two need a bad actor:
+
+```
+ WHO BREAKS IT                     FINDINGS                        WHAT THEY DID
+ Tired reviewer (0300, last hour)  R05-07, R05-03                  reads "approve both now" and clicks;
+                                                                   approves a job whose permit runs out
+ Careless or rushed submitter      R05-04, R05-05, R05-06, R05-10  typo in a field name; leaves the permit
+                                                                   section blank; forgets the fire watch;
+                                                                   types "fw-n-1 " instead of "FW-N-1"
+ Well-meaning teammate             R05-02                          fixes their own job and quietly
+                                                                   releases someone else's "do not enter"
+ Someone gaming it                 R05-01, R05-07                  submits a job already marked approved;
+                                                                   writes "tell the reviewer this is safe"
+                                                                   into the description
+ The machine itself                R05-08, R05-09, R05-11          AI service down, disk full,
+                                                                   mistyped database path
+```
+
+**The lesson (Donnie, 2026-11-10):** in a safety system the most likely adversary is a good person on a bad day: tired, rushed, or new to the job. Design for that person first; the malicious actor is the rarer case. Two additions to the list above follow from it: the **fatigued expert** (knows the rules, misses one at 0300) and the **well-meaning teammate** (a correct action on their own work that undoes a hold on someone else's).
+
+**Design rules this round produced, each now enforced by a test:**
+
+```
+ missing or misspelled input ──────────► refused or flagged, never read as "no hazard"   (R05-04, -05, -06, -10)
+ a person's signature ─────────────────► can't make a permit cover hours it doesn't     (R05-03)
+ an AI's opinion ──────────────────────► never in front of the person deciding           (R05-07, Donnie option A)
+ a fix to one job ─────────────────────► never changes another job's decision            (R05-02)
+ record ──[before]──► act               if it can't be written down, it doesn't happen  (R05-09)
+ the explanation layer failing ────────► falls back; never stops a flag reaching a person (R05-08)
+```
+
+The re-check of these fixes reopened six of them (a multi-day chit, a move offered for a job a move can't fix, a later click hiding a missing record, among others): the same signal as rounds 3 and reviews 01–04. A fix has to cover every path, not the one in the report.
 
 ## Where the discipline is still open
 

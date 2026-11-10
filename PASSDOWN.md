@@ -815,3 +815,4 @@ Tested `fix-review-04` at `2cde436ff5322e09de29807139cb919dae964f8f` on `review-
 **R05-07 to Donnie:** whether a model's text should be shown to the person deciding at all (rule 7).
 **Escalation:** a re-check reopened items, so per the cost policy the next re-check goes to the strongest model (Fable, included through Nov 16).
 **R05-07 ruled (Donnie, option A) and fixed:** the model's words never reach the person deciding. Stripped from the review request and again on read (for runs saved before the fix); kept for the record and shown after the decision. 614 tests.
+**AOSE write-up (Donnie's idea):** `AOSE.md` "Who the adversary is" uses review 05 as the worked example: 9 of 11 findings come from a tired, rushed or well-meaning person or a failing machine, not an attacker. Adds the fatigued expert and the well-meaning teammate to the adversary list, and the six design rules the round produced. Linked from the README.
