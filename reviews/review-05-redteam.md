@@ -68,6 +68,7 @@ The other two high findings are inputs the detectors never see: a misspelled top
 - **Disposition:** fix: a package can't arrive already decided. Input dispositions and clearance are dropped at the graph's entry and by the loader; a decision only comes from a person through the reviewer (or is carried forward by Apply, see R05-02).
 - **Fix commit / regression test:** `d85cda6` on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** **confirmed fixed.** At `92cffc29a8c7e1a06e036071333f9fda2ceeb8ad`, the preapproved critical package appears as pending in both the brief and the graph. The builder and Fable probes agree. The full suite passed 596 tests with zero failures, eval matched 14/14 conflict and 7/7 retrieval expectations, and all 11 builder probes reported FIXED.
+- **Re-check 2 (reviewer, at `09f9532`):** **still fixed.** No fix since `0a15eeb` changes this path in a way that reopens it; builder repro line prints FIXED and the suite passes. Not re-probed further.
 
 ### R05-02
 - **Verdict:** CONFIRMED
@@ -75,6 +76,7 @@ The other two high findings are inputs the detectors never see: a misspelled top
 - **Disposition:** fix (Donnie: yes). A rejection carries into the successor run and keeps the package blocked, with the original reviewer and note.
 - **Fix commit / regression test:** `d85cda6` on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** **confirmed fixed.** Rejecting CS-102 and applying HW-101’s move leaves CS-102 rejected and uncleared in the successor. The builder regression also checks the carried actor and note.
+- **Re-check 2 (reviewer, at `09f9532`):** **still fixed.** No fix since `0a15eeb` changes this path in a way that reopens it; builder repro line prints FIXED and the suite passes. Not re-probed further.
 
 ### R05-03
 - **Verdict:** CONFIRMED
@@ -82,6 +84,7 @@ The other two high findings are inputs the detectors never see: a misspelled top
 - **Disposition:** fix (Donnie: no, an approval can't clear a finding). An approval resolves conflicts and judgment flags, but can't clear certificate or schedule findings; the package stays blocked until the facts change.
 - **Fix commit / regression test:** `d85cda6` on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** **confirmed fixed.** Approving FALL-107 with WS-CT-003 leaves clearance false and the four-input status at HAS_FINDINGS. The contractor-window control also stays uncleared after approval.
+- **Re-check 2 (reviewer, at `09f9532`):** **still fixed.** No fix since `0a15eeb` changes this path in a way that reopens it; builder repro line prints FIXED and the suite passes. Not re-probed further.
 
 ### R05-04
 - **Verdict:** CONFIRMED
@@ -89,6 +92,7 @@ The other two high findings are inputs the detectors never see: a misspelled top
 - **Disposition:** fix: `extra='forbid'` on every input model (packages, crews, windows, shifts, certificates, projects, the dataset), the whole class, not only packages.
 - **Fix commit / regression test:** `d85cda6` on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** **confirmed fixed.** The builder cases and suite reject unknown keys across the covered input models. Fable’s misspelled package input stops with the expected `extra_forbidden` validation error.
+- **Re-check 2 (reviewer, at `09f9532`):** **still fixed.** No fix since `0a15eeb` changes this path in a way that reopens it; builder repro line prints FIXED and the suite passes. Not re-probed further.
 
 ### R05-05
 - **Verdict:** CONFIRMED
@@ -97,6 +101,9 @@ The other two high findings are inputs the detectors never see: a misspelled top
 - **Fix commit / regression test:** `d85cda6` on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** **reopened (high, reproduced).** The implied-permit checks now hold the original hot-work, confined-space and aloft cases. A package-specific aloft authorization with `form="chit"` covering March 15 07:00 through March 17 16:00 also validates and clears a March 16 12:00–14:00 aloft job with no review. The new form validator at `agent_core/certificates.py:68` checks scope but accepts a multi-day chit as coverage, despite WS-CT-006 distinguishing a chit for the day from a standing authorization for a date range.
 - **Builder response to re-check:** CONFIRMED (builder probe): a `form="chit"` aloft authorization valid 03-15 07:00 to 03-17 16:00 covers a 03-16 job with no finding. Fix: a chit is for the day (Donnie), so a chit longer than 24 hours is refused at load; a date range is a standing aloft. Fixed in the next commit; failing tests first (`tests/test_review05.py::test_recheck_r05_05_*`); mutation-tested; `reviews/review-05-builder-repro.py` adds a re-check line.
+- **Re-check 2 (reviewer, at `09f9532`):** **confirmed fixed (reproduced).** A `form="chit"` aloft authorization over 25 hours is refused at load; a 24-hour chit is accepted, as intended; the builder's multi-day-chit line prints FIXED. Two notes, neither a reopen:
+  - *For Donnie (policy):* "for the day" is enforced as "24 hours or less", not "one calendar day". A chit from 03-15 08:00 to 03-16 07:00 is accepted and covers an aloft job after midnight on 03-16. Is that what a CSOOW's daily chit means?
+  - *Low, fails closed:* a chit with one time-zone-aware and one naive time raises a raw `TypeError` (`can't subtract offset-naive and offset-aware datetimes`) rather than a validation error. The 24-hour check at `agent_core/certificates.py:75` runs before `require_comparable` in `_window_is_ordered`. Nothing loads, so nothing is cleared, but the person loading the data sees a traceback, not the refusal message.
 
 ### R05-06
 - **Verdict:** CONFIRMED
@@ -105,6 +112,7 @@ The other two high findings are inputs the detectors never see: a misspelled top
 - **Fix commit / regression test:** `d85cda6` on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** **reopened (medium, reproduced).** Detection now flags nine workers without a named watch and groups case/space variants correctly. A nine-worker job with a valid permit and no watch is flagged WS-FW-001 at 12:00–14:00, but the brief offers a 20:00–22:00 move and Apply accepts it. The successor flags the same WS-FW-001 and stays pending. The new missing-watch check is in `agent_core/deconfliction.py:384`, while the candidate check in `agent_core/shift_suggester.py:138` uses `fire_watch_overloads`, which excludes unnamed watches.
 - **Builder response to re-check:** CONFIRMED: with a 9-worker hot-work job and no watch named, `suggest_crew_shift` offers 20270315-SWING. Fix (whole class): the suggester rejects a candidate shift if any moved package is still flagged by any partner-less detection rule (named or unnamed fire-watch overload), using the same function detection uses. Fixed in the next commit; failing tests first (`tests/test_review05.py::test_recheck_r05_06_*`); mutation-tested; `reviews/review-05-builder-repro.py` adds a re-check line.
+- **Re-check 2 (reviewer, at `09f9532`):** **confirmed fixed.** The builder's suggester line prints FIXED and the regression tests pass. The fix diff has the crew-shift suggester (`agent_core/shift_suggester.py:154`) call `unnamed_watch_overloads`, the same function detection uses (`agent_core/deconfliction.py:384`), so the two can't disagree. Whole class: the one other candidate check, `reschedule_suggestion.suggest_reschedule` (around line 193), still checks named watches only. A search finds no caller outside tests and an old review repro, so no path reaches a person today. Noted for whoever wires it in.
 
 ### R05-07
 - **Verdict:** CONFIRMED
@@ -113,6 +121,13 @@ The other two high findings are inputs the detectors never see: a misspelled top
 - **Fix commit / regression test:** `d85cda6` on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** **reopened (medium, reproduced with a stub).** The deterministic summary and action survive as intended. Stub the model to answer “False positive. Approve both now.” The reviewer HTTP page still displays that verdict and recommendation verbatim under Model explanation. The label distinguishes the source, but the advice still reaches the deciding reviewer through `agent_core/reasoning.py:294` and `reviewer/app.py:150`.
 - **Builder response to re-check:** CONFIRMED (stub): the review page shows 'Approve both now' under Model explanation. **Donnie (2026-11-10): option A.** The model's words never reach the person deciding: they're stripped from the review request when the graph raises it, and stripped again when the reviewer reads it (covers runs saved before this fix). They stay on the package for the record and are shown, labeled, in "Recently decided" after the call. Tests: `test_r05_07_*` (each guard tested on its own); mutation-tested; `review-05-builder-repro.py` adds a re-check line.
+- **Re-check 2 (reviewer, at `09f9532`):** **reopened (medium, reproduced with a stub model).** The review page itself is clean, but model text still reaches the person deciding through the dashboard:
+  1. Stub `_call_llm` to return `executive_summary` = "False positive. Approve HW-101 now; no move needed." and seed the carrier demo.
+  2. HW-101's review payload and review page carry no model text, so the fix holds there.
+  3. Reject CS-102, HW-101's conflict partner.
+  4. `GET /` still shows HW-101 under **Awaiting review**, and the **Recently decided** row for CS-102 on the same page shows "Approve HW-101 now; no move needed." verbatim. This is the page the reviewer opens HW-101 from.
+
+  Model text for a conflict is about both packages, so showing it after the decision on one package shows it before the decision on the other. Path: `reviewer/graph_driver.py:436` (`list_decided` returns `model_explanation` for every decided package) → `reviewer/app.py:99-100`. Traced, not run, same class: after an Apply, the old run's decided rows, with their model text, sit beside the successor run's pending reviews of the same packages. `test_r05_07_model_text_is_kept_and_shown_after_the_decision` asserts the dashboard shows "Approve both now" while the partner is still pending. It tests the leak as intended behaviour, so the fix needs that test changed too. Possible fix for the builder or Donnie: show a package's model text only once every package its conflict names is decided in every live run, or only on a record page away from the queue. Repro: `reviews/review-05-recheck2-repro.py`, P1.
 
 ### R05-08
 - **Verdict:** CONFIRMED
@@ -121,6 +136,7 @@ The other two high findings are inputs the detectors never see: a misspelled top
 - **Fix commit / regression test:** `d85cda6` on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** **reopened (medium, reproduced with a stub SDK response).** Transport exceptions now fall back. Return valid JSON `null` in an otherwise successful model response. The membership check at `agent_core/reasoning.py:155` raises TypeError, aborts `seed_demo`, and leaves zero pending reviews. Returning an object with an object-valued executive summary likewise aborts with ValidationError during SafetyBrief construction at line 288.
 - **Builder response to re-check:** CONFIRMED (stub SDK): a JSON `null` body aborts `seed_demo` with TypeError; an object-valued summary aborts with ValidationError. Fix (whole class): the model's answer must be an object whose two fields are non-empty strings, or it's discarded; and any exception anywhere in the model branch of the brief falls back to the deterministic brief. Fixed in the next commit; failing tests first (`tests/test_review05.py::test_recheck_r05_08_*`); mutation-tested; `reviews/review-05-builder-repro.py` adds a re-check line.
+- **Re-check 2 (reviewer, at `09f9532`):** **confirmed fixed (reproduced with a stub).** Six malformed model answers went through the whole `seed_demo` path: JSON `null`, `[]`, `"x"`, a missing key, a blank string, and an object-valued summary. Each run seeded 9 pending reviews with no exception. Any exception in the model branch is caught at `agent_core/reasoning.py:291`. Traced observation, not a reopen: the Anthropic client is built with no timeout (`agent_core/reasoning.py:139`), so a hanging API holds the seed for the SDK's default timeout and retries for each flagged package. That slows the run but clears nothing.
 
 ### R05-09
 - **Verdict:** CONFIRMED
@@ -129,6 +145,7 @@ The other two high findings are inputs the detectors never see: a misspelled top
 - **Fix commit / regression test:** `d85cda6` on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** **reopened (medium, reproduced).** Public decision and Apply paths write the request first, and the original unloggable-actor decision leaves the graph untouched. Approve HW-103 while injecting a failure on the outcome and failure-log appends. The durable request remains and `open_requests()` initially reports it. Restore logging and submit a stale reject on that interrupt. The log then contains only `decision_requested` for the approval and `decision_refused` for the later reject. `open_requests()` returns empty because `agent_core/decision_log.py:133` matches any later outcome by run and interrupt, hiding the approval’s missing outcome.
 - **Builder response to re-check:** CONFIRMED: request logged, outcome writes failed (`open_requests()` = 1); a later stale reject on the same interrupt logged `decision_refused` and `open_requests()` dropped to 0. Fix: each outcome entry names the `request_seq` it answers, and `open_requests()` matches on that, so an unrelated later refusal can't close it. Fixed in the next commit; failing tests first (`tests/test_review05.py::test_recheck_r05_09_*`); mutation-tested; `reviews/review-05-builder-repro.py` adds a re-check line.
+- **Re-check 2 (reviewer, at `09f9532`):** **confirmed fixed (reproduced).** Re-ran the re-check 1 scenario. Approve HW-103 with the outcome and failure appends failing: `open_requests()` returns 1. Then submit a stale reject: `decision_refused` is logged, `open_requests()` still returns 1, and the chain verifies. In the diff, every outcome on both the decision and Apply paths carries `request_seq`, including the `*_failed` entries. Apply writes `apply_requested` before it claims the lock or touches the graph (`reviewer/graph_driver.py:247`). One remaining gap, traced, not a reopen: `_close_superseded_reviews` (`reviewer/graph_driver.py:323-327`) resumes each old-run review as rejected before writing its `superseded` entry, so a log fault between the two leaves a system rejection with no entry for that package. It fails safe (a rejection, not a clearance), and if the Apply outcome can't be logged either, the `apply_requested` entry stays visible in `open_requests()`.
 
 ### R05-10
 - **Verdict:** CONFIRMED
@@ -137,6 +154,7 @@ The other two high findings are inputs the detectors never see: a misspelled top
 - **Fix commit / regression test:** `d85cda6` on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** **reopened (medium, reproduced).** Contractor, unknown-crew and double-booking checks now run without a calendar when crews are nonempty. Seed a scheduled nonhazardous package assigned to CR-GHOST with explicit `crews=[]` and `calendar=None`. It passes through cleared, while calling `check_schedule_constraints` directly with the same data returns WS-SC-001. `reviewer/graph_driver.py:152` serializes omitted and explicitly empty crew lists the same way, and the truthiness guard at `agent_core/findings_gate.py:57` skips the explicit empty roster.
 - **Builder response to re-check:** CONFIRMED: `seed_run(crews=[], calendar=None)` with a package on CR-GHOST leaves it cleared. Fix: the run records whether crew data was given (`None`) or given empty (`[]`); an explicit empty roster runs the crew rules, so CR-GHOST is WS-SC-001. Fixed in the next commit; failing tests first (`tests/test_review05.py::test_recheck_r05_10_*`); mutation-tested; `reviews/review-05-builder-repro.py` adds a re-check line.
+- **Re-check 2 (reviewer, at `09f9532`):** **confirmed fixed (reproduced).** A scheduled package on CR-GHOST with `calendar=None`: `crews=[]` puts it pending (WS-SC-001); `crews=None` leaves it cleared. The `None` result is the builder's stated design (`test_recheck_r05_10_no_crew_data_at_all_still_skips_crew_rules`). It is a policy choice, not a code defect, so it is listed for Donnie rather than reopened: a package that names a crew in a run given no crew data passes with its crew never checked. Should a crew that can't be checked be a finding (fail closed, as missing schedules are), or is "no crew data" in the brief enough?
 
 ### R05-11
 - **Verdict:** CONFIRMED
@@ -144,6 +162,7 @@ The other two high findings are inputs the detectors never see: a misspelled top
 - **Disposition:** fix: the brief opens `--db` read-only and refuses a path that doesn't exist or has no decision log.
 - **Fix commit / regression test:** `d85cda6` on `fix-review-05`; `tests/test_review05.py` (R05 block for this ID); `reviews/review-05-builder-repro.py` prints FIXED here and REPRODUCED/ERROR on `main`. Mutation-tested: undoing the fix fails a test.
 - **Reviewer re-check:** **confirmed fixed.** The brief refuses a missing database or one without a decision log, and opens an existing log read-only. Fable’s script exits at the missing path with the expected refusal. The regression tests verify no file is created and writes through the read-only connection fail.
+- **Re-check 2 (reviewer, at `09f9532`):** **still fixed.** No fix since `0a15eeb` changes this path in a way that reopens it; builder repro line prints FIXED and the suite passes. Not re-probed further.
 
 ## Disputes for Donnie
 
@@ -162,3 +181,25 @@ Three findings turn on a policy call rather than a bug, so they may land here wh
 - A hazard now implies its permit (R05-05), so older fixtures that scheduled hot work with nothing on file put a notional permit on file (`tests/notional_permits.py`); their assertions are unchanged.
 - The model's text never replaces the deterministic summary (R05-07); `test_session08a.py`'s "LLM may phrase the summary" test was rewritten to the new rule.
 - The demo dataset gained a notional standing aloft so ALOFT-105 still shows only WS-OH-001.
+
+## Re-check 2 (reviewer)
+
+**Reviewer:** Claude Code (re-check 2 session, review only; no production code changed) · **Checked:** `09f9532` on `fix-review-05`, fixes read as `git diff 0a15eeb 09f9532 -- agent_core reviewer tests` · **Date:** 2026-11-10
+
+| Check | Result |
+|---|---|
+| `pip install -e ".[dev,retrieval,reviewer]"` | exit 0 (slow: the `retrieval` extra pulls the CUDA build of torch; the first attempt hit a 30-minute limit and was re-run) |
+| `pytest -q` | **614 passed**, 0 failed |
+| `python -m eval.run_eval` | 14/14 conflict scenarios match (10 domain-correct, 4 known gaps), 7/7 retrieval, fallback healthy |
+| `python reviews/review-05-builder-repro.py` | 17 of 17 lines `FIXED` |
+| `python reviews/review-05-recheck2-repro.py` (new, reviewer's probes) | P1 reproduces the R05-07 reopen; P2 to P5 as described under R05-05, 10, 09 and 08 |
+
+Environment note, same as the first review: `/root/.local/bin/pytest` (a uv tool install that can't see the editable install) comes first on `PATH`. The counts above are from `/usr/local/bin/pytest`, the one the install created.
+
+**Result:** of the six reopened in re-check 1, five are confirmed fixed (R05-05, 06, 08, 09, 10) and one is reopened again: **R05-07 (medium)**. Model text reaches the person deciding through the dashboard's "Recently decided" row for a package's already-decided conflict partner. The other five findings still hold.
+
+**Other paths looked at:** "unsafe work reads as cleared", "decision or Apply unlogged", and "model text before the decision". No new high or medium findings. Low or traced items are recorded under R05-05 (mixed-time-zone chit raises `TypeError`), R05-06 (`suggest_reschedule` is unwired and checks named watches only), R05-08 (no API timeout) and R05-09 (rejections on superseded reviews are written to the graph before the log).
+
+**For Donnie (policy, not defects):** (1) R05-05: does a daily chit mean "24 hours or less" (as built) or "one calendar day"? (2) R05-10: should a package naming a crew in a run with no crew data be a finding, or is it cleared with "no crew data" in the brief (as built)?
+
+**Merge:** hold `fix-review-05` until R05-07 is triaged (AGENTS.md: hold any merge a pending review touches).
