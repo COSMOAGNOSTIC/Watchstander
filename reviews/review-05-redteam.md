@@ -122,6 +122,7 @@ The other two high findings are inputs the detectors never see: a misspelled top
 - **Reviewer re-check:** **reopened (medium, reproduced with a stub).** The deterministic summary and action survive as intended. Stub the model to answer “False positive. Approve both now.” The reviewer HTTP page still displays that verdict and recommendation verbatim under Model explanation. The label distinguishes the source, but the advice still reaches the deciding reviewer through `agent_core/reasoning.py:294` and `reviewer/app.py:150`.
 - **Builder response to re-check:** CONFIRMED (stub): the review page shows 'Approve both now' under Model explanation. **Donnie (2026-11-10): option A.** The model's words never reach the person deciding: they're stripped from the review request when the graph raises it, and stripped again when the reviewer reads it (covers runs saved before this fix). They stay on the package for the record and are shown, labeled, in "Recently decided" after the call. Tests: `test_r05_07_*` (each guard tested on its own); mutation-tested; `review-05-builder-repro.py` adds a re-check line.
 - **Re-check 2 (reviewer, at `09f9532`):** **reopened (medium, reproduced with a stub model).** The review page itself is clean, but model text still reaches the person deciding through the dashboard:
+- **Builder response to re-check 2:** CONFIRMED independently: seeded the demo with a stubbed model saying "False positive. Approve HW-101 now.", rejected CS-102; the dashboard showed that sentence while HW-101 was pending. Fixed: a decided package's model text is shown only once nothing in its run, or in any run Apply made from it, awaits a decision (`ReviewerService._run_settled`). The builder's earlier test that expected the text after one decision was rewritten to the new rule. Tests: `test_r05_07_model_text_is_kept_and_shown_once_nothing_in_the_run_is_pending`, `test_recheck2_r05_07_*` (one decision with a pending partner; after Apply). Mutation-tested (the settled check and the successor-chain walk each caught).
   1. Stub `_call_llm` to return `executive_summary` = "False positive. Approve HW-101 now; no move needed." and seed the carrier demo.
   2. HW-101's review payload and review page carry no model text, so the fix holds there.
   3. Reject CS-102, HW-101's conflict partner.
@@ -203,3 +204,11 @@ Environment note, same as the first review: `/root/.local/bin/pytest` (a uv tool
 **For Donnie (policy, not defects):** (1) R05-05: does a daily chit mean "24 hours or less" (as built) or "one calendar day"? (2) R05-10: should a package naming a crew in a run with no crew data be a finding, or is it cleared with "no crew data" in the brief (as built)?
 
 **Merge:** hold `fix-review-05` until R05-07 is triaged (AGENTS.md: hold any merge a pending review touches).
+
+
+### Builder response to re-check 2
+
+- **R05-07:** CONFIRMED and fixed (see under R05-07).
+- **Low items:** three fixed with failing tests first, mutation-tested: a chit with mixed time-zone formats is refused with a clear message; the older `suggest_reschedule` uses the same no-watch-named check; the model call has a 30-second timeout. The fourth (Apply's supersession rejections reach the graph before their log entries; fails safe) is recorded in ARCHITECTURE.md Known Debt.
+- **Two policy questions** (a chit past midnight; a named crew with no crew data loaded) are with Donnie.
+- 619 passed; eval unchanged; `review-05-builder-repro.py` 17/17 FIXED.

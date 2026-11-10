@@ -816,3 +816,10 @@ Tested `fix-review-04` at `2cde436ff5322e09de29807139cb919dae964f8f` on `review-
 **Escalation:** a re-check reopened items, so per the cost policy the next re-check goes to the strongest model (Fable, included through Nov 16).
 **R05-07 ruled (Donnie, option A) and fixed:** the model's words never reach the person deciding. Stripped from the review request and again on read (for runs saved before the fix); kept for the record and shown after the decision. 614 tests.
 **AOSE write-up (Donnie's idea):** `AOSE.md` "Who the adversary is" uses review 05 as the worked example: 9 of 11 findings come from a tired, rushed or well-meaning person or a failing machine, not an attacker. Adds the fatigued expert and the well-meaning teammate to the adversary list, and the six design rules the round produced. Linked from the README.
+
+## 50. Session Notes — 2026-11-10: review-05 re-check 2 (Fable): 5 confirmed, R05-07 reopened and fixed
+
+**Re-check 2** (Fable 5.2, `review-05-recheck2` @ `ca7e569`, at `09f9532`): R05-05, 06, 08, 09, 10 confirmed fixed. R05-07 reopened: the dashboard's "Recently decided" row showed the model's text about a conflict pair while the partner package was still pending. Four low items; two policy questions for Donnie.
+**Builder:** R05-07 CONFIRMED; model text now shows only when the run and any run Apply made from it have nothing pending. Low items: mixed time-zone chit refused clearly; `suggest_reschedule` gains the no-watch check; model call timeout 30 s; Apply's supersession write order → Known Debt (fails safe). 619 passed; eval unchanged; each fix mutation-tested.
+**Process slip, caught:** while rewriting one test I cut a range that removed 20 others; the suite count dropping 614 → 594 showed it, and the file was restored from git before anything was committed. Lesson: check the test count after editing a test file.
+**Open for Donnie:** (1) does an aloft chit "for the day" mean any 24 hours, or one calendar day? (2) with no crew data loaded, should a package that names a crew be a finding?

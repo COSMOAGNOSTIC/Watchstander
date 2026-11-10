@@ -72,6 +72,9 @@ class Certificate(BaseModel):
         if not aloft and self.form is not None:
             raise ValueError(f"{self.certificate_id}: only an aloft authorization has a form")
         standing = aloft and self.form == "standing"
+        if aloft and self.form == "chit":
+            # re-check 2: compare only comparable times; a mixed time-zone chit is refused clearly.
+            require_comparable([("valid_from", self.valid_from), ("valid_until", self.valid_until)])
         if aloft and self.form == "chit" and instant(self.valid_until) - instant(self.valid_from) > timedelta(hours=24):
             # review-05 re-check (Donnie): a chit is signed for the day; a date range is a standing aloft.
             raise ValueError(f"{self.certificate_id}: an aloft chit covers one day (24 hours at most); "

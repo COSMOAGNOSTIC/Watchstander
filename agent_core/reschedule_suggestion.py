@@ -50,6 +50,7 @@ from agent_core.deconfliction import (
     _fire_watch_capacity_conflicts,
     check_conflict,
     fire_watch_overloads,
+    unnamed_watch_overloads,
 )
 from agent_core.state import WorkPackageState
 
@@ -192,6 +193,9 @@ def suggest_reschedule(
             candidate.work_package_id in [w.work_package_id for w in overloaded]
             for _, _, overloaded in fire_watch_overloads(trial_group)
         ):
+            continue
+        # review-05 re-check 2: same no-watch-named check as detection; a move can't fix it.
+        if candidate.work_package_id in {w.work_package_id for w in unnamed_watch_overloads(trial_group)}:
             continue
 
         return RescheduleSuggestion(

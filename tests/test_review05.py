@@ -291,21 +291,44 @@ def test_r05_07_model_text_never_reaches_the_reviewer_before_the_decision(tmp_pa
         assert "Approve both now" not in page
 
 
-def test_r05_07_model_text_is_kept_and_shown_after_the_decision(tmp_path, monkeypatch):
+def test_r05_07_model_text_is_kept_and_shown_once_nothing_in_the_run_is_pending(tmp_path, monkeypatch):
+    # re-check 2 changed this test: model text covers both packages of a conflict, so it waits
+    # until nothing in the run (or a run Apply made from it) is still awaiting a decision.
     from fastapi.testclient import TestClient
     from reviewer import app as app_module
     _fake_llm(monkeypatch, "False positive. Approve both now.")
     app_module.service = ReviewerService(str(tmp_path / "ui2.db"))
     app_module.service.seed_demo("T")
-    hw = _pending(app_module.service, "HW-101")
-    app_module.service.submit_decision("T", hw.interrupt_id, "reject", actor="a")
-    d = next(x for x in app_module.service.list_decided() if x["work_package_id"] == "HW-101")
-    assert d["model_explanation"] == "False positive. Approve both now."
-    page = TestClient(app_module.app).get("/").text
+    client = TestClient(app_module.app)
+    first, *rest = app_module.service.list_pending_reviews()
+    app_module.service.submit_decision("T", first.interrupt_id, "reject", actor="a")
+    assert "Approve both now" not in client.get("/").text  # others still pending
+    for r in rest:
+        app_module.service.submit_decision("T", r.interrupt_id, "reject", actor="a")
+    page = client.get("/").text
     assert "Model explanation, shown after the decision" in page and "Approve both now" in page
 
 
-# --- R05-08: a model API failure falls back, never aborts the run -------------------------------
+def test_recheck2_r05_07_one_decision_does_not_reveal_text_about_a_pending_partner(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from reviewer import app as app_module
+    _fake_llm(monkeypatch, "False positive. Approve HW-101 now.")
+    app_module.service = ReviewerService(str(tmp_path / "p.db"))
+    app_module.service.seed_demo("T")
+    app_module.service.submit_decision("T", _pending(app_module.service, "CS-102").interrupt_id, "reject", actor="a")
+    assert _pending(app_module.service, "HW-101") is not None
+    assert "Approve HW-101 now" not in TestClient(app_module.app).get("/").text
+    assert all(d["model_explanation"] is None for d in app_module.service.list_decided())
+
+
+def test_recheck2_r05_07_after_apply_old_run_text_waits_for_the_successor(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch, "Model view of the pair.")
+    s = ReviewerService(str(tmp_path / "a.db"))
+    s.seed_demo("T")
+    res = s.apply_shift_suggestion("T", _pending(s, "HW-101").interrupt_id, actor="a")
+    assert res.applied and any(r.thread_id == res.new_thread_id for r in s.list_pending_reviews())
+    assert all(d["model_explanation"] is None for d in s.list_decided())
+    s.close()
 
 
 def test_r05_08_api_exception_falls_back_to_deterministic(monkeypatch, tmp_path):
@@ -549,3 +572,34 @@ def test_r05_07_runs_saved_before_this_fix_are_still_stripped_on_read(tmp_path, 
     hw = _pending(s, "HW-101")
     assert "model_explanation" not in hw.safety_brief
     s.close()
+
+
+
+# --- re-check 2 low items ----------------------------------------------------------------------
+
+
+def test_recheck2_mixed_time_zones_on_a_chit_get_a_clear_refusal():
+    with pytest.raises(ValidationError, match="time zone|timezone|offset|comparable"):
+        Certificate(certificate_id="C", work_package_id="P", kind="aloft_authorization", form="chit",
+                    valid_from="2027-03-15T07:00:00+00:00", valid_until="2027-03-15T16:00:00")
+
+
+def test_recheck2_older_reschedule_suggester_also_refuses_a_job_with_no_watch_named():
+    from agent_core.reschedule_suggestion import suggest_reschedule
+    nine = W.model_validate({**BASE, "work_package_id": "NINE", "hazard_categories": ["hot_work"], "hot_worker_count": 9})
+    assert suggest_reschedule([nine], "NINE") is None
+
+
+def test_recheck2_the_model_call_has_a_timeout(monkeypatch):
+    import agent_core.reasoning as rz
+    seen = {}
+
+    class Client:
+        def __init__(self, *a, **k):
+            seen.update(k)
+            self.messages = types.SimpleNamespace(create=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+
+    monkeypatch.setitem(sys.modules, "anthropic", types.SimpleNamespace(Anthropic=Client))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+    rz._call_llm({"work_package_id": "x"})
+    assert 0 < seen.get("timeout", 0) <= 60

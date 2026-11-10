@@ -136,7 +136,7 @@ def _call_llm(context: dict) -> dict | None:
     # falls back to the deterministic brief. The explanation layer must never stop a
     # flagged package from reaching a person.
     try:
-        client = anthropic.Anthropic()
+        client = anthropic.Anthropic(timeout=30.0)  # re-check 2: a hung API can't stall a run
         response = client.messages.create(
             model="claude-sonnet-4-5",
             max_tokens=512,

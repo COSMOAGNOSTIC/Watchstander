@@ -418,6 +418,7 @@ class ReviewerService:
         decision actually reached the graph's real state, not just a UI
         acknowledgment."""
         decided: list[dict] = []
+        settled: dict[str, bool] = {}
         for thread_id in registry.list_thread_ids(self.db_path):
             config = {"configurable": {"thread_id": thread_id}}
             state = self._graph.get_state(config)
@@ -432,11 +433,25 @@ class ReviewerService:
                             # review-03 re-check: an approval on a replaced schedule never reads as cleared.
                             "cleared_for_execution": wp.cleared_for_execution and superseded is None,
                             "superseded_by": superseded,
-                            # review-05 R05-07: the model's words, for the record, after the decision.
-                            "model_explanation": wp.safety_brief.model_explanation if wp.safety_brief else None,
+                            # review-05 R05-07 (re-check 2): the model's words cover both packages of a
+                            # conflict, so they're shown only once nothing in this run, or in any run
+                            # Apply made from it, is still awaiting a decision.
+                            "model_explanation": (wp.safety_brief.model_explanation
+                                                  if wp.safety_brief and settled.setdefault(thread_id, self._run_settled(thread_id))
+                                                  else None),
                         }
                     )
         return decided
+
+    def _run_settled(self, thread_id: str) -> bool:
+        """True when nothing in this run, or in the chain of runs Apply made from it, awaits a decision."""
+        seen, t = set(), thread_id
+        while t is not None and t not in seen:
+            seen.add(t)
+            if self._pending_for(t):
+                return False
+            t = registry.superseded_by(self.db_path, t)
+        return True
 
     def submit_decision(
         self, thread_id: str, interrupt_id: str, decision: str, note: str | None = None,

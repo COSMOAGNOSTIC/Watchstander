@@ -299,6 +299,7 @@ version will require rather than warn about.
 | Aloft zones not checked | An aloft chit or standing aloft is matched by time only. Zones differ by ship (CO, CSO and maintenance officer rules) and by mast modernization, so they're left to the ship's own process for now |
 | Over-the-side authorization not modeled | Open question from review-05: does over-the-side work need the aloft authorization or its own? Not implied by any hazard yet |
 | Site prerequisite documents (tabled) | Donnie: the fall protection plan, CO's standing orders and the ship's aloft instruction are prerequisites for bringing Watchstander online for a ship. Separate discussion; nothing checks for them yet |
+| Apply's supersession rejections are written to the graph before their log entries | review-05 re-check 2 (low): a log failure between the two leaves an old-run rejection with no `superseded` entry. Fails safe (the package is rejected, never cleared); restart recovery re-runs the step |
 | `rules_audit.py` isn't called by anything yet | No rule-editing GUI exists yet, so nothing invokes `record_rule_change()` in normal operation today. A manual, deliberate edit to `case_data/hazard_rules_v1.json` (e.g. a future ADR changing the fire-watch limit) is expected to call it by hand until an editing tool exists — not enforced by code yet |
 
 ### Extraction Candidates
