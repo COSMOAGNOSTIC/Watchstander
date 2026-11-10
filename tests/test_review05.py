@@ -347,8 +347,9 @@ def test_r05_09_unloggable_apply_changes_nothing(svc, monkeypatch):
 def test_r05_09_a_request_with_no_outcome_is_visible(tmp_path):
     log = DecisionLog(str(tmp_path / "l.db"))
     log.append(kind="decision_requested", actor="a", run_id="T", work_package_id="P", detail={"interrupt_id": "i1"})
-    log.append(kind="decision_requested", actor="a", run_id="T", work_package_id="Q", detail={"interrupt_id": "i2"})
-    log.append(kind="decision", actor="a", run_id="T", work_package_id="Q", detail={"interrupt_id": "i2", "disposition": "approved"})
+    q = log.append(kind="decision_requested", actor="a", run_id="T", work_package_id="Q", detail={"interrupt_id": "i2"})
+    log.append(kind="decision", actor="a", run_id="T", work_package_id="Q",
+               detail={"interrupt_id": "i2", "disposition": "approved", "request_seq": q.seq})
     assert [e.work_package_id for e in log.open_requests()] == ["P"]
 
 
@@ -393,3 +394,116 @@ def test_r05_11_read_only_log_cannot_write(tmp_path):
     ro = DecisionLog(path, read_only=True)
     with pytest.raises(sqlite3.OperationalError):
         ro.append(kind="decision", actor="a", run_id="T", work_package_id="P", detail={})
+
+
+# --- review-05 re-check (reopened R05-05, 06, 08, 09, 10) ------------------------------------------
+
+
+def test_recheck_r05_05_a_chit_longer_than_a_day_is_refused():
+    with pytest.raises(ValidationError, match="day"):
+        Certificate(certificate_id="C", work_package_id="P", kind="aloft_authorization", form="chit",
+                    valid_from="2027-03-15T07:00:00", valid_until="2027-03-17T16:00:00")
+
+
+def test_recheck_r05_05_a_full_day_chit_and_a_multi_day_standing_aloft_are_fine():
+    Certificate(certificate_id="C", work_package_id="P", kind="aloft_authorization", form="chit",
+                valid_from="2027-03-15T07:00:00", valid_until="2027-03-16T07:00:00")
+    Certificate(certificate_id="S", work_package_id=None, kind="aloft_authorization", form="standing",
+                valid_from="2027-03-14T00:00:00", valid_until="2027-03-30T00:00:00")
+
+
+def test_recheck_r05_06_no_move_is_offered_that_leaves_the_job_flagged():
+    from agent_core.shift_suggester import suggest_crew_shift
+    ds = load_carrier_dataset()
+    nine = W.model_validate({**BASE, "work_package_id": "NINE", "hazard_categories": ["hot_work"], "hot_worker_count": 9})
+    permit = Certificate(certificate_id="HWP", work_package_id="NINE", kind="hot_work_permit",
+                         valid_from="2027-03-14T00:00:00", valid_until="2027-03-18T00:00:00")
+    out = suggest_crew_shift(ds.fresh_packages() + [nine], "NINE", crews=ds.crews, calendar=ds.calendar,
+                             certificates=ds.certificates + [permit])
+    assert out.suggestion is None
+    assert all("WS-FW-001" in r.rule_ids for r in out.rejected)
+
+
+class _Resp:
+    def __init__(self, text):
+        self.content = [types.SimpleNamespace(type="text", text=text)]
+
+
+@pytest.mark.parametrize("body", ["null", "[]", '"text"', '{"executive_summary": {"x": 1}, "precedent_context": "n"}',
+                                  '{"executive_summary": "", "precedent_context": "n"}',
+                                  '{"executive_summary": "ok", "precedent_context": 3}'])
+def test_recheck_r05_08_malformed_model_answers_fall_back(monkeypatch, tmp_path, body):
+    import agent_core.reasoning as rz
+
+    class Client:
+        def __init__(self, *a, **k):
+            self.messages = types.SimpleNamespace(create=lambda *a, **k: _Resp(body))
+
+    monkeypatch.setitem(sys.modules, "anthropic", types.SimpleNamespace(Anthropic=Client))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+    assert rz._call_llm({"work_package_id": "x"}) is None
+    s = ReviewerService(str(tmp_path / "m.db"))
+    s.seed_demo("T")
+    assert _pending(s, "HW-101") is not None
+    s.close()
+
+
+def test_recheck_r05_08_any_exception_in_the_model_branch_falls_back(monkeypatch, tmp_path):
+    import agent_core.reasoning as rz
+    monkeypatch.setattr(rz, "_call_llm", lambda ctx: {"executive_summary": object(), "precedent_context": "n"})
+    s = ReviewerService(str(tmp_path / "x.db"))
+    s.seed_demo("T")
+    hw = _pending(s, "HW-101")
+    assert hw is not None and hw.safety_brief["source"] == "deterministic-fallback"
+    s.close()
+
+
+def test_recheck_r05_09_a_later_refusal_does_not_close_an_earlier_request(svc, monkeypatch):
+    hw = _pending(svc, "HW-103")
+    real = svc.decision_log.append
+
+    def picky(**kw):
+        if kw["kind"] in ("decision", "decision_failed"):
+            raise OSError("injected")
+        return real(**kw)
+
+    monkeypatch.setattr(svc.decision_log, "append", picky)
+    with pytest.raises(OSError):
+        svc.submit_decision("T", hw.interrupt_id, "approve", actor="a")
+    monkeypatch.undo()
+    with pytest.raises(ValueError):
+        svc.submit_decision("T", hw.interrupt_id, "reject", actor="b")
+    [open_req] = svc.decision_log.open_requests()
+    assert open_req.kind == "decision_requested" and open_req.actor == "a"
+
+
+def test_recheck_r05_09_every_outcome_names_its_request(svc):
+    svc.submit_decision("T", _pending(svc, "HW-103").interrupt_id, "approve", actor="a")
+    req, out = svc.decision_log.entries()
+    assert out.detail["request_seq"] == req.seq
+
+
+def test_recheck_r05_10_an_explicit_empty_roster_still_checks_crews(tmp_path):
+    g = W.model_validate({**BASE, "work_package_id": "G", "crew_id": "CR-GHOST"})
+    s = ReviewerService(str(tmp_path / "e.db"))
+    s.seed_run("T", [g], crews=[], calendar=None, certificates=[])
+    assert _pending(s, "G") is not None
+    s.close()
+
+
+def test_recheck_r05_10_no_crew_data_at_all_still_skips_crew_rules(tmp_path):
+    g = W.model_validate({**BASE, "work_package_id": "G", "crew_id": "CR-GHOST"})
+    s = ReviewerService(str(tmp_path / "n.db"))
+    s.seed_run("T", [g], crews=None, calendar=None, certificates=[])
+    assert _pending(s, "G") is None  # no crew data given: the brief says so; nothing to check against
+    s.close()
+
+
+def test_recheck_r05_08_the_model_call_raising_falls_back(monkeypatch, tmp_path):
+    import agent_core.reasoning as rz
+    monkeypatch.setattr(rz, "_call_llm", lambda ctx: (_ for _ in ()).throw(RuntimeError("anything at all")))
+    s = ReviewerService(str(tmp_path / "r.db"))
+    s.seed_demo("T")
+    hw = _pending(s, "HW-101")
+    assert hw is not None and hw.safety_brief["source"] == "deterministic-fallback"
+    s.close()

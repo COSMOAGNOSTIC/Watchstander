@@ -23,7 +23,7 @@ that is itself a finding rather than a pass.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Iterable, Literal, Optional
 
@@ -72,6 +72,10 @@ class Certificate(BaseModel):
         if not aloft and self.form is not None:
             raise ValueError(f"{self.certificate_id}: only an aloft authorization has a form")
         standing = aloft and self.form == "standing"
+        if aloft and self.form == "chit" and instant(self.valid_until) - instant(self.valid_from) > timedelta(hours=24):
+            # review-05 re-check (Donnie): a chit is signed for the day; a date range is a standing aloft.
+            raise ValueError(f"{self.certificate_id}: an aloft chit covers one day (24 hours at most); "
+                             "use a standing aloft for a date range")
         if standing and self.work_package_id is not None:
             raise ValueError(f"{self.certificate_id}: a standing aloft is ship-wide; it names no package")
         if not standing and self.work_package_id is None:

@@ -381,14 +381,12 @@ def find_all_conflicts(packages: list[WorkPackageState]) -> list[WorkPackageStat
         _record_conflict(b, a.work_package_id, rationale)
     # review-05 R05-06: more hot workers than one watch may cover, and no watch named, is
     # missing data that would otherwise read as safe. It routes to a person.
-    for wp in packages:
-        if (HazardCategory.HOT_WORK in wp.hazard_categories and watch_key(wp) is None
-                and wp.hot_worker_count > MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH):
-            _record_rationale(wp, (
-                f"{wp.work_package_id} has {wp.hot_worker_count} hot workers and no fire watch named; one "
-                f"watch covers at most {MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH} "
-                f"({named_rules.rule_for_fire_watch_capacity().rule_id}, NAVSEA8010-4.4.3)."
-            ))
+    for wp in unnamed_watch_overloads(packages):
+        _record_rationale(wp, (
+            f"{wp.work_package_id} has {wp.hot_worker_count} hot workers and no fire watch named; one "
+            f"watch covers at most {MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH} "
+            f"({named_rules.rule_for_fire_watch_capacity().rule_id}, NAVSEA8010-4.4.3)."
+        ))
     for watch_id, peak, overloaded in fire_watch_overloads(packages):
         for wp in overloaded:
             if not wp.conflict_rationale or f"Fire watch '{watch_id}'" not in wp.conflict_rationale:
@@ -399,6 +397,14 @@ def find_all_conflicts(packages: list[WorkPackageState]) -> list[WorkPackageStat
                     f"({named_rules.rule_for_fire_watch_capacity().rule_id}, NAVSEA8010-4.4.3)."
                 ))
     return packages
+
+
+def unnamed_watch_overloads(packages: list[WorkPackageState]) -> list[WorkPackageState]:
+    """review-05 R05-06: hot work with more workers than one watch covers and no watch named.
+    One function, used by detection and by the shift suggester, so they can't disagree."""
+    return [wp for wp in packages
+            if HazardCategory.HOT_WORK in wp.hazard_categories and watch_key(wp) is None
+            and wp.hot_worker_count > MAX_CONCURRENT_HOT_WORKERS_PER_FIRE_WATCH]
 
 
 def watch_key(wp: WorkPackageState) -> str | None:

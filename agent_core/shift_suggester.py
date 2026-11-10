@@ -61,6 +61,7 @@ from agent_core.deconfliction import (
     _schedules_overlap,
     conflict_rule_ids,
     fire_watch_overloads,
+    unnamed_watch_overloads,
 )
 from agent_core.judgment import judgment_flags
 from agent_core.named_rules import rule_for_fire_watch_capacity
@@ -148,6 +149,9 @@ def _failures(trial: list[WorkPackageState], moved_ids: set[str], crews: list[Cr
                 failed.update(conflict_rule_ids(m, other))
 
     if any(moved_ids & {w.work_package_id for w in over} for _, _, over in fire_watch_overloads(trial)):
+        failed.add(rule_for_fire_watch_capacity().rule_id)
+    # review-05 re-check R05-06: a move can't fix a missing fire watch, so never offer one.
+    if moved_ids & {w.work_package_id for w in unnamed_watch_overloads(trial)}:
         failed.add(rule_for_fire_watch_capacity().rule_id)
 
     for mid in moved_ids:

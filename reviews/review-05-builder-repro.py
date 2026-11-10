@@ -157,8 +157,90 @@ def r11():
         return not os.path.exists(missing)
 
 
-for n, fn in enumerate([r01, r02, r03, r04, r05, r06, r07, r08, r09, r10, r11], start=1):
+def rc05():  # re-check: a chit longer than a day is refused
+    from agent_core.certificates import Certificate
     try:
-        print(f"R05-{n:02d}", "FIXED" if fn() else "REPRODUCED")
+        Certificate(certificate_id="C", work_package_id="P", kind="aloft_authorization", form="chit",
+                    valid_from="2027-03-15T07:00:00", valid_until="2027-03-17T16:00:00")
+        return False
+    except ValidationError:
+        return True
+
+
+def rc06():  # re-check: no move offered for a job a move can't fix
+    from agent_core.certificates import Certificate
+    from agent_core.shift_suggester import suggest_crew_shift
+    ds = load_carrier_dataset()
+    nine = W.model_validate({**BASE, "work_package_id": "NINE", "hazard_categories": ["hot_work"], "hot_worker_count": 9})
+    hwp = Certificate(certificate_id="H", work_package_id="NINE", kind="hot_work_permit",
+                      valid_from="2027-03-14T00:00:00", valid_until="2027-03-18T00:00:00")
+    return suggest_crew_shift(ds.fresh_packages() + [nine], "NINE", crews=ds.crews, calendar=ds.calendar,
+                              certificates=ds.certificates + [hwp]).suggestion is None
+
+
+def rc08():  # re-check: a JSON null answer falls back
+    class Resp:
+        content = [types.SimpleNamespace(type="text", text="null")]
+
+    class Client:
+        def __init__(self, *a, **k):
+            self.messages = types.SimpleNamespace(create=lambda *a, **k: Resp())
+    saved = sys.modules.get("anthropic")
+    sys.modules["anthropic"] = types.SimpleNamespace(Anthropic=Client)
+    os.environ["ANTHROPIC_API_KEY"] = "dummy"
+    try:
+        s = svc("rc08")
+        ok = pend(s, "HW-101") is not None
+        s.close()
+        return ok
+    finally:
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        if saved is None:
+            sys.modules.pop("anthropic", None)
+        else:
+            sys.modules["anthropic"] = saved
+
+
+def rc09():  # re-check: a later stale refusal doesn't hide a missing outcome
+    s = svc("rc09")
+    hw = pend(s, "HW-103")
+    real = s.decision_log.append
+
+    def picky(**kw):
+        if kw["kind"] in ("decision", "decision_failed"):
+            raise OSError("injected")
+        return real(**kw)
+    s.decision_log.append = picky
+    try:
+        s.submit_decision("T", hw.interrupt_id, "approve", actor="a")
+    except OSError:
+        pass
+    s.decision_log.append = real
+    try:
+        s.submit_decision("T", hw.interrupt_id, "reject", actor="b")
+    except ValueError:
+        pass
+    ok = len(s.decision_log.open_requests()) == 1
+    s.close()
+    return ok
+
+
+def rc10():  # re-check: an explicit empty roster still checks crews
+    g = W.model_validate({**BASE, "work_package_id": "G", "crew_id": "CR-GHOST"})
+    s = ReviewerService(f"{D}/rc10.db")
+    s.seed_run("T", [g], crews=[], calendar=None, certificates=[])
+    ok = pend(s, "G") is not None
+    s.close()
+    return ok
+
+
+_LABEL = {7: "R05-07 (summary stays deterministic; showing model text at all is pending Donnie)"}
+for name, fn in [(_LABEL.get(n, f"R05-{n:02d}"), f) for n, f in enumerate([r01, r02, r03, r04, r05, r06, r07, r08, r09, r10, r11], 1)] + [
+        ("R05-05 re-check (multi-day chit)", rc05), ("R05-06 re-check (suggester, no watch)", rc06),
+        ("R05-08 re-check (null answer)", rc08), ("R05-09 re-check (stale refusal)", rc09),
+        ("R05-10 re-check (empty roster)", rc10)]:
+    n = name
+    try:
+        print(name, "FIXED" if fn() else "REPRODUCED")
     except Exception as e:  # never read an exception as a fix
-        print(f"R05-{n:02d}", "ERROR", repr(e)[:160])
+        print(name, "ERROR", repr(e)[:160])

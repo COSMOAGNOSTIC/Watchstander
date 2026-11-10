@@ -54,7 +54,7 @@ def findings_node(state: dict) -> dict:
 
     # review-05 R05-10: crew rules (unknown crew, contractor windows, double booking) need no
     # calendar, so they run whenever the run has crew data; only WS-SC-003 needs the calendar.
-    if inputs.get("calendar") or inputs.get("crews"):
+    if inputs.get("calendar") or inputs.get("crews") is not None:
         crews = [Crew.model_validate(c) for c in inputs.get("crews") or []]
         calendar = ShiftCalendar.model_validate(inputs["calendar"]) if inputs.get("calendar") else None
         for f in check_schedule_constraints(packages, crews, calendar):

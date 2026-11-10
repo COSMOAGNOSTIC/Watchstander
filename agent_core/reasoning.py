@@ -152,7 +152,10 @@ def _call_llm(context: dict) -> dict | None:
     except (json.JSONDecodeError, TypeError):
         return None
 
-    if not all(key in parsed for key in _REQUIRED_LLM_KEYS):
+    # review-05 re-check R05-08: an object whose two fields are non-empty strings, or nothing.
+    if not isinstance(parsed, dict):
+        return None
+    if not all(isinstance(parsed.get(k), str) and parsed[k].strip() for k in _REQUIRED_LLM_KEYS):
         return None
     return {key: parsed[key] for key in _REQUIRED_LLM_KEYS}
 
@@ -279,7 +282,14 @@ def generate_safety_brief(wp: WorkPackageState, shift_outcome=None) -> SafetyBri
         )
 
     deterministic = _deterministic_fallback(context)
-    llm_result = _call_llm(context)
+    try:
+        llm_result = _call_llm(context)
+        # re-check: whatever came back, only two plain strings are kept.
+        if llm_result is not None and not all(isinstance(llm_result.get(k), str) and llm_result[k].strip()
+                                              for k in _REQUIRED_LLM_KEYS):
+            llm_result = None
+    except Exception:
+        llm_result = None  # the explanation layer never stops a flagged package reaching a person
     source = "llm" if llm_result is not None else "deterministic-fallback"
     # Rule 7 / review-05 R05-07: every field a reviewer acts on is deterministic, whatever the
     # model returned. Model text is kept apart, labeled as the model's explanation, never

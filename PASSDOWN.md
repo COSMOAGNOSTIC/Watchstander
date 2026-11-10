@@ -807,3 +807,10 @@ Tested `fix-review-04` at `2cde436ff5322e09de29807139cb919dae964f8f` on `review-
 **What changed:** new `agent_core/intake.py` (graph entry); `open_findings` on packages; WS-CT-006 and `aloft_authorization`; `extra="forbid"` on every input model; fire-watch key; model text kept apart (`model_explanation`); `_call_llm` catches API failures; `*_requested` log entries and `open_requests()`; crew rules without a calendar; read-only log for the brief.
 **Tests:** `tests/test_review05.py` (written failing first); older fixtures given permits via `tests/notional_permits.py`; review-04 tests count outcome entries. 596 passed; eval unchanged. Each fix mutation-tested (14 mutations, all caught). `reviews/review-05-builder-repro.py`: FIXED ×11 here, REPRODUCED/ERROR ×11 on `main`.
 **Next up:** cheaper-model re-check → merge on Donnie's go → Session 13.
+
+## 49. Session Notes — 2026-11-10: review-05 re-check: 5 confirmed, 6 reopened; 5 fixed again, 1 to Donnie
+
+**Re-check** (Codex at `92cffc2`, `review-05-recheck` @ `0a15eeb`): R05-01..04 and R05-11 confirmed fixed. R05-05..10 reopened: a multi-day aloft chit cleared next-day work; the suggester offered a move for a nine-worker job with no watch named; the review page still shows a model's verdict (labeled); a JSON `null` or non-string model answer aborted the run; a later stale refusal hid an earlier missing outcome; an explicit empty crew roster skipped crew rules.
+**Builder:** all six CONFIRMED independently. Fixed five: a chit covers at most 24 hours (date ranges are standing aloft); the suggester uses the same no-watch check as detection; the model answer must be two non-empty strings and any exception in the model branch falls back; outcomes name their `request_seq`; `crews=None` (no data) vs `[]` (empty roster) recorded separately. 611 passed; eval unchanged; each fix mutation-tested (one survivor led to a new test).
+**R05-07 to Donnie:** whether a model's text should be shown to the person deciding at all (rule 7).
+**Escalation:** a re-check reopened items, so per the cost policy the next re-check goes to the strongest model (Fable, included through Nov 16).

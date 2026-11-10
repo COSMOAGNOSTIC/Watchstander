@@ -149,7 +149,8 @@ class ReviewerService:
         """
         run_inputs = {
             "packages": [p.model_dump() for p in packages],
-            "crews": [c.model_dump() for c in crews] if crews else [],
+            # review-05 re-check R05-10: None = no crew data given; [] = an explicit empty roster.
+            "crews": [c.model_dump() for c in crews] if crews is not None else None,
             "calendar": calendar.model_dump() if calendar else None,
             "certificates": [c.model_dump() for c in certificates] if certificates else [],
             # review-05 R05-02: {package_id: {run, actor, note}} kept rejected by intake.
@@ -172,25 +173,26 @@ class ReviewerService:
         review-04 re-check: the guard covers the whole body, including the first read, so a
         fault at any step is logged (unless the log itself can't be written)."""
         with self._op_lock:  # review-03 re-check 2: one operation at a time, end to end
-            wp_id, logged = None, False
+            wp_id, logged, req = None, False, {}
             try:
                 wp_id = next((r.work_package_id for r in self._pending_for(thread_id)
                               if r.interrupt_id == interrupt_id), None)
                 def before_change() -> None:
                     # review-05 R05-09: log first. If this can't be written, nothing changes.
-                    self.decision_log.append(kind="apply_requested", actor=_actor(actor), run_id=thread_id,
-                                             work_package_id=wp_id, detail={"interrupt_id": interrupt_id})
+                    e = self.decision_log.append(kind="apply_requested", actor=_actor(actor), run_id=thread_id,
+                                                 work_package_id=wp_id, detail={"interrupt_id": interrupt_id})
+                    req["request_seq"] = e.seq  # re-check: each outcome names the request it answers
 
                 result = self._apply_locked(thread_id, interrupt_id, before_change)
                 if result.applied:
                     self.decision_log.append(kind="apply", actor=_actor(actor), run_id=thread_id, work_package_id=wp_id,
                                              detail={"successor": result.new_thread_id, "moves": list(result.moves),
                                                      "carried_rejections": list(result.carried_rejections),
-                                                     "interrupt_id": interrupt_id})
+                                                     "interrupt_id": interrupt_id, **req})
                 else:
                     self.decision_log.append(kind="apply_refused", actor=_actor(actor), run_id=thread_id,
                                              work_package_id=wp_id,
-                                             detail={"reason": result.message, "interrupt_id": interrupt_id})
+                                             detail={"reason": result.message, "interrupt_id": interrupt_id, **req})
                 logged = True
                 return result
             except Exception as e:
@@ -208,7 +210,7 @@ class ReviewerService:
                     self.decision_log.append(kind="apply_failed", actor=_actor(actor), run_id=thread_id,
                                              work_package_id=wp_id,
                                              detail={"error": repr(e), "interrupt_id": interrupt_id,
-                                                     "apply_marker_left": left, "note": note})
+                                                     "apply_marker_left": left, "note": note, **req})
                 raise
 
     def _apply_locked(self, thread_id: str, interrupt_id: str, before_change=lambda: None) -> ApplyResult:
@@ -441,12 +443,12 @@ class ReviewerService:
         # review-03 re-check 2: the check and the write happen under the service's one
         # operation lock, so no Apply can start in between.
         with self._op_lock:
-            wp_id, logged = None, False
+            wp_id, logged, req = None, False, {}
 
             def log(kind: str, detail: dict) -> None:
                 nonlocal logged
                 self.decision_log.append(kind=kind, actor=_actor(actor), run_id=thread_id,
-                                         work_package_id=wp_id, detail=detail)
+                                         work_package_id=wp_id, detail={**detail, **req})
                 logged = True
 
             try:
@@ -465,9 +467,10 @@ class ReviewerService:
                     log("decision_refused", {"reason": reason, "requested": decision, "interrupt_id": interrupt_id})
                     raise ValueError(reason)
                 # review-05 R05-09: log first. If the request can't be recorded, the graph is untouched.
-                self.decision_log.append(kind="decision_requested", actor=_actor(actor), run_id=thread_id,
-                                         work_package_id=wp_id,
-                                         detail={"requested": decision, "note": note, "interrupt_id": interrupt_id})
+                e = self.decision_log.append(kind="decision_requested", actor=_actor(actor), run_id=thread_id,
+                                             work_package_id=wp_id,
+                                             detail={"requested": decision, "note": note, "interrupt_id": interrupt_id})
+                req["request_seq"] = e.seq  # re-check: each outcome names the request it answers
                 self._resume(thread_id, interrupt_id, decision, note)
                 # Session 9: record the disposition the graph actually stored, not the request.
                 stored = next(
@@ -486,7 +489,8 @@ class ReviewerService:
                 if not logged:
                     self.decision_log.append(kind="decision_failed", actor=_actor(actor), run_id=thread_id,
                                              work_package_id=wp_id,
-                                             detail={"error": repr(e), "requested": decision, "interrupt_id": interrupt_id})
+                                             detail={"error": repr(e), "requested": decision, "interrupt_id": interrupt_id,
+                                                     **req})
                 raise
 
     def _resume(self, thread_id: str, interrupt_id: str, decision: str, note: str | None) -> None:

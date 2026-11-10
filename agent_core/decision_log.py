@@ -134,15 +134,11 @@ class DecisionLog:
         """review-05 R05-09: requests with no outcome entry after them (same run and interrupt).
         One here means the outcome couldn't be logged: check that package in the graph."""
         entries = self.entries()
-        out = []
-        for i, e in enumerate(entries):
-            if e.kind not in _OUTCOMES:
-                continue
-            key = (e.run_id, e.detail.get("interrupt_id"))
-            if not any(x.kind in _OUTCOMES[e.kind] and (x.run_id, x.detail.get("interrupt_id")) == key
-                       for x in entries[i + 1:]):
-                out.append(e)
-        return out
+        # re-check: an outcome answers the request whose seq it names, not any later entry for
+        # the same interrupt (a stale refusal must not close an earlier missing outcome).
+        answered = {x.detail.get("request_seq") for x in entries
+                    if any(x.kind in outs for outs in _OUTCOMES.values())}
+        return [e for e in entries if e.kind in _OUTCOMES and e.seq not in answered]
 
     def head(self) -> Optional[tuple[int, str]]:
         """(seq, hash) of the newest entry, or None for an empty log. Session 10: record
