@@ -75,10 +75,11 @@ class Certificate(BaseModel):
         if aloft and self.form == "chit":
             # re-check 2: compare only comparable times; a mixed time-zone chit is refused clearly.
             require_comparable([("valid_from", self.valid_from), ("valid_until", self.valid_until)])
-        if aloft and self.form == "chit" and instant(self.valid_until) - instant(self.valid_from) > timedelta(hours=24):
-            # review-05 re-check (Donnie): a chit is signed for the day; a date range is a standing aloft.
-            raise ValueError(f"{self.certificate_id}: an aloft chit covers one day (24 hours at most); "
-                             "use a standing aloft for a date range")
+        if aloft and self.form == "chit" and self.valid_from.date() != self.valid_until.date():
+            # Donnie (2026-11-11): the duty officer signs the chit for that day; aloft is secured
+            # when the work is done, at dusk at the latest. A date range is a blanket (standing) aloft.
+            raise ValueError(f"{self.certificate_id}: an aloft chit covers one calendar day; "
+                             "use a blanket (standing) aloft for a date range")
         if standing and self.work_package_id is not None:
             raise ValueError(f"{self.certificate_id}: a standing aloft is ship-wide; it names no package")
         if not standing and self.work_package_id is None:

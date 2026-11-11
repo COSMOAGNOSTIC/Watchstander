@@ -54,7 +54,10 @@ def findings_node(state: dict) -> dict:
 
     # review-05 R05-10: crew rules (unknown crew, contractor windows, double booking) need no
     # calendar, so they run whenever the run has crew data; only WS-SC-003 needs the calendar.
-    if inputs.get("calendar") or inputs.get("crews") is not None:
+    # Donnie (2026-11-11): a package that names a crew is checked even when no roster was
+    # loaded; the crew can't be verified, which is a finding, not a pass.
+    names_a_crew = any(p.crew_id for p in packages)
+    if inputs.get("calendar") or inputs.get("crews") is not None or names_a_crew:
         crews = [Crew.model_validate(c) for c in inputs.get("crews") or []]
         calendar = ShiftCalendar.model_validate(inputs["calendar"]) if inputs.get("calendar") else None
         for f in check_schedule_constraints(packages, crews, calendar):

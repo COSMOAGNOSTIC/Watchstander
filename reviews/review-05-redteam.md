@@ -212,3 +212,10 @@ Environment note, same as the first review: `/root/.local/bin/pytest` (a uv tool
 - **Low items:** three fixed with failing tests first, mutation-tested: a chit with mixed time-zone formats is refused with a clear message; the older `suggest_reschedule` uses the same no-watch-named check; the model call has a 30-second timeout. The fourth (Apply's supersession rejections reach the graph before their log entries; fails safe) is recorded in ARCHITECTURE.md Known Debt.
 - **Two policy questions** (a chit past midnight; a named crew with no crew data loaded) are with Donnie.
 - 619 passed; eval unchanged; `review-05-builder-repro.py` 17/17 FIXED.
+
+### Donnie's answers to re-check 2's policy questions (2026-11-11)
+
+1. **Aloft chit "for the day":** one **calendar day**. The duty officer signs it the morning of; aloft is secured when the work is done, at dusk at the latest. A date range is a **blanket (standing) aloft**, set case by case by the CO, CSO or CSMO. A chit that spans two dates is refused at load. (Was: up to 24 hours.)
+2. **Named crew, no roster loaded:** a **finding** (WS-SC-001, "no crew roster is loaded, so crew X can't be verified").
+
+Recorded for later, not built: zones, daylight (dawn to dusk unless the CO approves), night aloft (a planned special evolution with safety council, CO and project sign-off), per-person briefs, qualifications and harnesses, and tag-outs; see `docs/ship-force-notes.md`. Two older tests that encoded the replaced behavior were rewritten to the rulings (`test_recheck_r05_05_a_same_day_chit_*`, `test_recheck_r05_10_no_crew_data_at_all_flags_a_named_crew`); `test_findings_gate.py`'s no-calendar test now uses a package with no crew so it still tests what it says. 622 passed; eval unchanged; both changes mutation-tested; `review-05-builder-repro.py` 18/18 FIXED.

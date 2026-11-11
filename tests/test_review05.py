@@ -445,9 +445,10 @@ def test_recheck_r05_05_a_chit_longer_than_a_day_is_refused():
                     valid_from="2027-03-15T07:00:00", valid_until="2027-03-17T16:00:00")
 
 
-def test_recheck_r05_05_a_full_day_chit_and_a_multi_day_standing_aloft_are_fine():
+def test_recheck_r05_05_a_same_day_chit_and_a_multi_day_standing_aloft_are_fine():
+    # Donnie 2026-11-11: a chit is one calendar day (was: up to 24 hours).
     Certificate(certificate_id="C", work_package_id="P", kind="aloft_authorization", form="chit",
-                valid_from="2027-03-15T07:00:00", valid_until="2027-03-16T07:00:00")
+                valid_from="2027-03-15T05:00:00", valid_until="2027-03-15T20:00:00")
     Certificate(certificate_id="S", work_package_id=None, kind="aloft_authorization", form="standing",
                 valid_from="2027-03-14T00:00:00", valid_until="2027-03-30T00:00:00")
 
@@ -531,11 +532,12 @@ def test_recheck_r05_10_an_explicit_empty_roster_still_checks_crews(tmp_path):
     s.close()
 
 
-def test_recheck_r05_10_no_crew_data_at_all_still_skips_crew_rules(tmp_path):
+def test_recheck_r05_10_no_crew_data_at_all_flags_a_named_crew(tmp_path):
+    # Donnie 2026-11-11 changed this: a named crew that can't be checked is a finding.
     g = W.model_validate({**BASE, "work_package_id": "G", "crew_id": "CR-GHOST"})
     s = ReviewerService(str(tmp_path / "n.db"))
     s.seed_run("T", [g], crews=None, calendar=None, certificates=[])
-    assert _pending(s, "G") is None  # no crew data given: the brief says so; nothing to check against
+    assert _pending(s, "G") is not None
     s.close()
 
 
@@ -603,3 +605,31 @@ def test_recheck2_the_model_call_has_a_timeout(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
     rz._call_llm({"work_package_id": "x"})
     assert 0 < seen.get("timeout", 0) <= 60
+
+
+# --- Donnie's aloft and crew-roster rulings (2026-11-11) -----------------------------------------
+
+
+def test_aloft_chit_is_one_calendar_day():
+    with pytest.raises(ValidationError, match="calendar day"):
+        Certificate(certificate_id="C", work_package_id="P", kind="aloft_authorization", form="chit",
+                    valid_from="2027-03-15T08:00:00", valid_until="2027-03-16T07:00:00")
+    Certificate(certificate_id="C", work_package_id="P", kind="aloft_authorization", form="chit",
+                valid_from="2027-03-15T05:00:00", valid_until="2027-03-15T20:00:00")
+
+
+def test_a_named_crew_with_no_roster_loaded_is_a_finding(tmp_path):
+    g = W.model_validate({**BASE, "work_package_id": "G", "crew_id": "CR-GHOST"})
+    s = ReviewerService(str(tmp_path / "nr.db"))
+    s.seed_run("T", [g], crews=None, calendar=None, certificates=[])
+    r = _pending(s, "G")
+    assert r is not None and "no crew roster" in r.conflict_rationale
+    s.close()
+
+
+def test_no_crew_named_and_no_roster_is_not_a_finding(tmp_path):
+    g = W.model_validate({**BASE, "work_package_id": "G", "crew_id": None})
+    s = ReviewerService(str(tmp_path / "nn.db"))
+    s.seed_run("T", [g], crews=None, calendar=None, certificates=[])
+    assert _pending(s, "G") is None
+    s.close()

@@ -192,7 +192,7 @@
     },
     {
       "rule_id": "WS-CT-006",
-      "title": "Aloft authorization (aloft chit or standing aloft) must cover the whole work window",
+      "title": "Aloft authorization (aloft chit or blanket aloft) must cover the whole work window",
       "category": "certificate",
       "applies_to": [
         "aloft_authorization"
@@ -200,7 +200,7 @@
       "citations": [],
       "contact_role": "Combat Systems Officer of the Watch (CSOOW)",
       "escalation_role": "Commanding Officer",
-      "note": "Ship's aloft procedure (review-05, Donnie): an aloft chit signed by the CSOOW for the day, or a standing aloft the CO authorizes for a date range. Uncited until a source is verified. Zones are not checked yet (Known Debt): each ship's CO, CSO and maintenance officer set them, and masts differ by modernization."
+      "note": "Ship's aloft procedure (Donnie): an aloft chit signed by the duty officer for one calendar day, or a blanket (standing) aloft for a date range set by the CO, CSO or CSMO. Uncited until a source is verified. Not yet checked: zones, daylight (dawn to dusk unless the CO approves), night aloft, per-person briefs, qualifications and harnesses, and tag-outs; each ship's own instructions will set these."
     },
     {
       "rule_id": "WS-JF-001",

@@ -93,7 +93,8 @@ def test_double_booked_crew_sends_both_packages_to_review(svc):
 
 
 def test_without_a_calendar_schedule_rules_do_not_route(svc):
-    pending, passed = run(svc, [wp("NIGHT", start=d(20), end=d(22))], crews=None, calendar=None)
+    # No crew named: since 2026-11-11 a named crew with no roster is its own finding (Donnie).
+    pending, passed = run(svc, [wp("NIGHT", start=d(20), end=d(22), crew=None)], crews=None, calendar=None)
     assert "NIGHT" not in pending and passed["NIGHT"].cleared_for_execution
 
 

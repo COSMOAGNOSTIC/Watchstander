@@ -15,6 +15,8 @@
 - **Daylight.** Without the CO's explicit written permission, aloft runs dawn to dusk only.
 - **Securing.** Aloft is secured as soon as work on the mast and island is done for the day
   (it interferes with other ship evolutions), at dusk at the latest.
+- **Night aloft.** A special evolution (alignments, celestial work, other needs): planned ahead,
+  reviewed by a safety council, signed off by the CO and project leadership. Not modeled yet.
 - **People.** Everyone going aloft, civilian or military, must be briefed, qualified, sign in,
   and have an approved harness (ship's force harnesses from the ship; others bring approved ones).
 - **Blanket aloft.** In a yard period, once scaffolding fully envelops the mast, normal zone rules

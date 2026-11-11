@@ -824,3 +824,9 @@ Tested `fix-review-04` at `2cde436ff5322e09de29807139cb919dae964f8f` on `review-
 **Process slip, caught:** while rewriting one test I cut a range that removed 20 others; the suite count dropping 614 → 594 showed it, and the file was restored from git before anything was committed. Lesson: check the test count after editing a test file.
 **Open for Donnie:** (1) does an aloft chit "for the day" mean any 24 hours, or one calendar day? (2) with no crew data loaded, should a package that names a crew be a finding?
 **Merge-time instruction (Donnie, option 1):** when `fix-review-05` merges to `main`, squash it so the removed tag-out line in `061c9ef` never reaches `main`; then Donnie deletes `fix-review-05` on GitHub. Ship's-force notes saved in `docs/ship-force-notes.md` (future phase, not built).
+
+## 51. Session Notes — 2026-11-11: Donnie's aloft and crew-roster rulings
+
+**Rulings:** an aloft chit is one calendar day (duty officer signs the morning of; secured when work is done); a date range is a blanket (standing) aloft set by the CO, CSO or CSMO. A named crew with no roster loaded is a finding (WS-SC-001). Zones, daylight, night aloft, per-person quals and tag-outs come later from each ship's instructions (`docs/ship-force-notes.md`, Known Debt).
+**Built:** both rulings with failing tests first; two older tests rewritten to the rulings, count guarded. 622 passed; eval unchanged; mutation-tested; builder repro 18/18 FIXED.
+**Next up:** final narrow re-check (Fable, since R05-07 reopened in re-check 2) → squash-merge `fix-review-05` on Donnie's go → Donnie deletes the branch → Session 13.

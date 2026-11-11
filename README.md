@@ -11,12 +11,12 @@ Every deconfliction check, safety-brief synthesis, and HITL gate pause is broadc
 
 ## Current status
 
-> **As of 2026-11-10.** This block is the one place to check where the project stands; other docs carry their own history.
+> **As of 2026-11-11.** This block is the one place to check where the project stands; other docs carry their own history.
 
 | | |
 |---|---|
 | On `main` | Upgrade Sessions 1–11: named rules, the four-input status gate, certificates, judgment flags, crews and shifts, the shift suggester, Apply that re-checks, the decision log, the notional carrier dataset and daily brief. 546 tests. |
-| Reviews | Four independent reviews (01–04), every finding fixed and re-checked. Review 05 (red team, 11 findings): first re-check confirmed 5 and reopened 6; 5 are fixed again on branch `fix-review-05`, 1 waits on a decision, then a second re-check. Details in [`reviews/`](reviews/). |
+| Reviews | Four independent reviews (01–04), every finding fixed and re-checked. Review 05 (red team, 11 findings): two re-checks; every finding is fixed on branch `fix-review-05` and waiting for a final narrow re-check. Details in [`reviews/`](reviews/). |
 | In progress | Review 05 fixes (second re-check pending); Session 12 web showcase (branch `session-12-showcase`, mockup approved). |
 | Next | Sessions 13–15 make the showcase live; Session 16 is the final review and this README's rewrite. Plan and status: [MIGRATION.md](MIGRATION.md#upgrade-plan--16-sessions-started-2026-11-04). |
 | Separate | [`retrieval/`](retrieval/README.md) is a standalone hybrid-retrieval subproject, last worked on 2026-08-21, not wired into the graph. |

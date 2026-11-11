@@ -181,8 +181,9 @@ def check_schedule_constraints(
         crew = by_id.get(cid) if cid else None
 
         if cid and crew is None:
-            out.append(_finding("WS-SC-001", ScheduleIssue.UNKNOWN_CREW, [pid], cid,
-                                f"crew {cid!r} is not in the crew list."))
+            detail = (f"crew {cid!r} is not in the crew list." if crew_list
+                      else f"no crew roster is loaded, so crew {cid!r} can't be verified.")
+            out.append(_finding("WS-SC-001", ScheduleIssue.UNKNOWN_CREW, [pid], cid, detail))
 
         if crew is not None and crew.is_contractor:
             if not scheduled:

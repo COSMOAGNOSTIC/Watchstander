@@ -157,7 +157,7 @@ def r11():
         return not os.path.exists(missing)
 
 
-def rc05():  # re-check: a chit longer than a day is refused
+def rc05():  # re-check: a chit that spans more than one calendar day is refused
     from agent_core.certificates import Certificate
     try:
         Certificate(certificate_id="C", work_package_id="P", kind="aloft_authorization", form="chit",
@@ -236,11 +236,24 @@ def rc07():  # re-check, Donnie option A: the reviewer never sees model text bef
         page = TestClient(app_module.app).get(f"/review/T/{hw.interrupt_id}").text
         before = "Approve both now" not in page and "model_explanation" not in hw.safety_brief
         app_module.service.submit_decision("T", hw.interrupt_id, "reject", actor="a")
-        after = "Approve both now" in TestClient(app_module.app).get("/").text
+        # re-check 2: still hidden while other packages in the run are pending
+        partial = "Approve both now" not in TestClient(app_module.app).get("/").text
+        for r in app_module.service.list_pending_reviews():
+            app_module.service.submit_decision(r.thread_id, r.interrupt_id, "reject", actor="a")
+        after = partial and "Approve both now" in TestClient(app_module.app).get("/").text
         app_module.service.close()
         return before and after
     finally:
         rz._call_llm = orig
+
+
+def rc_roster():  # Donnie 2026-11-11: a named crew with no roster loaded is a finding
+    g = W.model_validate({**BASE, "work_package_id": "G", "crew_id": "CR-GHOST"})
+    s = ReviewerService(f"{D}/rcr.db")
+    s.seed_run("T", [g], crews=None, calendar=None, certificates=[])
+    ok = pend(s, "G") is not None
+    s.close()
+    return ok
 
 
 def rc10():  # re-check: an explicit empty roster still checks crews
@@ -253,9 +266,10 @@ def rc10():  # re-check: an explicit empty roster still checks crews
 
 
 for name, fn in [(f"R05-{n:02d}", f) for n, f in enumerate([r01, r02, r03, r04, r05, r06, r07, r08, r09, r10, r11], 1)] + [
-        ("R05-05 re-check (multi-day chit)", rc05), ("R05-06 re-check (suggester, no watch)", rc06),
+        ("R05-05 re-check (chit is one calendar day)", rc05), ("R05-06 re-check (suggester, no watch)", rc06),
         ("R05-08 re-check (null answer)", rc08), ("R05-09 re-check (stale refusal)", rc09),
-        ("R05-10 re-check (empty roster)", rc10), ("R05-07 re-check (no model text before deciding)", rc07)]:
+        ("R05-10 re-check (empty roster)", rc10), ("R05-07 re-check (no model text before deciding)", rc07),
+        ("R05-10 Donnie ruling (named crew, no roster)", rc_roster)]:
     n = name
     try:
         print(name, "FIXED" if fn() else "REPRODUCED")
