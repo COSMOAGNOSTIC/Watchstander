@@ -416,3 +416,24 @@ Reviewer's feedback, given to Donnie in the session and recorded for the builder
 6. **Review weight.** This can mark work safe or stop it, so under AGENTS.md its first review goes to the strongest model.
 7. **Item b:** the reviewer's advice is not to spend a fix on chit time zones. If aloft moves to announced status, the chit's start and end times stop being a Watchstander input and the item goes with them. Until then it stays low and open, with the brief line (Donnie: yes) covering the honest-wording gap.
 
+**Donnie on recording versus trying it out (2026-11-11, recorded by the reviewer; backlog, not built):**
+
+- Sometimes "secured" is clicked only to see what work would be affected that day. That must not count as the ship securing. **Recording the real status is its own deliberate, tracked action.**
+- **The real status may be entered late.** Nobody may be at Watchstander when aloft is set (everyone in meetings); someone sees it later and records it then.
+- Later-build philosophy: you can experiment with aloft set and not set and see how it changes the day's schedule.
+- Donnie's category for all of this: future features, not part of review 05.
+
+Reviewer's reading, for the builder:
+
+```
+  "What if aloft were secured / set?" ──► preview only: shows the work affected, changes nothing,
+                                          writes nothing, and is marked as a what-if on screen
+  "The ship announced it" ─────────────► recorded: decision log (who, when entered, when it
+                                          happened), then coverage changes
+```
+
+- Two controls, not one switch with two meanings. A preview can never change `cleared_for_execution`.
+- A recorded entry carries two times, when it happened and when it was entered, because of late entry.
+- Late entry is safe one way and not the other. A late "set" leaves aloft jobs held that could run. A late "secured" leaves Watchstander showing aloft work as covered while the ship is secured, which is why the screen shows who entered the status and when, and why the brief line stays even after this is built.
+- Where it belongs: the backlog (MIGRATION.md future work and `docs/ship-force-notes.md`), not ARCHITECTURE.md Known Debt, which is for shortcuts in what is already built. The builder files it; the reviewer has not edited those files.
+
