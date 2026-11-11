@@ -295,3 +295,25 @@ How the reviewer reads that against item b, for the builder and Donnie to correc
 - Item b is therefore a record-keeping defect, not an aloft-safety judgment: one chit record can be read as one day or as 41 hours, and Watchstander picks the longer reading without telling anyone. It stays **low**. The fix it points at is narrow (a record with two different offsets is sent back to be written clearly), and whether that is worth doing before merge is still Donnie's call.
 - Not checked by this review, and not built: Watchstander has no input for "the ship secured from aloft early". A valid chit on file reads as covered until its end time whatever the ship has since said. That is consistent with "tracked its own way" as long as nobody reads Watchstander's "covered" as the ship's live aloft status. Whether the brief should say so in words is a design question for `docs/ship-force-notes.md`, not a review-05 finding.
 
+**Donnie, follow-up (2026-11-11): "secured from aloft" belongs in Watchstander.** His example: if there is an accident while aloft, one of the first things done after the person is taken care of is to secure from aloft; nothing keeps swinging over the heads of hurt people and the medical team. So the line above ("no input for the ship secured early ... a design question") is answered: it is a requirement, **not built**, and outside review 05's fixes. Recorded here for the builder to carry into `docs/ship-force-notes.md` and a build session; the reviewer has not edited that file or any code.
+
+What the reviewer takes the requirement to be (a reading for Donnie to correct, not a design):
+
+```
+  chit or blanket aloft on file, covers the job's time ──┐
+                                                         ├─ AND ──► aloft job reads as covered
+  ship has NOT secured from aloft ──── (NOT) ────────────┘
+
+  ship says "secured from aloft" ──► every aloft job reads NOT covered from that moment,
+                                     approved or not, chit or blanket, until the ship
+                                     sets aloft again
+  Watchstander was never told ─────► it can't know; so its "covered" must always read as
+                                     "per the authorization on file", never as the ship's
+                                     live aloft status
+```
+
+- **One direction only.** The ship's word can take coverage away in Watchstander. Nothing in Watchstander can set aloft, and it never infers a secure on its own (for example from an incident report); the ship says it.
+- **It has to reach work already approved.** As built, a package approved with a valid chit stays `cleared_for_execution=True` to the chit's end. A secure has to pull that back the same way an open finding does (R05-03's hold), or the brief keeps showing cleared work aloft over a casualty.
+- **Today's gap, stated plainly:** with a valid chit on file, Watchstander reads the job as covered until the chit's end time whatever has happened on the ship (traced from `check_certificates`; there is no secure input to run a scenario against).
+- **Questions for Donnie before it is built:** (1) after a secure, does aloft resume on the same day's chit when the ship sets aloft again, or does it take a new chit? (2) who puts the ship's "secured" into Watchstander, and is it ship-wide only or also by zone? (3) until it is built, should the brief carry a line that the ship's aloft status governs?
+
