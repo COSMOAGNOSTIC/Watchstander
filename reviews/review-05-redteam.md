@@ -317,3 +317,23 @@ What the reviewer takes the requirement to be (a reading for Donnie to correct, 
 - **Today's gap, stated plainly:** with a valid chit on file, Watchstander reads the job as covered until the chit's end time whatever has happened on the ship (traced from `check_certificates`; there is no secure input to run a scenario against).
 - **Questions for Donnie before it is built:** (1) after a secure, does aloft resume on the same day's chit when the ship sets aloft again, or does it take a new chit? (2) who puts the ship's "secured" into Watchstander, and is it ship-wide only or also by zone? (3) until it is built, should the brief carry a line that the ship's aloft status governs?
 
+**Donnie's answers to the three questions above (2026-11-11, recorded by the reviewer):**
+
+1. **After a secure, the chit is dead.** Aloft does not resume on the same chit. It is rerun from scratch: every signature, every tag-out, every responsible party signs again. Uncommon, and seen mostly underway rather than in a shipyard, so a small use case.
+2. **A secure is ship-wide only.** A chit is run to a set of zones. To extend or reduce the zones, the ship secures from aloft and runs a new chit with the new zones and all parties signing again, because the point is to re-verify that the tags are hung (dozens of them: radars, moving parts, the ship's whistle and more). **Who enters the ship's "secured" into Watchstander is open**; Donnie is taking it to his coworkers.
+3. **Whether the brief carries a "ship's status governs" line until this is built: not yet answered**; Donnie asked for the question to be explained.
+
+What follows for whoever builds it (reviewer's reading, not a design):
+
+```
+  ship secures from aloft ──► the chit on file is VOID from that moment (not paused)
+                              │
+                              ├─ aloft jobs it covered ──► not covered, back to a person
+                              └─ aloft again needs a NEW chit record (new signatures, new tag-out
+                                 verification); the old one can never cover anything again
+
+  zones change ──► same path: secure, then a new chit with the new zones
+```
+
+Not asked and not answered: whether a secure also voids a blanket (standing) aloft, or only the day's chit.
+
