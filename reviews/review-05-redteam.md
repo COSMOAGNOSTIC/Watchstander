@@ -129,6 +129,13 @@ The other two high findings are inputs the detectors never see: a misspelled top
   4. `GET /` still shows HW-101 under **Awaiting review**, and the **Recently decided** row for CS-102 on the same page shows "Approve HW-101 now; no move needed." verbatim. This is the page the reviewer opens HW-101 from.
 
   Model text for a conflict is about both packages, so showing it after the decision on one package shows it before the decision on the other. Path: `reviewer/graph_driver.py:436` (`list_decided` returns `model_explanation` for every decided package) → `reviewer/app.py:99-100`. Traced, not run, same class: after an Apply, the old run's decided rows, with their model text, sit beside the successor run's pending reviews of the same packages. `test_r05_07_model_text_is_kept_and_shown_after_the_decision` asserts the dashboard shows "Approve both now" while the partner is still pending. It tests the leak as intended behaviour, so the fix needs that test changed too. Possible fix for the builder or Donnie: show a package's model text only once every package its conflict names is decided in every live run, or only on a record page away from the queue. Repro: `reviews/review-05-recheck2-repro.py`, P1.
+- **Re-check 3 (reviewer, at `dc5588e`):** **confirmed fixed** for the rule as stated (no model text in the reviewer app while anything in the run, or in a run Apply made from it, awaits a decision). Run with a stub model whose two answers each carry a marker, then every page the app serves (`/`, `/log`, `/openapi.json`, every review page, every review payload) searched for the markers:
+  1. One run, nine reviews decided one at a time, all pages searched before each decision: no model text until the last decision; it appears, labeled, once the run is settled.
+  2. Reject CS-102, Apply from HW-101, Apply again from the successor (three runs in a chain), restart the service on the same database, then decide the last run one review at a time: no model text at any step; it appears once the whole chain is settled.
+
+  Two things recorded, neither reopens it:
+  - **Low, reproduced with an injected fault (inside the rule):** if recording the supersession fails after Apply has closed the old run's reviews (`registry.mark_superseded` raises), the old run has nothing pending and no successor on record, so `_run_settled` reads it as settled and the dashboard shows its model text beside the successor's 8 pending reviews. A restart repairs it (`_recover_applies`). `_run_settled` follows only the `superseded` table, not the Apply marker's successor. Repro A5.
+  - **For Donnie (outside the rule as stated, reproduced, no fault needed):** two separate runs of the same schedule. Settle run T1, then seed the demo again as T2 (the dashboard's seed button twice). T1's "Recently decided" rows show "Approve HW-101 now; no move needed." on the same page where T2's HW-101 awaits review. The settled check is per run and per Apply chain; it doesn't know T2 holds the same packages. Is model text about a package allowed on the queue page while that package is pending in any run? Repro A4.
 
 ### R05-08
 - **Verdict:** CONFIRMED
@@ -219,3 +226,52 @@ Environment note, same as the first review: `/root/.local/bin/pytest` (a uv tool
 2. **Named crew, no roster loaded:** a **finding** (WS-SC-001, "no crew roster is loaded, so crew X can't be verified").
 
 Recorded for later, not built: zones, daylight (dawn to dusk unless the CO approves), night aloft (a planned special evolution with safety council, CO and project sign-off), per-person briefs, qualifications and harnesses, and tag-outs; see `docs/ship-force-notes.md`. Two older tests that encoded the replaced behavior were rewritten to the rulings (`test_recheck_r05_05_a_same_day_chit_*`, `test_recheck_r05_10_no_crew_data_at_all_flags_a_named_crew`); `test_findings_gate.py`'s no-calendar test now uses a package with no crew so it still tests what it says. 622 passed; eval unchanged; both changes mutation-tested; `review-05-builder-repro.py` 18/18 FIXED.
+
+
+## Re-check 3 (reviewer, final)
+
+**Reviewer:** Claude Code (re-check 3 session, review only; no production code changed) · **Checked:** `dc5588e` on `fix-review-05`, fixes read as `git diff ca7e569 dc5588e -- agent_core reviewer tests` · **Date:** 2026-11-11
+
+| Check | Result |
+|---|---|
+| `pip install -e ".[dev,retrieval,reviewer]"` | exit 0 |
+| `pytest -q` | **622 passed**, 0 failed |
+| `python -m eval.run_eval` | 14/14 conflict scenarios match (10 domain-correct, 4 known gaps), 7/7 retrieval, fallback healthy |
+| `python reviews/review-05-builder-repro.py` | 18 of 18 lines `FIXED` |
+| `python reviews/review-05-recheck3-repro.py` (new, reviewer's probes) | A1, A2, C as expected; A4, A5 and one B line as described below |
+
+Environment note, unchanged: `/root/.local/bin/pytest` (a uv tool install that can't see the editable install) is first on `PATH` and fails collection with 40 import errors. The count above is from `/usr/local/bin/pytest`, the one the install created.
+
+| Item | Result |
+|---|---|
+| a. R05-07, no model text while anything in the run or its Apply chain is pending | **confirmed fixed** (notes under R05-07: one low fault-path item, one question for Donnie) |
+| b. Aloft chit spanning two calendar dates is refused; same-day chit and multi-day blanket aloft work | **reopened (low)**: holds for every chit written in one time convention; fails when the chit's two ends carry different UTC offsets |
+| c. Named crew, no roster loaded, goes to a person | **confirmed fixed** |
+
+```
+R05-07 gate, as built (reviewer/graph_driver.py, list_decided / _run_settled)
+
+  this run has a pending review ───────────┐
+  a run Apply made from it has one ────────┼─ OR ── NOT ──┐
+  (followed through the superseded table)  ┘              ├─ AND ──► show model text
+  package is decided and has model text ──────────────────┘          on "Recently decided"
+
+  not covered: supersession not recorded after a fault (A5, reads as settled)
+  not covered: a separate run of the same packages (A4, never consulted)
+```
+
+**b, what was run.** Refused, as ruled: 23:00 to 01:00 next day; 07:00 to 00:00 next day; 07:00 to 00:00:01 next day; two dates in UTC; three dates; naive mixed with aware. Accepted, as ruled: 05:00 to 20:00; 00:00 to 23:59:59; same day with one offset; a five-day blanket aloft. Through the real graph: a same-day aloft job with a same-day chit has no finding; a three-day job under a blanket aloft has no finding; an overnight job with a same-day chit goes to a person (WS-CT-006, uncovered 20:00 to 02:00); an aloft job with nothing on file goes to a person.
+
+**b, the failing scenario (reproduced).** `agent_core/certificates.py:78` compares `valid_from.date()` with `valid_until.date()`. For aware times that is the date as written, each in its own offset, not the same day.
+
+1. Chit `valid_from="2027-03-15T00:00:00+09:00"`, `valid_until="2027-03-15T23:59:00-08:00"`: accepted. Both ends read "2027-03-15"; the real span is 2027-03-14 15:00Z to 2027-03-16 07:59Z, 41 hours over three UTC dates.
+2. Seed one aloft package, 2027-03-14T16:00Z to 2027-03-16T07:00Z (39 hours), with that chit: no finding, no review, `cleared_for_execution=True`.
+3. Milder and more likely form: `05:00+00:00` to `20:00-05:00` on the same date is accepted and ends 01:00Z the next day.
+
+Low because it needs two different offsets inside one certificate; the notional data and every test use one convention. It is the same class as re-check 2's mixed time-zone item (which covered naive against aware only). Possible fix for the builder: refuse a chit whose two ends have different UTC offsets, or compare the dates in one offset. Does not need the strongest model to re-check.
+
+**c, what was run.** A package naming `CR-GHOST` with `crews=None`: pending review with "no crew roster is loaded, so crew 'CR-GHOST' can't be verified", and an approval leaves `cleared_for_execution=False` while WS-SC-001 is open. Same with `crews=[]`, with `cleared_for_execution: true` supplied in the input, beside a second package naming no crew, and with the graph invoked with no `run_inputs` at all. Control: a package naming no crew and no roster is not flagged. Observation only: `crew_id=""` is treated as naming no crew (cleared); `crew_id="   "` goes to a person.
+
+**No new high or medium findings.** Open after this re-check: the low chit item above (b), the low fault-path item and Donnie's question under R05-07.
+
+**Merge:** nothing found here blocks `fix-review-05` at medium or above. The reopened item is low; whether it is fixed before or after merge, and the answer to the R05-07 question, are Donnie's call (AGENTS.md: nothing merges without Donnie's go).
