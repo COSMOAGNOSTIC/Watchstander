@@ -364,3 +364,29 @@ Reviewer's reading of what that means for how Watchstander tracks aloft, for Don
 
 **Donnie confirms the roles (2026-11-11):** what was heard as "CSAO" is the **CSOOW**, said "see-sow": Combat Systems Officer of the Watch. The other three are the **CO** (commanding officer), the **CSO** (Combat Systems Officer) and the **CSMO** (said roughly "ziz-mo"). So the reading above stands: the CSOOW is the single point of contact and holds the live aloft and tag-out status.
 
+**Donnie on who governs and what the trailer sees (2026-11-11, recorded by the reviewer):**
+
+- **The CSOOW's word governs everything on aloft**, a blanket aloft included, day to day.
+- **Someone higher in the chain of command may direct the CSOOW to secure from aloft.** It still comes through the CSOOW.
+- **How the trailer hears it:** ship's force sit in the trailer Donnie works from with radios on the CSOOW's channel, so combat systems traffic, mostly routine, is heard directly there.
+- **After a secure, defer to the CSOOW for when aloft is set again.** The rerun chit is never seen in the trailer; it stays with the military side and is not in the trailer's purview.
+- **The officer of the deck is the last signature in the chain, both to go aloft and to secure.** The OOD posts it and has it announced over the 1MC so everyone knows the status of aloft.
+
+Reviewer's reading, for Donnie and the builder to correct:
+
+```
+  CO / CSO / CSMO may direct ──► CSOOW ──► chit signatures ... ──► OOD signs last
+                                                                      │
+                                                     posted, announced on the 1MC
+                                                                      │
+              trailer hears it (CSOOW channel, 1MC) ◄─────────────────┘
+                                │
+                                ▼
+      Watchstander's aloft input = the announced status: "aloft set" / "secured", and when
+      (not the chit itself; the trailer may never hold it)
+```
+
+- **This puts a question mark over how Watchstander models aloft today.** As built, aloft coverage is a chit record with start and end times loaded as a certificate (`agent_core/certificates.py`). If the trailer never holds the chit, the thing Watchstander can honestly know is the announced status, not the document. That is a design question for the build session, not a review-05 defect.
+- **It also shrinks item b.** A chit whose two ends carry different UTC offsets matters only while Watchstander loads chit records. It stays low and stays open, but if the model moves to announced status the item goes away with the field.
+- **Open, asked of Donnie:** does "never seen in the trailer" cover only the rerun chit after a secure, or every aloft chit?
+
