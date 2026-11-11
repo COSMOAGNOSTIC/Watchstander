@@ -390,3 +390,29 @@ Reviewer's reading, for Donnie and the builder to correct:
 - **It also shrinks item b.** A chit whose two ends carry different UTC offsets matters only while Watchstander loads chit records. It stays low and stays open, but if the model moves to announced status the item goes away with the field.
 - **Open, asked of Donnie:** does "never seen in the trailer" cover only the rerun chit after a secure, or every aloft chit?
 
+**Donnie on what the trailer knows and a possible aloft control (2026-11-11, recorded by the reviewer; future build, nothing here is built):**
+
+- Before this tool, the trailer was only vaguely aware aloft was going on a given day; that granularity was not needed for the trailer's work. **Watchstander can only ever know the announced status.** (This answers the open question above: the status, not the chit, is what the trailer has.)
+- The trailer learns of an accident, equipment failure or the like within about five minutes, through shipyard and ship communications.
+- **Many things secure aloft:** an accident, thunder and lightning, wind over a set speed, poor visibility, and more.
+- **The securing sequence:** all personnel come down; the aloft safety observer reports the last person down and everyone on the roster is accounted for by name; the safety observer comes down last; aloft is secured once the safety observer is down; the CSOOW confirms only when everyone is down and the safety observer has checked in; then the chit goes back down to the officer of the deck.
+- **Donnie's idea:** a simple on/off control in the 3D model, "aloft set" / "secured". Clicking "secured" shows what work gets stopped. To be talked through with the shipyard, design and the ship's side.
+
+Reviewer's feedback, given to Donnie in the session and recorded for the builder:
+
+```
+  control says SET  AND  it was set today  AND  not since secured ──► aloft jobs may read covered
+  anything else: secured, never set today, set on an earlier day, unknown ──► not covered, to a person
+
+  wrong click "set" when the ship is secured   ──► the dangerous error; the design guards this one
+  wrong click "secured" when the ship is set   ──► work held that could run; a phone call fixes it
+```
+
+1. **Off unless told.** The safe default is "not set". A set that carries over from yesterday is the error to prevent, so a set should lapse by itself at the end of the day (the chit is one calendar day).
+2. **A click is a record of what was heard, not an authorization.** Each one goes in the decision log with who and when, and the screen shows "aloft set, entered by <name> at <time>, per the announced status" so its age is visible.
+3. **A secure has to reach approved work**, pulling `cleared_for_execution` back, and list what stops. That list is the feature.
+4. **A question the reviewer can't answer:** securing from aloft ends the chit, and the tags come off afterwards. Does other work that was relying on those tags (not itself aloft) also need to show as affected?
+5. **Where the control lives.** The 3D model is today a display that deliberately shows less than the reviewer app (`agent_core/events.py` broadcast policy; ADR-024). A control that stops work should go through the same logged, locked path as a decision or an Apply, wherever the button is drawn.
+6. **Review weight.** This can mark work safe or stop it, so under AGENTS.md its first review goes to the strongest model.
+7. **Item b:** the reviewer's advice is not to spend a fix on chit time zones. If aloft moves to announced status, the chit's start and end times stop being a Watchstander input and the item goes with them. Until then it stays low and open, with the brief line (Donnie: yes) covering the honest-wording gap.
+
