@@ -28,10 +28,9 @@
 Watchstander so far models the shipyard side. Ship's force owns a large part of the safety
 picture and isn't in it yet:
 
-- **Tag-out authority** belongs to three watch stations, each for its own area, each using eTagout:
+- **Tag-out authority** belongs to watch stations, each for its own area, each using eTagout, including:
   - **CSOOW** (Combat Systems Officer of the Watch): combat systems, including aloft tags.
   - **EOW** (Engineering Officer of the Watch): engineering.
-  - **Reactor Department**: reactor plant.
 - A future build portion: bring these watch stations in as owners of their tag-outs and of
   the authorizations that depend on them (aloft chits, blanket aloft), with each ship's own
   instructions loaded as the rules.
