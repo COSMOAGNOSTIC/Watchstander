@@ -362,3 +362,5 @@ Reviewer's reading of what that means for how Watchstander tracks aloft, for Don
 - It does not conflict with the earlier ruling that a blanket aloft is set by the CO, CSO or CSMO: that is who authorizes a blanket period; this is who holds the live status. If Donnie means the CSOOW's word also governs a blanket aloft day to day, that should be said when this is designed.
 - Rule 6: the real ship Donnie named in conversation is deliberately not written here.
 
+**Donnie confirms the roles (2026-11-11):** what was heard as "CSAO" is the **CSOOW**, said "see-sow": Combat Systems Officer of the Watch. The other three are the **CO** (commanding officer), the **CSO** (Combat Systems Officer) and the **CSMO** (said roughly "ziz-mo"). So the reading above stands: the CSOOW is the single point of contact and holds the live aloft and tag-out status.
+
