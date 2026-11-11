@@ -275,3 +275,23 @@ Low because it needs two different offsets inside one certificate; the notional 
 **No new high or medium findings.** Open after this re-check: the low chit item above (b), the low fault-path item and Donnie's question under R05-07.
 
 **Merge:** nothing found here blocks `fix-review-05` at medium or above. The reopened item is low; whether it is fixed before or after merge, and the answer to the R05-07 question, are Donnie's call (AGENTS.md: nothing merges without Donnie's go).
+
+**Donnie on aloft authority (2026-11-11, after reading this re-check; recorded by the reviewer):** the ship has an aloft program on purpose. If the ship says we're aloft, we're aloft; if the ship says we're secured from aloft, we're secured. That is a military responsibility and it is tracked its own way.
+
+How the reviewer reads that against item b, for the builder and Donnie to correct if wrong:
+
+```
+  ship's aloft program says "aloft is set" ──────► the authority (not Watchstander)
+                                                        │
+  Watchstander holds a COPY of what the ship said ◄─────┘
+        │
+        ├─ copy matches what the ship said ──► package reads as covered   (correct)
+        ├─ copy is missing ──────────────────► WS-CT-006, goes to a person (correct)
+        └─ copy can be read two ways ────────► today: read as covered      (item b)
+           (two UTC offsets in one chit)
+```
+
+- Watchstander never decides whether aloft is authorized or secured. Nothing in item b asks it to, and the wording "a chit is refused" above means "the record can't be loaded as written", not "Watchstander overrules the ship".
+- Item b is therefore a record-keeping defect, not an aloft-safety judgment: one chit record can be read as one day or as 41 hours, and Watchstander picks the longer reading without telling anyone. It stays **low**. The fix it points at is narrow (a record with two different offsets is sent back to be written clearly), and whether that is worth doing before merge is still Donnie's call.
+- Not checked by this review, and not built: Watchstander has no input for "the ship secured from aloft early". A valid chit on file reads as covered until its end time whatever the ship has since said. That is consistent with "tracked its own way" as long as nobody reads Watchstander's "covered" as the ship's live aloft status. Whether the brief should say so in words is a design question for `docs/ship-force-notes.md`, not a review-05 finding.
+
