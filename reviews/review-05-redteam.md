@@ -337,3 +337,28 @@ What follows for whoever builds it (reviewer's reading, not a design):
 
 Not asked and not answered: whether a secure also voids a blanket (standing) aloft, or only the day's chit.
 
+**Donnie, further (2026-11-11, recorded by the reviewer):**
+
+- **Question 3 answered: yes.** Until a secure input is built, the brief carries a line that aloft coverage shown is from the chit on file and the ship's aloft status governs. Wording is Donnie's to approve. Not built; for the builder.
+- **The aloft program is the ship's and is safe on its own terms.** It has its own checks: a posted aloft safety observer, people checking in and out, briefs and qualifications. Someone not cleared ending up in an aloft zone would be a freak event and close to intentional. Donnie ran this program on a ship himself. Watchstander is not there to re-run or second-guess it.
+- **The CSOOW is the single point of contact between the ship and Watchstander for aloft and tag-outs.** The watch holds the live picture (which tags are hung, what the safety conditions are), so on these matters the CSOOW's word outranks the combat systems officer, the maintenance officer and the maintenance master chief. (The reviewer heard "CSAO" once in this message and took it as CSOOW; Donnie to correct if a different role was meant.)
+
+Reviewer's reading of what that means for how Watchstander tracks aloft, for Donnie and the builder to correct:
+
+```
+  ship's aloft program (observer, sign-in/out, tags, quals, zones) ──► stays on the ship;
+                                                                       Watchstander copies none of it
+                              │
+                              ▼
+                 CSOOW's word: "aloft is set under chit N" / "secured"
+                              │  (the only aloft input Watchstander takes)
+                              ▼
+  Watchstander: is this aloft job inside what the CSOOW last said? ── yes ──► reads as covered
+                                                                  ── no / secured / not told ──► to a person,
+                                                                     contact role: CSOOW
+```
+
+- This narrows the open question "who enters secured into Watchstander" to "how does the CSOOW's word get in"; it does not answer it.
+- It does not conflict with the earlier ruling that a blanket aloft is set by the CO, CSO or CSMO: that is who authorizes a blanket period; this is who holds the live status. If Donnie means the CSOOW's word also governs a blanket aloft day to day, that should be said when this is designed.
+- Rule 6: the real ship Donnie named in conversation is deliberately not written here.
+
