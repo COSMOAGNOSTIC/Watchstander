@@ -437,3 +437,8 @@ Reviewer's reading, for the builder:
 - Late entry is safe one way and not the other. A late "set" leaves aloft jobs held that could run. A late "secured" leaves Watchstander showing aloft work as covered while the ship is secured, which is why the screen shows who entered the status and when, and why the brief line stays even after this is built.
 - Where it belongs: the backlog (MIGRATION.md future work and `docs/ship-force-notes.md`), not ARCHITECTURE.md Known Debt, which is for shortcuts in what is already built. The builder files it; the reviewer has not edited those files.
 
+**Donnie on tags, and the merge (2026-11-11, recorded by the reviewer):**
+
+- **Tags relying on an aloft chit: not needed in Watchstander.** The trailer does not get into that detail and trusts the sources. Tags often live outside the databases Watchstander will reach (eTagout access is possible but was not asked for). The ship handles shared tags by **piggybacking**: an item more than one job depends on is double-tagged, so one job clearing its tag does not release it. The reviewer's question 4 above is closed: no.
+- **Merge: Donnie's go given**, in the same message in which he asked for the R05-07 question (model text across separate runs of the same schedule) to be explained again. The reviewer has not merged: that answer decides whether one more change is needed first. PASSDOWN's merge-time instruction (squash, so `061c9ef`'s removed line never reaches `main`) applies when it happens.
+
